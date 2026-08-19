@@ -56,10 +56,21 @@ over a local socket or an explicitly selected remote connection.
 
 ## Core contracts
 
-Names are conceptual until the public Rust API is implemented.
+M1 slice A makes this small foundation public:
 
-- `ConnectionSpec` identifies a local or remote Podman service without ambient discovery.
-- `TargetProfile` records the exact Podman and API compatibility range.
+- `ConnectionSpec` identifies only explicit local Unix, verified SSH, or mutual-TLS TCP service
+  endpoints. It does not read environment variables or Podman connection configuration.
+- `LibpodTransport` is object-safe and asynchronous, but has no built-in client. Applications own
+  socket, SSH, TLS, runtime, and credential resolution.
+- `LibpodRequest`, `LibpodResponse`, and duplicate-preserving `LibpodHeaders` are bounded
+  transport messages. Their `Debug` output redacts paths, headers, and bodies.
+- `ObservedPodmanVersion`, `ObservedApiVersion`, and `TargetProfile` retain original version
+  spelling, reject prereleases, and fail closed outside the reviewed 5.4.0–6.2.0 engine range.
+  A selected Libpod API must be at least 4.0.0 and no newer than that selected engine.
+- `capability_catalogue()` returns the published immutable evidence for reviewed 5.4–6.1 lines.
+
+The following names remain conceptual until their milestones:
+
 - `DiscoveryRequest` contains explicit roots, label selectors, closure policy, and authorized
   boundary crossings.
 - `ResourceInventory` retains typed Podman resources, identifiers, relationships, and native
@@ -176,9 +187,10 @@ Input records the observed Podman version. Output requires an explicit target pr
 data governs both CLI flags and Libpod request fields; the development machine never supplies an
 implicit target version.
 
-The initial evidence programme will review Podman 5.4 through 6.1, including current patch-level
-conformance for 5.8.6 and 6.1.0. A version is not supported until its fixtures, boundaries, and
-positive and negative tests are committed.
+The embedded catalogue identifies reviewed Podman 5.4 through 6.1 source releases and current
+patch provenance for 5.8.6 and 6.1.0. Slice A only validates explicit semantic target pairs; it
+does not yet decode a system-information response or claim runtime conformance. A version is not
+fully supported until its fixtures, boundaries, and positive and negative tests are committed.
 
 ## Primary references
 

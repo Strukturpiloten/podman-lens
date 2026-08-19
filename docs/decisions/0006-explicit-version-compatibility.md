@@ -13,6 +13,9 @@ development version is not a valid target-selection policy.
 Input observations record the reported Podman and API versions. Output planning requires an
 explicit target profile. Versioned capability evidence governs both CLI and Libpod representations.
 
+A profile accepts only a reviewed Podman engine range and a Libpod API from the evidence-backed
+minimum through that selected engine version.
+
 A version is supported only after reviewed specifications or runtime responses and positive and
 negative boundary tests are committed. Unknown versions fail closed or require an explicit caller
 policy; they are never treated as the development machine's version.

@@ -1,8 +1,13 @@
 # API stability policy
 
-PodmanLens is pre-1.0. The M0 crate deliberately exposes no premature runtime, protocol, or
-planning contract. Public types begin only when their versioned evidence, diagnostics, and positive
-and negative tests are ready.
+PodmanLens is pre-1.0. M0 deliberately exposed no premature runtime, protocol, or planning
+contract. M1 slice A now publishes the explicit connection, redacted diagnostic, bounded Libpod
+transport-message, version, target-profile, and evidence-catalogue contracts. They are exercised
+by the external-consumer `public_api` integration test.
+
+These public contracts intentionally do not promise a transport implementation, API probe decoder,
+resource inventory, discovery graph, or deployment plan. Those APIs remain private or absent until
+their respective evidence and positive and negative tests are ready.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

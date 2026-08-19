@@ -28,6 +28,7 @@ plans, or depend on BoxFerry.
 
 ## Status
 
-M0 repository and Rust-library scaffolding is complete. M1 establishes version evidence and the
-replaceable Libpod transport. See the roadmap for the planned implementation order and acceptance
-criteria.
+M0 repository and Rust-library scaffolding is complete. M1 slice A now provides explicit redacted
+connection specifications, a caller-owned asynchronous Libpod transport contract, and an offline
+Podman 5.4–6.1 compatibility catalogue. It does not yet connect to Podman or decode API responses.
+See the roadmap for the remaining M1 work and acceptance criteria.

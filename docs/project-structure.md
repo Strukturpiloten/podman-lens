@@ -6,6 +6,7 @@ have a demonstrated public-contract boundary.
 | Path                 | Responsibility                                                    |
 | -------------------- | ----------------------------------------------------------------- |
 | `src/`               | Public library and private implementation modules                 |
+| `catalogue/v1/`      | Versioned offline Podman compatibility evidence                   |
 | `tests/`             | Public-contract, fixture, and repository-policy integration tests |
 | `docs/`              | Architecture, decisions, policy, and evidence documentation       |
 | `scripts/`           | Deterministic local validation helpers                            |

@@ -96,6 +96,14 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
 }
 
 #[test]
+fn hosted_documentation_job_exposes_locked_node_tools() -> Result<(), std::io::Error> {
+    let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
+    assert!(workflow.contains("${GITHUB_WORKSPACE}/node_modules/.bin"));
+    assert!(workflow.contains("${GITHUB_PATH}"));
+    Ok(())
+}
+
+#[test]
 fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::io::Error> {
     let configuration = fs::read_to_string(".github/renovate.json")?;
     assert!(configuration.contains("currentDigest"));

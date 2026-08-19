@@ -113,7 +113,10 @@ jobs:
           # renovate: datasource=node-version depName=node
           node-version: 24.18.1
           cache: npm
-      - run: npm ci --ignore-scripts
+      - name: Install locked Node file-quality tools
+        run: |
+          npm ci --ignore-scripts
+          printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
       - run: sudo bash scripts/install-file-tools.sh /usr/local/bin
       - run: bash scripts/check-files.sh --check
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0

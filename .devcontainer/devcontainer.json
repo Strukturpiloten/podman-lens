@@ -1,0 +1,23 @@
+{
+  "name": "PodmanLens",
+  "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/podman-lens,type=bind",
+  "workspaceFolder": "/workspaces/podman-lens",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1.1.0": { "version": "2.97.0" }
+  },
+  "containerEnv": {
+    "CARGO_HOME": "/workspaces/.podman-lens-cargo",
+    "CARGO_TARGET_DIR": "/workspaces/.podman-lens-target",
+    "GH_CONFIG_DIR": "/workspaces/.podman-lens-gh"
+  },
+  "mounts": [
+    "source=podman-lens-cargo-${devcontainerId},target=/workspaces/.podman-lens-cargo,type=volume",
+    "source=podman-lens-target-${devcontainerId},target=/workspaces/.podman-lens-target,type=volume",
+    "source=podman-lens-gh-${devcontainerId},target=/workspaces/.podman-lens-gh,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/verify-tools.sh && cargo fetch --locked",
+  "waitFor": "postCreateCommand"
+}

@@ -1,0 +1,76 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PodmanLens: Format, lint, and test all",
+      "type": "process",
+      "command": "${workspaceFolder}/scripts/check-all.sh",
+      "problemMatcher": "$rustc",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "PodmanLens: Format non-Rust files",
+      "type": "process",
+      "command": "${workspaceFolder}/scripts/check-files.sh",
+      "args": ["--fix"],
+      "problemMatcher": []
+    },
+    {
+      "label": "PodmanLens: Format check",
+      "type": "process",
+      "command": "cargo",
+      "args": ["fmt", "--all", "--", "--check"],
+      "problemMatcher": []
+    },
+    {
+      "label": "PodmanLens: Check",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-check"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "PodmanLens: Policy",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-policy"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "PodmanLens: Clippy",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-clippy"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "PodmanLens: Test",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-test"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "PodmanLens: Doctest",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-doctest"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "PodmanLens: Documentation",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-doc"],
+      "options": {
+        "env": {
+          "RUSTDOCFLAGS": "-D warnings"
+        }
+      },
+      "problemMatcher": "$rustc"
+    }
+  ]
+}

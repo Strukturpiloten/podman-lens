@@ -1,0 +1,11 @@
+# PodmanLens documentation
+
+- [Architecture](architecture.md)
+- [Roadmap](roadmap.md)
+- [Project structure](project-structure.md)
+- [API stability](api-stability.md)
+- [Testing](testing.md)
+- [Dependency policy](dependency-policy.md)
+- [Development environment](development-environment.md)
+- [Releasing](releasing.md)
+- [Accepted decisions](decisions/README.md)

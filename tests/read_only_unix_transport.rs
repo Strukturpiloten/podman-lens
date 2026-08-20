@@ -257,9 +257,21 @@ async fn response_header_count_and_bytes_are_bounded_as_invalid_messages() -> Re
             .err()
             .ok_or_else(|| std::io::Error::other("over-limit response headers were accepted"))?;
         assert_eq!(error.diagnostic().code(), DiagnosticCode::InvalidTransportMessage);
-        server
+        match server
             .join()
-            .map_err(|_| std::io::Error::other("fixture server panicked"))??;
+            .map_err(|_| std::io::Error::other("fixture server panicked"))?
+        {
+            Ok(()) => {}
+            // The client has already rejected the excessive headers and may close the socket
+            // before this fixture finishes writing. Linux often accepts the buffered write;
+            // macOS reports the equivalent peer-close as EPIPE instead.
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                ) => {}
+            Err(error) => return Err(error.into()),
+        }
         std::fs::remove_file(path)?;
     }
     Ok(())

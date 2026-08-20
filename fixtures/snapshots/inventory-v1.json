@@ -209,6 +209,80 @@
               "state": "absent",
               "origin": null
             },
+            "restart_policy": {
+              "name": {
+                "state": "absent",
+                "origin": null
+              },
+              "maximum_retry_count": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "health_check": {
+              "command": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "interval": {
+                "state": "absent",
+                "origin": null
+              },
+              "timeout": {
+                "state": "absent",
+                "origin": null
+              },
+              "retries": {
+                "state": "absent",
+                "origin": null
+              },
+              "start_period": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "health_failure_action": {
+              "state": "absent",
+              "origin": null
+            },
+            "startup_health_check": {
+              "command": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "interval": {
+                "state": "absent",
+                "origin": null
+              },
+              "timeout": {
+                "state": "absent",
+                "origin": null
+              },
+              "retries": {
+                "state": "absent",
+                "origin": null
+              },
+              "start_period": {
+                "state": "absent",
+                "origin": null
+              },
+              "successes": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "logging": {
+              "driver": {
+                "state": "absent",
+                "origin": null
+              },
+              "size": {
+                "state": "absent",
+                "origin": null
+              }
+            },
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -375,6 +449,80 @@
             "infra": {
               "state": "absent",
               "origin": null
+            },
+            "restart_policy": {
+              "name": {
+                "state": "absent",
+                "origin": null
+              },
+              "maximum_retry_count": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "health_check": {
+              "command": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "interval": {
+                "state": "absent",
+                "origin": null
+              },
+              "timeout": {
+                "state": "absent",
+                "origin": null
+              },
+              "retries": {
+                "state": "absent",
+                "origin": null
+              },
+              "start_period": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "health_failure_action": {
+              "state": "absent",
+              "origin": null
+            },
+            "startup_health_check": {
+              "command": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "interval": {
+                "state": "absent",
+                "origin": null
+              },
+              "timeout": {
+                "state": "absent",
+                "origin": null
+              },
+              "retries": {
+                "state": "absent",
+                "origin": null
+              },
+              "start_period": {
+                "state": "absent",
+                "origin": null
+              },
+              "successes": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "logging": {
+              "driver": {
+                "state": "absent",
+                "origin": null
+              },
+              "size": {
+                "state": "absent",
+                "origin": null
+              }
             },
             "create_infra": null,
             "secret_driver": null,
@@ -569,6 +717,11 @@
             },
             "memory_swappiness": null,
             "infra": null,
+            "restart_policy": null,
+            "health_check": null,
+            "health_failure_action": null,
+            "startup_health_check": null,
+            "logging": null,
             "create_infra": {
               "state": "absent",
               "origin": null
@@ -655,6 +808,11 @@
             "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "restart_policy": null,
+            "health_check": null,
+            "health_failure_action": null,
+            "startup_health_check": null,
+            "logging": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -739,6 +897,11 @@
             "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "restart_policy": null,
+            "health_check": null,
+            "health_failure_action": null,
+            "startup_health_check": null,
+            "logging": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": {
@@ -823,6 +986,11 @@
             "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "restart_policy": null,
+            "health_check": null,
+            "health_failure_action": null,
+            "startup_health_check": null,
+            "logging": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -897,6 +1065,11 @@
             "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "restart_policy": null,
+            "health_check": null,
+            "health_failure_action": null,
+            "startup_health_check": null,
+            "logging": null,
             "create_infra": null,
             "secret_driver": {
               "state": "observed",

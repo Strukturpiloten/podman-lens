@@ -840,11 +840,270 @@ impl fmt::Debug for ContainerSecretGrantObservation {
     }
 }
 
+/// A bounded native restart policy name observed from HostConfig.RestartPolicy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeRestartPolicyName {
+    /// Never restart automatically.
+    No,
+    /// Always restart automatically.
+    Always,
+    /// Restart after a failure.
+    OnFailure,
+    /// Restart unless explicitly stopped.
+    UnlessStopped,
+}
+
+/// Typed, effective native restart-policy evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeRestartPolicyObservation {
+    name: ObservationField<NativeRestartPolicyName>,
+    maximum_retry_count: ObservationField<u64>,
+}
+
+impl NativeRestartPolicyObservation {
+    pub(crate) const fn new(
+        name: ObservationField<NativeRestartPolicyName>,
+        maximum_retry_count: ObservationField<u64>,
+    ) -> Self {
+        Self {
+            name,
+            maximum_retry_count,
+        }
+    }
+
+    /// Returns the effective policy name or its field state.
+    #[must_use]
+    pub fn name(&self) -> &ObservationField<NativeRestartPolicyName> {
+        &self.name
+    }
+
+    /// Returns the effective native retry count, including valid zero.
+    #[must_use]
+    pub fn maximum_retry_count(&self) -> &ObservationField<u64> {
+        &self.maximum_retry_count
+    }
+}
+
+/// A protected health-check command. Its argument values are never formatted or snapshotted.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ProtectedHealthCommand {
+    arguments: Vec<String>,
+}
+
+impl ProtectedHealthCommand {
+    pub(crate) const fn new(arguments: Vec<String>) -> Self {
+        Self { arguments }
+    }
+
+    /// Returns the number of protected command arguments without disclosing their values.
+    #[must_use]
+    pub fn argument_count(&self) -> usize {
+        self.arguments.len()
+    }
+    /// Lets an explicitly authorized caller use arguments without formatting or serializing them.
+    pub fn expose<R>(&self, use_arguments: impl FnOnce(&[String]) -> R) -> R {
+        use_arguments(&self.arguments)
+    }
+}
+
+impl fmt::Debug for ProtectedHealthCommand {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProtectedHealthCommand")
+            .field("argument_count", &self.arguments.len())
+            .finish()
+    }
+}
+
+impl fmt::Display for ProtectedHealthCommand {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("[redacted]")
+    }
+}
+
+/// Native health command syntax with values retained as protected evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeHealthCommand {
+    /// Podman's explicit NONE health-check form.
+    Disabled,
+    /// A shell command whose arguments are protected.
+    Shell(ProtectedHealthCommand),
+    /// A direct executable command whose arguments are protected.
+    Exec(ProtectedHealthCommand),
+}
+
+/// Typed normal-health observation from Config.Healthcheck.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeHealthCheckObservation {
+    command: ObservationField<NativeHealthCommand>,
+    interval: ObservationField<i64>,
+    timeout: ObservationField<i64>,
+    retries: ObservationField<u64>,
+    start_period: ObservationField<i64>,
+}
+
+impl NativeHealthCheckObservation {
+    pub(crate) const fn new(
+        command: ObservationField<NativeHealthCommand>,
+        interval: ObservationField<i64>,
+        timeout: ObservationField<i64>,
+        retries: ObservationField<u64>,
+        start_period: ObservationField<i64>,
+    ) -> Self {
+        Self {
+            command,
+            interval,
+            timeout,
+            retries,
+            start_period,
+        }
+    }
+
+    /// Returns protected health-command evidence or its field state.
+    #[must_use]
+    pub fn command(&self) -> &ObservationField<NativeHealthCommand> {
+        &self.command
+    }
+    /// Returns the native interval, including effective zero.
+    #[must_use]
+    pub fn interval(&self) -> &ObservationField<i64> {
+        &self.interval
+    }
+    /// Returns the native timeout, including effective zero.
+    #[must_use]
+    pub fn timeout(&self) -> &ObservationField<i64> {
+        &self.timeout
+    }
+    /// Returns the effective native retry count, including zero.
+    #[must_use]
+    pub fn retries(&self) -> &ObservationField<u64> {
+        &self.retries
+    }
+    /// Returns the native start period, including effective zero.
+    #[must_use]
+    pub fn start_period(&self) -> &ObservationField<i64> {
+        &self.start_period
+    }
+}
+
+/// The bounded normal-health failure action reported by Podman.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeHealthFailureAction {
+    /// Retains the unhealthy state without stopping the container.
+    None,
+    /// Kills the container.
+    Kill,
+    /// Restarts the container.
+    Restart,
+    /// Stops the container.
+    Stop,
+}
+
+/// Typed startup-health observation from Config.StartupHealthCheck.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeStartupHealthCheckObservation {
+    command: ObservationField<NativeHealthCommand>,
+    interval: ObservationField<i64>,
+    timeout: ObservationField<i64>,
+    retries: ObservationField<u64>,
+    start_period: ObservationField<i64>,
+    successes: ObservationField<u64>,
+}
+
+impl NativeStartupHealthCheckObservation {
+    pub(crate) const fn new(
+        command: ObservationField<NativeHealthCommand>,
+        interval: ObservationField<i64>,
+        timeout: ObservationField<i64>,
+        retries: ObservationField<u64>,
+        start_period: ObservationField<i64>,
+        successes: ObservationField<u64>,
+    ) -> Self {
+        Self {
+            command,
+            interval,
+            timeout,
+            retries,
+            start_period,
+            successes,
+        }
+    }
+
+    /// Returns protected startup-command evidence or its field state.
+    #[must_use]
+    pub fn command(&self) -> &ObservationField<NativeHealthCommand> {
+        &self.command
+    }
+    /// Returns the native interval, including effective zero.
+    #[must_use]
+    pub fn interval(&self) -> &ObservationField<i64> {
+        &self.interval
+    }
+    /// Returns the native timeout, including effective zero.
+    #[must_use]
+    pub fn timeout(&self) -> &ObservationField<i64> {
+        &self.timeout
+    }
+    /// Returns the effective native retry count, including zero.
+    #[must_use]
+    pub fn retries(&self) -> &ObservationField<u64> {
+        &self.retries
+    }
+    /// Returns the effective native start period, including zero.
+    #[must_use]
+    pub fn start_period(&self) -> &ObservationField<i64> {
+        &self.start_period
+    }
+    /// Returns the effective native startup success threshold, including zero.
+    #[must_use]
+    pub fn successes(&self) -> &ObservationField<u64> {
+        &self.successes
+    }
+}
+
+/// The bounded logging drivers represented by this native observation batch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeLogDriver {
+    /// Podman's journald driver.
+    Journald,
+    /// Podman's k8s-file driver.
+    K8sFile,
+}
+
+/// Native logging observation from HostConfig.LogConfig.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeLoggingObservation {
+    driver: ObservationField<NativeLogDriver>,
+    size: ObservationField<String>,
+}
+
+impl NativeLoggingObservation {
+    pub(crate) const fn new(driver: ObservationField<NativeLogDriver>, size: ObservationField<String>) -> Self {
+        Self { driver, size }
+    }
+
+    /// Returns the effective logging driver or its field state.
+    #[must_use]
+    pub fn driver(&self) -> &ObservationField<NativeLogDriver> {
+        &self.driver
+    }
+
+    /// Returns the effective native log-size spelling or its field state.
+    #[must_use]
+    pub fn size(&self) -> &ObservationField<String> {
+        &self.size
+    }
+}
+
 /// Container-specific native observations.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ContainerObservation {
-    labels: ObservationField<Labels>,
     configured_image: ObservationField<String>,
+    labels: ObservationField<Labels>,
     local_image_id: ObservationField<String>,
     relationships: ObservationField<Vec<NativeRelationship>>,
     environment: ObservationField<ProtectedEnvironment>,
@@ -859,6 +1118,11 @@ pub struct ContainerObservation {
     secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
     memory_swappiness: ObservationField<u64>,
     infra: ObservationField<bool>,
+    restart_policy: ObservationField<NativeRestartPolicyObservation>,
+    health_check: ObservationField<NativeHealthCheckObservation>,
+    health_failure_action: ObservationField<NativeHealthFailureAction>,
+    startup_health_check: ObservationField<NativeStartupHealthCheckObservation>,
+    logging: ObservationField<NativeLoggingObservation>,
     networking: ObservationField<NativeNetworkingObservation>,
 }
 
@@ -892,7 +1156,12 @@ observation_debug!(
     secret_grants,
     memory_swappiness,
     infra,
-    networking
+    networking,
+    restart_policy,
+    health_check,
+    health_failure_action,
+    startup_health_check,
+    logging,
 );
 
 impl ContainerObservation {
@@ -914,11 +1183,16 @@ impl ContainerObservation {
         secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
         memory_swappiness: ObservationField<u64>,
         infra: ObservationField<bool>,
+        restart_policy: ObservationField<NativeRestartPolicyObservation>,
+        health_check: ObservationField<NativeHealthCheckObservation>,
+        health_failure_action: ObservationField<NativeHealthFailureAction>,
+        startup_health_check: ObservationField<NativeStartupHealthCheckObservation>,
+        logging: ObservationField<NativeLoggingObservation>,
         networking: ObservationField<NativeNetworkingObservation>,
     ) -> Self {
         Self {
-            labels,
             configured_image,
+            labels,
             local_image_id,
             relationships,
             environment,
@@ -933,6 +1207,11 @@ impl ContainerObservation {
             secret_grants,
             memory_swappiness,
             infra,
+            restart_policy,
+            health_check,
+            health_failure_action,
+            startup_health_check,
+            logging,
             networking,
         }
     }
@@ -1010,6 +1289,37 @@ impl ContainerObservation {
     #[must_use]
     pub fn memory_swappiness(&self) -> &ObservationField<u64> {
         &self.memory_swappiness
+    }
+    /// Returns effective restart-policy evidence or its observation state.
+    #[must_use]
+    pub fn restart_policy(&self) -> &ObservationField<NativeRestartPolicyObservation> {
+        &self.restart_policy
+    }
+    /// Returns effective normal-health inspect evidence or its observation state.
+    ///
+    /// This may include an image default and is not authored deployment intent.
+    #[must_use]
+    pub fn health_check(&self) -> &ObservationField<NativeHealthCheckObservation> {
+        &self.health_check
+    }
+    /// Returns effective normal-health failure action or its observation state.
+    ///
+    /// This may include an image default and is not authored deployment intent.
+    #[must_use]
+    pub fn health_failure_action(&self) -> &ObservationField<NativeHealthFailureAction> {
+        &self.health_failure_action
+    }
+    /// Returns effective startup-health inspect evidence or its observation state.
+    ///
+    /// This may include an image default and is not authored deployment intent.
+    #[must_use]
+    pub fn startup_health_check(&self) -> &ObservationField<NativeStartupHealthCheckObservation> {
+        &self.startup_health_check
+    }
+    /// Returns effective logging evidence or its observation state.
+    #[must_use]
+    pub fn logging(&self) -> &ObservationField<NativeLoggingObservation> {
+        &self.logging
     }
     /// Returns the infra-container marker or its observation state.
     #[must_use]
@@ -1785,6 +2095,11 @@ fn incomplete_field<T>(state: ResourceObservationState) -> ObservationField<T> {
 fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> ResourceDetails {
     match kind {
         ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),

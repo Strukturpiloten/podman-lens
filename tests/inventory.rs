@@ -1757,7 +1757,7 @@ async fn host_config_members_not_yet_modeled_are_retained_as_unknown_metadata() 
             .iter()
             .map(podman_lens::UnmodelledField::path)
             .collect::<Vec<_>>(),
-        ["$.HostConfig.LogConfig", "$.HostConfig.NanoCpus"]
+        ["$.HostConfig.NanoCpus"]
     );
     assert!(record.unknown_fields_complete());
     assert!(
@@ -1765,10 +1765,7 @@ async fn host_config_members_not_yet_modeled_are_retained_as_unknown_metadata() 
             .findings()
             .iter()
             .filter(|finding| finding.code() == DiagnosticCode::NativeFieldUnsupported)
-            .all(|finding| matches!(
-                finding.field_path(),
-                Some("$.HostConfig.LogConfig" | "$.HostConfig.NanoCpus")
-            ))
+            .all(|finding| matches!(finding.field_path(), Some("$.HostConfig.NanoCpus")))
     );
     Ok(())
 }
@@ -2509,6 +2506,458 @@ async fn malformed_mount_destination_or_local_backing_path_invalidates_the_compl
                 .iter()
                 .any(|finding| finding.field_path() == Some(malformed_path))
         );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One integration assertion keeps the redaction and provenance evidence together.
+async fn container_restart_health_and_logging_are_typed_effective_observations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+        "Id":"container-a","Name":"a",
+        "Config":{
+            "Healthcheck":{"Test":["CMD-SHELL","SENTINEL_NORMAL_HEALTH"],"Interval":1,"Timeout":2,"Retries":3,"StartPeriod":4},
+            "HealthcheckOnFailureAction":"restart",
+            "StartupHealthCheck":{"Test":["CMD","SENTINEL_STARTUP_HEALTH"],"Interval":5,"Timeout":6,"Retries":7,"StartPeriod":8,"Successes":9}
+        },
+        "HostConfig":{
+            "RestartPolicy":{"Name":"on-failure","MaximumRetryCount":10},
+            "LogConfig":{"Type":"k8s-file","Size":"10m"}
+        }
+    }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section must be present")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a container observation".into());
+    };
+
+    let restart = container
+        .restart_policy()
+        .observed()
+        .ok_or("restart policy must be observed")?;
+    assert_eq!(restart.origin(), ObservationOrigin::Effective);
+    assert!(matches!(
+        restart.value().name(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeRestartPolicyName::OnFailure
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert_eq!(
+        restart
+            .value()
+            .maximum_retry_count()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((10, ObservationOrigin::Effective))
+    );
+
+    let health = container
+        .health_check()
+        .observed()
+        .ok_or("health check must be observed")?;
+    assert_eq!(health.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        health
+            .value()
+            .interval()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((1, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        health
+            .value()
+            .retries()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((3, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        health
+            .value()
+            .start_period()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((4, ObservationOrigin::Effective))
+    );
+    let ObservationField::Observed(command) = health.value().command() else {
+        return Err("normal health command must be observed".into());
+    };
+    let podman_lens::NativeHealthCommand::Shell(command) = command.value() else {
+        return Err("normal health command must retain shell syntax".into());
+    };
+    assert_eq!(command.argument_count(), 1);
+    assert_eq!(command.expose(<[String]>::to_vec), ["SENTINEL_NORMAL_HEALTH"]);
+    assert_eq!(
+        container
+            .health_failure_action()
+            .observed()
+            .map(|value| (value.value(), value.origin())),
+        Some((
+            &podman_lens::NativeHealthFailureAction::Restart,
+            ObservationOrigin::Effective
+        ))
+    );
+
+    let startup = container
+        .startup_health_check()
+        .observed()
+        .ok_or("startup health check must be observed")?;
+    assert_eq!(startup.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        startup
+            .value()
+            .retries()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((7, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        startup
+            .value()
+            .start_period()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((8, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        startup
+            .value()
+            .successes()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((9, ObservationOrigin::Effective))
+    );
+    let ObservationField::Observed(command) = startup.value().command() else {
+        return Err("startup health command must be observed".into());
+    };
+    let podman_lens::NativeHealthCommand::Exec(command) = command.value() else {
+        return Err("startup health command must retain exec syntax".into());
+    };
+    assert_eq!(command.expose(<[String]>::to_vec), ["SENTINEL_STARTUP_HEALTH"]);
+
+    let logging = container.logging().observed().ok_or("logging must be observed")?;
+    assert_eq!(logging.origin(), ObservationOrigin::Effective);
+    assert!(matches!(
+        logging.value().driver(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeLogDriver::K8sFile
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert_eq!(
+        logging
+            .value()
+            .size()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("10m", ObservationOrigin::Effective))
+    );
+    let debug = format!("{container:?}");
+    let snapshot = serde_json::to_string(&podman_lens::snapshot::v1::inventory(&inventory))?;
+    for sentinel in ["SENTINEL_NORMAL_HEALTH", "SENTINEL_STARTUP_HEALTH"] {
+        assert!(!debug.contains(sentinel));
+        assert!(!snapshot.contains(sentinel));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One table keeps every ledger-linked malformed B3a field auditable.
+async fn container_b3_malformed_counts_and_commands_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+    for (startup, test) in [
+        (false, serde_json::json!([])),
+        (false, serde_json::json!(["CMD"])),
+        (false, serde_json::json!(["CMD-SHELL"])),
+        (false, serde_json::json!(["NONE", "extra"])),
+        (false, serde_json::json!(["CMD", false])),
+        (true, serde_json::json!([])),
+        (true, serde_json::json!(["CMD"])),
+        (true, serde_json::json!(["CMD-SHELL"])),
+        (true, serde_json::json!(["NONE", "extra"])),
+        (true, serde_json::json!(["CMD", false])),
+    ] {
+        let field = if startup { "StartupHealthCheck" } else { "Healthcheck" };
+        let mut body = serde_json::json!({
+            "Id":"container-a", "Name":"a",
+            "Config":{"Healthcheck":{"Test":["CMD","ok"]}, "StartupHealthCheck":{"Test":["CMD","ok"]}}
+        });
+        body["Config"][field]["Test"] = test.clone();
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(serde_json::to_vec(&body)?)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("fixture must remain a container observation".into());
+        };
+        let command = if startup {
+            container
+                .startup_health_check()
+                .observed()
+                .ok_or("startup health check")?
+                .value()
+                .command()
+        } else {
+            container
+                .health_check()
+                .observed()
+                .ok_or("health check")?
+                .value()
+                .command()
+        };
+        assert!(matches!(command, ObservationField::Malformed), "{field}: {test}");
+        let expected_path = format!("$.Config.{field}.Test");
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(expected_path.as_str())
+        }));
+    }
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":{"Retries":-1},"StartupHealthCheck":{"Retries":-1,"Successes":-1}},"HostConfig":{"RestartPolicy":{"MaximumRetryCount":-1}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    assert!(matches!(
+        container
+            .restart_policy()
+            .observed()
+            .ok_or("restart policy")?
+            .value()
+            .maximum_retry_count(),
+        ObservationField::Malformed
+    ));
+    assert!(matches!(
+        container
+            .health_check()
+            .observed()
+            .ok_or("health check")?
+            .value()
+            .retries(),
+        ObservationField::Malformed
+    ));
+    let startup = container
+        .startup_health_check()
+        .observed()
+        .ok_or("startup health check")?
+        .value();
+    assert!(matches!(startup.retries(), ObservationField::Malformed));
+    assert!(matches!(startup.successes(), ObservationField::Malformed));
+    for path in [
+        "$.HostConfig.RestartPolicy.MaximumRetryCount",
+        "$.Config.Healthcheck.Retries",
+        "$.Config.StartupHealthCheck.Retries",
+        "$.Config.StartupHealthCheck.Successes",
+    ] {
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(path)
+        }));
+    }
+    for (body, path) in [
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"RestartPolicy":false}}"#,
+            "$.HostConfig.RestartPolicy",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"RestartPolicy":{"Name":false}}}"#,
+            "$.HostConfig.RestartPolicy.Name",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":false}}"#,
+            "$.Config.Healthcheck",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":{"Interval":false}}}"#,
+            "$.Config.Healthcheck.Interval",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":{"Timeout":false}}}"#,
+            "$.Config.Healthcheck.Timeout",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":{"StartPeriod":false}}}"#,
+            "$.Config.Healthcheck.StartPeriod",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"HealthcheckOnFailureAction":false}}"#,
+            "$.Config.HealthcheckOnFailureAction",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"StartupHealthCheck":false}}"#,
+            "$.Config.StartupHealthCheck",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"StartupHealthCheck":{"Interval":false}}}"#,
+            "$.Config.StartupHealthCheck.Interval",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"StartupHealthCheck":{"Timeout":false}}}"#,
+            "$.Config.StartupHealthCheck.Timeout",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"StartupHealthCheck":{"StartPeriod":false}}}"#,
+            "$.Config.StartupHealthCheck.StartPeriod",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"LogConfig":false}}"#,
+            "$.HostConfig.LogConfig",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"LogConfig":{"Type":false}}}"#,
+            "$.HostConfig.LogConfig.Type",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"LogConfig":{"Size":false}}}"#,
+            "$.HostConfig.LogConfig.Size",
+        ),
+    ] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("fixture must remain container observation".into());
+        };
+        let malformed = match path {
+            "$.HostConfig.RestartPolicy" => matches!(container.restart_policy(), ObservationField::Malformed),
+            "$.HostConfig.RestartPolicy.Name" => container
+                .restart_policy()
+                .observed()
+                .is_some_and(|restart| matches!(restart.value().name(), ObservationField::Malformed)),
+            "$.Config.Healthcheck" => matches!(container.health_check(), ObservationField::Malformed),
+            "$.Config.Healthcheck.Interval" => container
+                .health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().interval(), ObservationField::Malformed)),
+            "$.Config.Healthcheck.Timeout" => container
+                .health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().timeout(), ObservationField::Malformed)),
+            "$.Config.Healthcheck.StartPeriod" => container
+                .health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().start_period(), ObservationField::Malformed)),
+            "$.Config.HealthcheckOnFailureAction" => {
+                matches!(container.health_failure_action(), ObservationField::Malformed)
+            }
+            "$.Config.StartupHealthCheck" => {
+                matches!(container.startup_health_check(), ObservationField::Malformed)
+            }
+            "$.Config.StartupHealthCheck.Interval" => container
+                .startup_health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().interval(), ObservationField::Malformed)),
+            "$.Config.StartupHealthCheck.Timeout" => container
+                .startup_health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().timeout(), ObservationField::Malformed)),
+            "$.Config.StartupHealthCheck.StartPeriod" => container
+                .startup_health_check()
+                .observed()
+                .is_some_and(|health| matches!(health.value().start_period(), ObservationField::Malformed)),
+            "$.HostConfig.LogConfig" => matches!(container.logging(), ObservationField::Malformed),
+            "$.HostConfig.LogConfig.Type" => container
+                .logging()
+                .observed()
+                .is_some_and(|logging| matches!(logging.value().driver(), ObservationField::Malformed)),
+            "$.HostConfig.LogConfig.Size" => container
+                .logging()
+                .observed()
+                .is_some_and(|logging| matches!(logging.value().size(), ObservationField::Malformed)),
+            _ => false,
+        };
+        assert!(malformed, "{path} must be field-local malformed");
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(path)
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn container_b3_unknown_enums_are_bounded_unmodelled_metadata() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","Config":{"Healthcheck":{"Test":["FUTURE_NORMAL","value"]},"HealthcheckOnFailureAction":"future-action","StartupHealthCheck":{"Test":["FUTURE_STARTUP","value"]}},"HostConfig":{"RestartPolicy":{"Name":"future-policy"},"LogConfig":{"Type":"future-driver"}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    assert!(matches!(
+        container
+            .restart_policy()
+            .observed()
+            .ok_or("restart policy")?
+            .value()
+            .name(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+    ));
+    assert!(matches!(
+        container
+            .health_check()
+            .observed()
+            .ok_or("health check")?
+            .value()
+            .command(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerConfig)
+    ));
+    assert!(matches!(
+        container.health_failure_action(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerConfig)
+    ));
+    assert!(matches!(
+        container
+            .startup_health_check()
+            .observed()
+            .ok_or("startup health check")?
+            .value()
+            .command(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerConfig)
+    ));
+    assert!(matches!(
+        container.logging().observed().ok_or("logging")?.value().driver(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+    ));
+    for path in [
+        "$.HostConfig.RestartPolicy.Name",
+        "$.Config.Healthcheck.Test",
+        "$.Config.HealthcheckOnFailureAction",
+        "$.Config.StartupHealthCheck.Test",
+        "$.HostConfig.LogConfig.Type",
+    ] {
+        assert!(
+            observation
+                .header()
+                .unmodelled_fields()
+                .iter()
+                .any(|field| field.path() == path)
+        );
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::NativeFieldUnsupported && finding.field_path() == Some(path)
+        }));
     }
     Ok(())
 }

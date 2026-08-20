@@ -38,8 +38,16 @@ host-bit spellings; callers must not treat it as a normalized deployment value. 
 wire parsing preserves valid syntax defensively and does not claim that host-bit route destinations
 are valid on every reviewed Podman version.
 
-The packaged ledger currently contains 88 input-observation rows and 50 output-intent rows (138
-total). M7-B2b adds 22 input-only pod-infra and unpodded-container networking rows. M6-B4
+M7-B3a adds `NativeRestartPolicyObservation`, normal and startup health observations,
+`NativeHealthFailureAction`, and `NativeLoggingObservation` to the public input API. All are
+effective inspect evidence, not input intent: health can include image defaults, while restart and
+logging may be normalized by Podman. `ProtectedHealthCommand` discloses arguments only through its
+callback accessor and cannot format or serialize them. Normal/startup retry counts and startup
+successes are unsigned observations, so negative wire values are malformed rather than usable.
+
+The packaged ledger currently contains 108 input-observation rows and 50 output-intent rows (158
+total). M7-B2b added 22 input-only pod-infra and unpodded-container networking rows; this first
+M7-B3 increment adds 20 typed restart, health, and logging rows. M6-B4
 extends the latter beyond container runtime settings to container mounts and secret grants, volume
 ownership, image acquisition policy/source portability, and the explicitly blocked pod-infra mount
 surface. It remains a strict catalogue: each row fixes its resource kind, target applicability,

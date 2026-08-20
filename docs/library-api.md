@@ -78,6 +78,16 @@ separate configured observation; callers must not infer `host_network` by negati
 `HostNetwork` is effective infra evidence. Runtime `NetworkSettings`, assigned addresses, raw
 host entries, and option values are not deployment intent.
 
+M7-B3a adds `restart_policy`, `health_check`, `health_failure_action`, `startup_health_check`, and
+`logging` accessors to `ContainerObservation`. These are effective inspect observations, not a
+conversion to `ContainerIntent`: health may be supplied by the image, and Podman can normalize
+restart/logging settings. `NativeHealthCommand` distinguishes disabled, shell, and exec syntax;
+its protected arguments are accessible only through `ProtectedHealthCommand::expose`, never debug,
+display, or snapshots. Only `["NONE"]` disables health. `Retries`, startup `Successes`, and restart
+`MaximumRetryCount` are unsigned; a negative wire value is field-local malformed evidence.
+Snapshots expose field state/origin and command argument count, never command, log-size, or other
+configuration spelling.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

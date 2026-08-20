@@ -48,7 +48,10 @@ mistake the retained slice for complete native configuration in either case.
   mounts; mount and environment secret grants; 5.6+ UID/GID and all four explicit pull policies;
   plus manual source-portability, no-copy-subpath, and pod-infra-mount boundaries. M7-B2a adds ten
   input-only native network IPAM and route rows. M7-B2b adds 22 pod-infra and unpodded-container
-  networking rows. The ledger has 88 input-observation rows and 50 output-intent rows (138 total).
-  Every reviewed line records
+  networking rows. M7-B3a adds 20 observation-only restart, health, and logging rows, including
+  parent objects; this avoids silently accepting their descendants. The ledger has 108
+  input-observation rows and 50 output-intent rows (158 total). Future B3 security, namespace,
+  and resource-control work remains separate; the final B3 input target is 126 rows. Every
+  reviewed line records
   immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

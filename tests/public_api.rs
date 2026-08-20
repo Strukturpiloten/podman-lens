@@ -140,6 +140,53 @@ fn consume_typed_observation(source: &ResourceObservation) {
                 })
                 .collect::<Vec<_>>()
         });
+        let _ = container.restart_policy().observed().map(|policy| {
+            let policy = policy.value();
+            (
+                policy.name().observed().map(|name| (name.value(), name.origin())),
+                policy
+                    .maximum_retry_count()
+                    .observed()
+                    .map(|count| (count.value(), count.origin())),
+            )
+        });
+        let _ = container.health_check().observed().map(|health| {
+            let health = health.value();
+            (
+                health.command().observed().map(|command| match command.value() {
+                    podman_lens::NativeHealthCommand::Disabled => 0,
+                    podman_lens::NativeHealthCommand::Shell(command)
+                    | podman_lens::NativeHealthCommand::Exec(command) => command.expose(<[String]>::len),
+                    _ => usize::MAX,
+                }),
+                health.interval().observed().map(podman_lens::ObservedValue::value),
+                health.timeout().observed().map(podman_lens::ObservedValue::value),
+                health.retries().observed().map(podman_lens::ObservedValue::value),
+                health.start_period().observed().map(podman_lens::ObservedValue::value),
+            )
+        });
+        let _ = container
+            .health_failure_action()
+            .observed()
+            .map(|action| (action.value(), action.origin()));
+        let _ = container.startup_health_check().observed().map(|health| {
+            let health = health.value();
+            (
+                health.command().observed().map(podman_lens::ObservedValue::value),
+                health.interval().observed().map(podman_lens::ObservedValue::value),
+                health.timeout().observed().map(podman_lens::ObservedValue::value),
+                health.retries().observed().map(podman_lens::ObservedValue::value),
+                health.start_period().observed().map(podman_lens::ObservedValue::value),
+                health.successes().observed().map(podman_lens::ObservedValue::value),
+            )
+        });
+        let _ = container.logging().observed().map(|logging| {
+            let logging = logging.value();
+            (
+                logging.driver().observed().map(podman_lens::ObservedValue::value),
+                logging.size().observed().map(podman_lens::ObservedValue::value),
+            )
+        });
     }
     if let ResourceDetails::Pod(pod) = source.details() {
         let _ = pod.create_infra().observed().map(podman_lens::ObservedValue::value);

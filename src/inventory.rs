@@ -11,13 +11,15 @@ use crate::observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
     ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
     ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
-    NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
-    NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
-    NativePortBindingObservation, NativePortProtocol, NativeRelationship, NativeResourceReference, NetworkObservation,
+    NativeHealthCheckObservation, NativeHealthCommand, NativeHealthFailureAction, NativeLogDriver,
+    NativeLoggingObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
+    NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
+    NativePortBindingObservation, NativePortProtocol, NativeRelationship, NativeResourceReference,
+    NativeRestartPolicyName, NativeRestartPolicyObservation, NativeStartupHealthCheckObservation, NetworkObservation,
     NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation,
-    ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
-    ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId, UnmodelledCompleteness, UnmodelledField,
-    VolumeObservation, VolumeOwnerIdWireValue,
+    ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
+    ResourceDetails, ResourceObservation, ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId,
+    UnmodelledCompleteness, UnmodelledField, VolumeObservation, VolumeOwnerIdWireValue,
 };
 use crate::{
     CapabilityCatalogueEntry, Diagnostic, DiagnosticCode, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse,
@@ -880,6 +882,7 @@ fn decode_observation(
         secret_driver,
         volume_owner_user,
         volume_owner_group,
+        container_b3,
         mut findings,
         known,
     ) = match listed_identity.kind {
@@ -893,29 +896,14 @@ fn decode_observation(
     let mut unknown_fields = UnknownFieldCollector::new(&identity, &evidence, unknown_field_limit);
     unknown_top_level(object, known, &mut unknown_fields);
     unknown_nested_fields(listed_identity.kind, object, &evidence, &mut unknown_fields);
-    let (unknown_fields, unknown_field_overflow) = unknown_fields.finish();
-    if unknown_field_overflow {
-        findings.push(InventoryFinding::field(
-            DiagnosticCode::UnknownFieldOverflow,
-            identity.clone(),
-            "$",
-        ));
-    }
-    findings.extend(
-        unknown_fields.iter().map(|field| {
-            InventoryFinding::field(DiagnosticCode::NativeFieldUnsupported, identity.clone(), field.path())
-        }),
-    );
+    append_container_unmodelled(&mut unknown_fields, container_b3.as_ref());
+    let (unknown_fields, unmodelled_completeness) = finish_unknown_fields(unknown_fields, &identity, &mut findings);
     let header = ObservationHeader::complete(
         identity.clone(),
         evidence,
         findings,
         unknown_fields,
-        if unknown_field_overflow {
-            UnmodelledCompleteness::Incomplete
-        } else {
-            UnmodelledCompleteness::Complete
-        },
+        unmodelled_completeness,
     );
     ResourceObservation::try_new(
         header,
@@ -938,6 +926,7 @@ fn decode_observation(
                 network,
                 memory_swappiness,
                 configured_image,
+                container_b3,
                 local_image_id,
                 is_infra,
                 container_networking,
@@ -949,6 +938,45 @@ fn decode_observation(
             },
         ),
     )
+}
+
+fn append_container_unmodelled(
+    unknown_fields: &mut UnknownFieldCollector<'_>,
+    container_b3: Option<&ContainerB3Decoded>,
+) {
+    if let Some(container_b3) = container_b3 {
+        for (path, kind) in &container_b3.unmodelled {
+            if !unknown_fields.push_kind(path.clone(), *kind) {
+                break;
+            }
+        }
+    }
+}
+
+fn finish_unknown_fields(
+    unknown_fields: UnknownFieldCollector<'_>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> (Vec<UnmodelledField>, UnmodelledCompleteness) {
+    let (unknown_fields, overflowed) = unknown_fields.finish();
+    if overflowed {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::UnknownFieldOverflow,
+            identity.clone(),
+            "$",
+        ));
+    }
+    findings.extend(
+        unknown_fields.iter().map(|field| {
+            InventoryFinding::field(DiagnosticCode::NativeFieldUnsupported, identity.clone(), field.path())
+        }),
+    );
+    let completeness = if overflowed {
+        UnmodelledCompleteness::Incomplete
+    } else {
+        UnmodelledCompleteness::Complete
+    };
+    (unknown_fields, completeness)
 }
 
 type Decoded = (
@@ -977,6 +1005,7 @@ type Decoded = (
     Option<ObservationField<String>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
+    Option<ContainerB3Decoded>,
     Vec<InventoryFinding>,
     &'static [&'static str],
 );
@@ -987,6 +1016,14 @@ type NetworkDecoded = (
     ObservationField<Vec<NativeNetworkSubnetObservation>>,
     ObservationField<Vec<NativeNetworkRouteObservation>>,
 );
+struct ContainerB3Decoded {
+    restart_policy: ObservationField<NativeRestartPolicyObservation>,
+    health_check: ObservationField<NativeHealthCheckObservation>,
+    health_failure_action: ObservationField<NativeHealthFailureAction>,
+    startup_health_check: ObservationField<NativeStartupHealthCheckObservation>,
+    logging: ObservationField<NativeLoggingObservation>,
+    unmodelled: Vec<(String, JsonValueKind)>,
+}
 
 struct DecodedDetails {
     labels: ObservationField<Labels>,
@@ -1005,6 +1042,7 @@ struct DecodedDetails {
     network: Option<NetworkDecoded>,
     memory_swappiness: Option<ObservationField<u64>>,
     configured_image: Option<ObservationField<String>>,
+    container_b3: Option<ContainerB3Decoded>,
     local_image_id: Option<ObservationField<String>>,
     is_infra: Option<ObservationField<bool>>,
     container_networking: Option<ObservationField<NativeNetworkingObservation>>,
@@ -1040,8 +1078,24 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
         pod_networking,
         secret_driver,
         volume_owner_user,
+        container_b3,
         volume_owner_group,
     } = details;
+    let ContainerB3Decoded {
+        restart_policy,
+        health_check,
+        health_failure_action,
+        startup_health_check,
+        logging,
+        unmodelled: _,
+    } = container_b3.unwrap_or(ContainerB3Decoded {
+        restart_policy: ObservationField::NotApplicable,
+        health_check: ObservationField::NotApplicable,
+        health_failure_action: ObservationField::NotApplicable,
+        startup_health_check: ObservationField::NotApplicable,
+        logging: ObservationField::NotApplicable,
+        unmodelled: Vec::new(),
+    });
     match kind {
         ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
             labels,
@@ -1060,6 +1114,11 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
             secret_grants.unwrap_or(ObservationField::Absent),
             memory_swappiness.unwrap_or(ObservationField::NotApplicable),
             is_infra.unwrap_or(ObservationField::Absent),
+            restart_policy,
+            health_check,
+            health_failure_action,
+            startup_health_check,
+            logging,
             container_networking.unwrap_or(ObservationField::Absent),
         )),
         ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(
@@ -1161,6 +1220,7 @@ fn decode_container(
         decode_container_secret_grants(object.get("Config"), &identity, &mut relationships, &mut findings);
     relationship_decoding.merge(secret_grants.relationships);
     let memory_swappiness = decode_memory_swappiness(object, evidence, &identity, &mut findings);
+    let container_b3 = decode_container_b3(object, &identity, &mut findings);
     let is_infra = decode_is_infra(object, &identity, &mut findings);
     Ok((
         identity,
@@ -1188,6 +1248,7 @@ fn decode_container(
         None,
         None,
         None,
+        Some(container_b3),
         findings,
         &[
             "Id",
@@ -1244,6 +1305,7 @@ fn decode_pod(
         None,
         None,
         None,
+        None,
         findings,
         &["Id", "Name", "Labels", "Containers", "CreateInfra", "InfraConfig"],
     ))
@@ -1257,6 +1319,404 @@ struct ContainerConfigurationDecoded {
     user: ObservationField<ConfiguredContainerUser>,
     working_directory: ObservationField<ConfiguredContainerWorkdir>,
     hostname: ObservationField<ConfiguredContainerHostname>,
+}
+
+fn decode_container_b3(
+    object: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ContainerB3Decoded {
+    let mut unmodelled = Vec::new();
+    let (health_check, health_failure_action, startup_health_check) = match object.get("Config") {
+        None | Some(Value::Null) => (
+            ObservationField::Absent,
+            ObservationField::Absent,
+            ObservationField::Absent,
+        ),
+        Some(Value::Object(config)) => (
+            decode_native_health_check(
+                config.get("Healthcheck"),
+                "$.Config.Healthcheck",
+                identity,
+                findings,
+                &mut unmodelled,
+            ),
+            decode_native_health_failure_action(
+                config.get("HealthcheckOnFailureAction"),
+                identity,
+                findings,
+                &mut unmodelled,
+            ),
+            decode_native_startup_health_check(config.get("StartupHealthCheck"), identity, findings, &mut unmodelled),
+        ),
+        Some(_) => (
+            native_malformed_field("$.Config", identity, findings),
+            native_malformed_field("$.Config", identity, findings),
+            native_malformed_field("$.Config", identity, findings),
+        ),
+    };
+    let (restart_policy, logging) = match object.get("HostConfig") {
+        None | Some(Value::Null) => (ObservationField::Absent, ObservationField::Absent),
+        Some(Value::Object(host_config)) => (
+            decode_native_restart_policy(host_config.get("RestartPolicy"), identity, findings, &mut unmodelled),
+            decode_native_logging(host_config.get("LogConfig"), identity, findings, &mut unmodelled),
+        ),
+        Some(_) => (
+            native_malformed_field("$.HostConfig", identity, findings),
+            native_malformed_field("$.HostConfig", identity, findings),
+        ),
+    };
+    ContainerB3Decoded {
+        restart_policy,
+        health_check,
+        health_failure_action,
+        startup_health_check,
+        logging,
+        unmodelled,
+    }
+}
+
+fn decode_native_restart_policy(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeRestartPolicyObservation> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(value) = value.as_object() else {
+        return native_malformed_field("$.HostConfig.RestartPolicy", identity, findings);
+    };
+    let name = match value.get("Name") {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(json_value @ Value::String(name)) => match name.as_str() {
+            "no" => ObservationField::Observed(ObservedValue::new(
+                NativeRestartPolicyName::No,
+                ObservationOrigin::Effective,
+            )),
+            "always" => ObservationField::Observed(ObservedValue::new(
+                NativeRestartPolicyName::Always,
+                ObservationOrigin::Effective,
+            )),
+            "on-failure" => ObservationField::Observed(ObservedValue::new(
+                NativeRestartPolicyName::OnFailure,
+                ObservationOrigin::Effective,
+            )),
+            "unless-stopped" => ObservationField::Observed(ObservedValue::new(
+                NativeRestartPolicyName::UnlessStopped,
+                ObservationOrigin::Effective,
+            )),
+            _ => native_unmodelled_field("$.HostConfig.RestartPolicy.Name", json_value, unmodelled),
+        },
+        Some(_) => native_malformed_field("$.HostConfig.RestartPolicy.Name", identity, findings),
+    };
+    let maximum_retry_count = native_u64_field(
+        value.get("MaximumRetryCount"),
+        "$.HostConfig.RestartPolicy.MaximumRetryCount",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    ObservationField::Observed(ObservedValue::new(
+        NativeRestartPolicyObservation::new(name, maximum_retry_count),
+        ObservationOrigin::Effective,
+    ))
+}
+
+fn decode_native_health_check(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeHealthCheckObservation> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(value) = value.as_object() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let command = native_health_command(
+        value.get("Test"),
+        &format!("{path}.Test"),
+        identity,
+        findings,
+        unmodelled,
+    );
+    let interval = native_i64_field(
+        value.get("Interval"),
+        &format!("{path}.Interval"),
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let timeout = native_i64_field(
+        value.get("Timeout"),
+        &format!("{path}.Timeout"),
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let retries = native_u64_field(
+        value.get("Retries"),
+        &format!("{path}.Retries"),
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let start_period = native_i64_field(
+        value.get("StartPeriod"),
+        &format!("{path}.StartPeriod"),
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    ObservationField::Observed(ObservedValue::new(
+        NativeHealthCheckObservation::new(command, interval, timeout, retries, start_period),
+        ObservationOrigin::Effective,
+    ))
+}
+
+fn decode_native_startup_health_check(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeStartupHealthCheckObservation> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(value) = value.as_object() else {
+        return native_malformed_field("$.Config.StartupHealthCheck", identity, findings);
+    };
+    let command = native_health_command(
+        value.get("Test"),
+        "$.Config.StartupHealthCheck.Test",
+        identity,
+        findings,
+        unmodelled,
+    );
+    let interval = native_i64_field(
+        value.get("Interval"),
+        "$.Config.StartupHealthCheck.Interval",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let timeout = native_i64_field(
+        value.get("Timeout"),
+        "$.Config.StartupHealthCheck.Timeout",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let retries = native_u64_field(
+        value.get("Retries"),
+        "$.Config.StartupHealthCheck.Retries",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let start_period = native_i64_field(
+        value.get("StartPeriod"),
+        "$.Config.StartupHealthCheck.StartPeriod",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let successes = native_u64_field(
+        value.get("Successes"),
+        "$.Config.StartupHealthCheck.Successes",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    ObservationField::Observed(ObservedValue::new(
+        NativeStartupHealthCheckObservation::new(command, interval, timeout, retries, start_period, successes),
+        ObservationOrigin::Effective,
+    ))
+}
+
+fn native_health_command(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeHealthCommand> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let Some(values) = values.iter().map(Value::as_str).collect::<Option<Vec<_>>>() else {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            path,
+        ));
+        return ObservationField::Malformed;
+    };
+    let Some((kind, arguments)) = values.split_first() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let command = match *kind {
+        "NONE" if arguments.is_empty() => NativeHealthCommand::Disabled,
+        "CMD" if !arguments.is_empty() => NativeHealthCommand::Exec(ProtectedHealthCommand::new(
+            arguments.iter().map(ToString::to_string).collect(),
+        )),
+        "CMD-SHELL" if !arguments.is_empty() => NativeHealthCommand::Shell(ProtectedHealthCommand::new(
+            arguments.iter().map(ToString::to_string).collect(),
+        )),
+        "NONE" | "CMD" | "CMD-SHELL" => {
+            return native_malformed_field(path, identity, findings);
+        }
+        _ => return native_unmodelled_field(path, value, unmodelled),
+    };
+    ObservationField::Observed(ObservedValue::new(command, ObservationOrigin::Effective))
+}
+
+fn decode_native_health_failure_action(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeHealthFailureAction> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(action_name) = value.as_str() else {
+        return native_malformed_field("$.Config.HealthcheckOnFailureAction", identity, findings);
+    };
+    let action = match action_name {
+        "none" => NativeHealthFailureAction::None,
+        "kill" => NativeHealthFailureAction::Kill,
+        "restart" => NativeHealthFailureAction::Restart,
+        "stop" => NativeHealthFailureAction::Stop,
+        _ => {
+            return native_unmodelled_field("$.Config.HealthcheckOnFailureAction", value, unmodelled);
+        }
+    };
+    ObservationField::Observed(ObservedValue::new(action, ObservationOrigin::Effective))
+}
+
+fn decode_native_logging(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<NativeLoggingObservation> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(value) = value.as_object() else {
+        return native_malformed_field("$.HostConfig.LogConfig", identity, findings);
+    };
+    let driver = match value.get("Type") {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(json_value @ Value::String(driver)) => match driver.as_str() {
+            "journald" => ObservationField::Observed(ObservedValue::new(
+                NativeLogDriver::Journald,
+                ObservationOrigin::Effective,
+            )),
+            "k8s-file" => ObservationField::Observed(ObservedValue::new(
+                NativeLogDriver::K8sFile,
+                ObservationOrigin::Effective,
+            )),
+            _ => native_unmodelled_field("$.HostConfig.LogConfig.Type", json_value, unmodelled),
+        },
+        Some(_) => native_malformed_field("$.HostConfig.LogConfig.Type", identity, findings),
+    };
+    let size = native_string_field(
+        value.get("Size"),
+        "$.HostConfig.LogConfig.Size",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    ObservationField::Observed(ObservedValue::new(
+        NativeLoggingObservation::new(driver, size),
+        ObservationOrigin::Effective,
+    ))
+}
+
+fn native_i64_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<i64> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(value) => value.as_i64().map_or_else(
+            || native_malformed_field(path, identity, findings),
+            |value| ObservationField::Observed(ObservedValue::new(value, origin)),
+        ),
+    }
+}
+
+fn native_u64_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<u64> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(value) => value.as_u64().map_or_else(
+            || native_malformed_field(path, identity, findings),
+            |value| ObservationField::Observed(ObservedValue::new(value, origin)),
+        ),
+    }
+}
+
+fn native_string_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<String> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) => ObservationField::Observed(ObservedValue::new(value.clone(), origin)),
+        Some(_) => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_unmodelled_field<T>(
+    path: &str,
+    value: &Value,
+    unmodelled: &mut Vec<(String, JsonValueKind)>,
+) -> ObservationField<T> {
+    unmodelled.push((path.to_owned(), json_value_kind(value)));
+    ObservationField::Unmodelled(if path.starts_with("$.Config") {
+        crate::UnmodelledFieldId::ContainerConfig
+    } else {
+        crate::UnmodelledFieldId::ContainerHostConfig
+    })
 }
 
 fn decode_container_configuration(
@@ -1426,6 +1886,7 @@ fn decode_network(
         None,
         ObservationField::NotApplicable,
         Some(network),
+        None,
         None,
         None,
         None,
@@ -1860,6 +2321,7 @@ fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         None,
         Some(uid),
         Some(gid),
+        None,
         findings,
         &["Name", "Labels", "UID", "GID"],
     ))
@@ -1968,6 +2430,7 @@ fn decode_image(
         None,
         None,
         None,
+        None,
         findings,
         &["Id", "Names", "Labels", "Config"],
     ))
@@ -2025,6 +2488,7 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         None,
         None,
         Some(driver),
+        None,
         None,
         None,
         findings,
@@ -3758,6 +4222,20 @@ impl<'a> UnknownFieldCollector<'a> {
         true
     }
 
+    fn push_kind(&mut self, path: String, kind: JsonValueKind) -> bool {
+        if self.fields.len() >= self.limit {
+            self.overflowed = true;
+            return false;
+        }
+        self.fields.push(UnmodelledField::new(
+            path,
+            kind,
+            self.resource.clone(),
+            self.evidence.clone(),
+        ));
+        true
+    }
+
     fn finish(self) -> (Vec<UnmodelledField>, bool) {
         (self.fields, self.overflowed)
     }
@@ -3792,7 +4270,28 @@ fn unknown_nested_fields(
                     "User",
                     "WorkingDir",
                     "Hostname",
+                    "Healthcheck",
+                    "HealthcheckOnFailureAction",
+                    "StartupHealthCheck",
                 ],
+                fields,
+            );
+            unknown_object_members(
+                object
+                    .get("Config")
+                    .and_then(Value::as_object)
+                    .and_then(|config| config.get("Healthcheck")),
+                "$.Config.Healthcheck",
+                &["Test", "Interval", "Timeout", "Retries", "StartPeriod"],
+                fields,
+            );
+            unknown_object_members(
+                object
+                    .get("Config")
+                    .and_then(Value::as_object)
+                    .and_then(|config| config.get("StartupHealthCheck")),
+                "$.Config.StartupHealthCheck",
+                &["Test", "Interval", "Timeout", "Retries", "StartPeriod", "Successes"],
                 fields,
             );
             unknown_object_members(
@@ -3844,6 +4343,24 @@ fn unknown_nested_fields(
                 &["ID", "Name", "UID", "GID", "Mode"],
                 fields,
             );
+            unknown_object_members(
+                object
+                    .get("HostConfig")
+                    .and_then(Value::as_object)
+                    .and_then(|host_config| host_config.get("RestartPolicy")),
+                "$.HostConfig.RestartPolicy",
+                &["Name", "MaximumRetryCount"],
+                fields,
+            );
+            unknown_object_members(
+                object
+                    .get("HostConfig")
+                    .and_then(Value::as_object)
+                    .and_then(|host_config| host_config.get("LogConfig")),
+                "$.HostConfig.LogConfig",
+                &["Type", "Size"],
+                fields,
+            );
             // HostAdd intentionally remains value-free unmodelled hosts-file data. All other
             // listed members have a bounded typed observation; unknown siblings remain explicit
             // metadata rather than being hidden by the accepted HostConfig object.
@@ -3859,6 +4376,8 @@ fn unknown_nested_fields(
                     "DnsOptions",
                     "NoManageResolvConf",
                     "NoManageHosts",
+                    "RestartPolicy",
+                    "LogConfig",
                 ],
                 fields,
             );
@@ -4077,6 +4596,11 @@ mod typed_observation_constructor_tests {
     fn kind_safe_resource_observation_constructor_accepts_every_matching_detail_and_rejects_mismatches() {
         let details = [
             ResourceDetails::Container(ContainerObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,

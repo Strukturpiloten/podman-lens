@@ -241,6 +241,11 @@ struct ResourceDetailsSnapshot {
     networking: Option<NativeNetworkingSnapshot>,
     memory_swappiness: Option<FieldStateSnapshot>,
     infra: Option<FieldStateSnapshot>,
+    restart_policy: Option<NativeRestartPolicySnapshot>,
+    health_check: Option<NativeHealthCheckSnapshot>,
+    health_failure_action: Option<FieldStateSnapshot>,
+    startup_health_check: Option<NativeStartupHealthCheckSnapshot>,
+    logging: Option<NativeLoggingSnapshot>,
     create_infra: Option<FieldStateSnapshot>,
     secret_driver: Option<FieldStateSnapshot>,
     volume_uid: Option<VolumeOwnerFieldSnapshot>,
@@ -288,6 +293,40 @@ struct NetworkSnapshot {
     options: FieldCountSnapshot,
     subnets: FieldCountSnapshot,
     routes: FieldCountSnapshot,
+}
+/// Redacted state-only restart-policy snapshot.
+#[derive(Debug, Serialize)]
+struct NativeRestartPolicySnapshot {
+    name: FieldStateSnapshot,
+    maximum_retry_count: FieldStateSnapshot,
+}
+
+/// Redacted state/count-only native health snapshot. Command values are never serialized.
+#[derive(Debug, Serialize)]
+struct NativeHealthCheckSnapshot {
+    command: FieldCountSnapshot,
+    interval: FieldStateSnapshot,
+    timeout: FieldStateSnapshot,
+    retries: FieldStateSnapshot,
+    start_period: FieldStateSnapshot,
+}
+
+/// Redacted state/count-only native startup-health snapshot. Command values are never serialized.
+#[derive(Debug, Serialize)]
+struct NativeStartupHealthCheckSnapshot {
+    command: FieldCountSnapshot,
+    interval: FieldStateSnapshot,
+    timeout: FieldStateSnapshot,
+    retries: FieldStateSnapshot,
+    start_period: FieldStateSnapshot,
+    successes: FieldStateSnapshot,
+}
+
+/// Redacted state-only native logging snapshot.
+#[derive(Debug, Serialize)]
+struct NativeLoggingSnapshot {
+    driver: FieldStateSnapshot,
+    size: FieldStateSnapshot,
 }
 
 /// Redacted state/count-only native networking snapshot. It deliberately omits every address,
@@ -459,6 +498,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: Some(native_networking(value.networking())),
             memory_swappiness: Some(field_summary(value.memory_swappiness())),
             infra: Some(field_summary(value.infra())),
+            restart_policy: Some(native_restart_policy(value.restart_policy())),
+            health_check: Some(native_health_check(value.health_check())),
+            health_failure_action: Some(field_summary(value.health_failure_action())),
+            startup_health_check: Some(native_startup_health_check(value.startup_health_check())),
+            logging: Some(native_logging(value.logging())),
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -485,6 +529,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: Some(native_networking(value.networking())),
             memory_swappiness: None,
             infra: None,
+            restart_policy: None,
+            health_check: None,
+            health_failure_action: None,
+            startup_health_check: None,
+            logging: None,
             create_infra: Some(field_summary(value.create_infra())),
             secret_driver: None,
             volume_uid: None,
@@ -516,6 +565,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: None,
             memory_swappiness: None,
             infra: None,
+            restart_policy: None,
+            health_check: None,
+            health_failure_action: None,
+            startup_health_check: None,
+            logging: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -542,6 +596,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: None,
             memory_swappiness: None,
             infra: None,
+            restart_policy: None,
+            health_check: None,
+            health_failure_action: None,
+            startup_health_check: None,
+            logging: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: Some(volume_owner(value.uid())),
@@ -568,6 +627,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: None,
             memory_swappiness: None,
             infra: None,
+            restart_policy: None,
+            health_check: None,
+            health_failure_action: None,
+            startup_health_check: None,
+            logging: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -594,6 +658,11 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             networking: None,
             memory_swappiness: None,
             infra: None,
+            restart_policy: None,
+            health_check: None,
+            health_failure_action: None,
+            startup_health_check: None,
+            logging: None,
             create_infra: None,
             secret_driver: Some(field_summary(value.driver())),
             volume_uid: None,
@@ -604,6 +673,89 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
 
 fn label_summary(value: &ObservationField<crate::Labels>) -> FieldCountSnapshot {
     collection_summary(value, BTreeMap::len)
+}
+
+fn native_restart_policy(
+    value: &ObservationField<crate::NativeRestartPolicyObservation>,
+) -> NativeRestartPolicySnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeRestartPolicySnapshot {
+            name: state.clone(),
+            maximum_retry_count: state,
+        };
+    };
+    NativeRestartPolicySnapshot {
+        name: field_summary(value.name()),
+        maximum_retry_count: field_summary(value.maximum_retry_count()),
+    }
+}
+
+fn health_command_count(value: &crate::NativeHealthCommand) -> usize {
+    match value {
+        crate::NativeHealthCommand::Disabled => 0,
+        crate::NativeHealthCommand::Shell(command) | crate::NativeHealthCommand::Exec(command) => {
+            command.argument_count()
+        }
+    }
+}
+
+fn native_health_check(value: &ObservationField<crate::NativeHealthCheckObservation>) -> NativeHealthCheckSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeHealthCheckSnapshot {
+            command: empty_collection_summary(&state),
+            interval: state.clone(),
+            timeout: state.clone(),
+            retries: state.clone(),
+            start_period: state,
+        };
+    };
+    NativeHealthCheckSnapshot {
+        command: collection_summary(value.command(), health_command_count),
+        interval: field_summary(value.interval()),
+        timeout: field_summary(value.timeout()),
+        retries: field_summary(value.retries()),
+        start_period: field_summary(value.start_period()),
+    }
+}
+
+fn native_startup_health_check(
+    value: &ObservationField<crate::NativeStartupHealthCheckObservation>,
+) -> NativeStartupHealthCheckSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeStartupHealthCheckSnapshot {
+            command: empty_collection_summary(&state),
+            interval: state.clone(),
+            timeout: state.clone(),
+            retries: state.clone(),
+            start_period: state.clone(),
+            successes: state,
+        };
+    };
+    NativeStartupHealthCheckSnapshot {
+        command: collection_summary(value.command(), health_command_count),
+        interval: field_summary(value.interval()),
+        timeout: field_summary(value.timeout()),
+        retries: field_summary(value.retries()),
+        start_period: field_summary(value.start_period()),
+        successes: field_summary(value.successes()),
+    }
+}
+
+fn native_logging(value: &ObservationField<crate::NativeLoggingObservation>) -> NativeLoggingSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeLoggingSnapshot {
+            driver: state.clone(),
+            size: state,
+        };
+    };
+    NativeLoggingSnapshot {
+        driver: field_summary(value.driver()),
+        size: field_summary(value.size()),
+    }
 }
 
 fn native_networking(value: &ObservationField<crate::NativeNetworkingObservation>) -> NativeNetworkingSnapshot {

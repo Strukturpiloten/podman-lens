@@ -141,3 +141,11 @@ boundary proves deprecated `StaticIP` and permanently inapplicable `StaticMAC` b
 Snapshot tests assert state,
 origin, and counts only, never addresses, host entries, DNS strings, port values, network names,
 or opaque option data.
+
+M7-B3a tests use pinned or synthesized offline container inspect responses. They cover effective
+restart, normal/startup health (including startup `StartPeriod`), failure action, and logging
+observations; protected-command callback access; debug and snapshot redaction; all malformed
+health command table shapes; and negative restart/retry/success count values. Unknown restart,
+logging, action, and health enum spellings must remain field-local unmodelled metadata with
+`PLN0023`. The external-consumer test compiles every public accessor and handles the
+non-exhaustive health-command enum.

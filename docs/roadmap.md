@@ -221,6 +221,13 @@ without silent loss; all other native output remains explicitly outside that con
 - [x] M7-B2: Complete bounded native network input coverage without inferring container runtime
       addresses, arbitrary driver/option values, or output behavior.
 - [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
+- [x] M7-B3a: Add observation-only container restart policy, normal and startup health checks,
+      health-failure action, and logging. These are effective inspect evidence, not authored
+      deployment intent: inspect may include image health defaults and normalized host settings.
+      Health command arguments remain protected callback-only evidence, and snapshots retain only
+      their count. Unknown enum spellings remain bounded `PLN0023` metadata; malformed command
+      forms and negative native count values fail closed with `PLN0017`. Security, namespaces, and
+      resource controls remain separate later B3 increments.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.
 - [ ] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.

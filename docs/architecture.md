@@ -169,6 +169,15 @@ Runtime addresses, runtime port assignments, MAC addresses, and arbitrary option
 portable intent. Deprecated `StaticIP` is usable only through 5.8.6; `StaticMAC` is version-
 inapplicable throughout the reviewed range.
 
+M7-B3a adds typed, observation-only container restart policy, normal and startup health checks,
+health-failure action, and logging. Every one is effective inspect evidence: restart and logging
+may be generator-normalized, while health values may originate in the image and cannot be reliably
+distinguished from authored configuration. Health command arguments are protected and available
+only through an explicit callback; diagnostics, debug output, and snapshots retain only state,
+provenance, and argument count. The sole disabled health form is `Test: ["NONE"]`; malformed forms
+and negative unsigned count values fail closed. Future enum spellings remain field-local bounded
+metadata with `PLN0023`, not coerced values or an implied output mapping.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

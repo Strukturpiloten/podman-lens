@@ -28,7 +28,8 @@ plans, or depend on BoxFerry.
 
 ## Status
 
-M0 repository and Rust-library scaffolding is complete. M1 slice A now provides explicit redacted
-connection specifications, a caller-owned asynchronous Libpod transport contract, and an offline
-Podman 5.4–6.1 compatibility catalogue. It does not yet connect to Podman or decode API responses.
-See the roadmap for the remaining M1 work and acceptance criteria.
+M1 provides explicit redacted connection specifications, a replaceable asynchronous Libpod
+transport contract, a built-in read-only Unix transport, an offline Podman 5.4–6.1 compatibility
+catalogue, and deterministic version probing. The built-in transport accepts only `GET` requests;
+the public probe itself performs two fixed `GET` requests. SSH and mutual-TLS transports remain
+caller-provided. See the roadmap for the next native inventory work.

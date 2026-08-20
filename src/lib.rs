@@ -1,15 +1,19 @@
 //! Version-aware native Podman inspection and deployment planning.
 //!
 //! This first milestone establishes explicit, redacted connection configuration; validated
-//! Libpod request and response contracts; and evidence-backed Podman target profiles. It does
-//! not open a connection or decode runtime responses. Applications provide a
-//! [`LibpodTransport`] implementation for their selected transport.
+//! Libpod request and response contracts; evidence-backed Podman target profiles; and a fixed
+//! read-only service probe. On Unix, `ReadOnlyUnixTransport` can acquire from one explicit socket
+//! and rejects every method except `GET` before opening it. Applications provide any SSH or TLS
+//! [`LibpodTransport`] implementation themselves.
 
 #![forbid(unsafe_code)]
 
 pub mod connection;
 pub mod diagnostic;
 pub mod evidence;
+pub mod probe;
+#[cfg(unix)]
+pub mod read_only_unix_transport;
 pub mod transport;
 pub mod version;
 
@@ -19,6 +23,9 @@ pub use connection::{
 };
 pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
+pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
+#[cfg(unix)]
+pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts};
 pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,
     LibpodTransportFuture, MAX_PATH_AND_QUERY_BYTES, TransportError, TransportLimits,

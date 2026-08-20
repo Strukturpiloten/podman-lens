@@ -56,18 +56,25 @@ over a local socket or an explicitly selected remote connection.
 
 ## Core contracts
 
-M1 slice A makes this small foundation public:
+M1 makes this small foundation public:
 
 - `ConnectionSpec` identifies only explicit local Unix, verified SSH, or mutual-TLS TCP service
   endpoints. It does not read environment variables or Podman connection configuration.
-- `LibpodTransport` is object-safe and asynchronous, but has no built-in client. Applications own
-  socket, SSH, TLS, runtime, and credential resolution.
+- `LibpodTransport` is object-safe and asynchronous. Callers may implement it for their selected
+  Unix, SSH, or TLS client. `ReadOnlyUnixTransport` is the sole built-in implementation: it uses
+  one explicit Unix socket for acquisition and is available only on Unix targets. It rejects every
+  method except bodyless `GET`, caller-supplied `Host`, and over-limit requests before opening the
+  socket. Its configurable HTTP/1 header ceiling must be at least the parser's documented 8 KiB
+  minimum. PodmanLens provides no mutating client or executor.
 - `LibpodRequest`, `LibpodResponse`, and duplicate-preserving `LibpodHeaders` are bounded
   transport messages. Their `Debug` output redacts paths, headers, and bodies.
 - `ObservedPodmanVersion`, `ObservedApiVersion`, and `TargetProfile` retain original version
   spelling, reject prereleases, and fail closed outside the reviewed 5.4.0–6.2.0 engine range.
   A selected Libpod API must be at least 4.0.0 and no newer than that selected engine.
 - `capability_catalogue()` returns the published immutable evidence for reviewed 5.4–6.1 lines.
+- `probe_libpod_service()` performs exactly `GET /libpod/_ping` and then
+  `GET /v4.0.0/libpod/version`, validates bounded protocol evidence, and returns independent
+  observed engine/API versions with their reviewed target profile.
 
 The following names remain conceptual until their milestones:
 
@@ -188,8 +195,9 @@ data governs both CLI flags and Libpod request fields; the development machine n
 implicit target version.
 
 The embedded catalogue identifies reviewed Podman 5.4 through 6.1 source releases and current
-patch provenance for 5.8.6 and 6.1.0. Slice A only validates explicit semantic target pairs; it
-does not yet decode a system-information response or claim runtime conformance. A version is not
+patch provenance for 5.8.6 and 6.1.0. The fixed probe validates status, duplicate-preserving
+headers, bounded JSON shape, and exactly one `Podman Engine` component. It preserves engine/API
+versions independently; compatible versions do not have to be textually equal. A version is not
 fully supported until its fixtures, boundaries, and positive and negative tests are committed.
 
 ## Primary references

@@ -11,3 +11,20 @@ Podman service must be explicitly opt-in and must never be part of the ordinary 
 Run the complete local gate with `./scripts/check-all.sh`. It formats tracked files, runs Rust and
 repository-policy tests, measures coverage without inventing an initial threshold, validates the
 MSRV, checks dependencies, and checks local documentation links offline.
+
+The opt-in current-patch probe test is deliberately not part of that gate. It only permits the
+fixed read-only acquisition probe. Run it explicitly against a selected local socket with:
+
+```shell
+PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=/absolute/podman.sock \
+PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=6.1.0 \
+cargo test --test current_patch_conformance -- --ignored
+```
+
+The expected version must be exactly `5.8.6` or `6.1.0`; the test never discovers a connection,
+retries, or sends a mutating Libpod request.
+
+The built-in Unix transport tests prove that mutation methods, body-bearing acquisition requests,
+caller-supplied `Host`, and over-limit requests fail before a socket is opened. The Unix-only module
+is conditionally compiled so platform-neutral connection and caller-provided transport contracts
+remain usable on non-Unix targets.

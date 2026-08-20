@@ -22,15 +22,18 @@ Exit: the empty library builds on the pinned toolchain and the complete local va
 - [x] Define explicit connection, observed-version, and target-profile types.
 - [x] Define a replaceable asynchronous transport contract with bounded, redacted messages.
 - [x] Add explicit remote-connection specifications without ambient endpoint discovery.
-- [ ] Negotiate and validate Podman and Libpod API versions.
+- [x] Negotiate and validate Podman and Libpod API versions through the fixed read-only probe.
 - [x] Build the initial reviewed capability catalogue for Podman 5.4 through 6.1.
-- [ ] Pin offline API fixtures and provenance for every reviewed minor line.
-- [ ] Add current-patch conformance for Podman 5.8.6 and 6.1.0.
+- [x] Pin offline API fixtures and provenance for every reviewed minor line.
+- [x] Add ignored, explicit current-patch conformance for Podman 5.8.6 and 6.1.0.
 
-M1 slice A is complete: it deliberately contains no Unix HTTP client, SSH client, TLS client,
-probe decoder, API negotiation, or runtime interaction. Those remain M1 slice B work.
+M1 is complete. Its built-in Unix HTTP/1.1 transport is acquisition-only: it permits `GET` and
+rejects `POST` and `DELETE` before socket connection. It has no redirect following, decompression,
+retries, ambient endpoint discovery, detached tasks, SSH client, mutual-TLS client, or execution
+facility. SSH and mutual-TLS remain caller-provided `LibpodTransport` implementations.
 
-Exit: system information can be decoded deterministically through real and fixture transports.
+Exit: version information is decoded deterministically through fixture transports and an opt-in,
+explicit current-patch read-only conformance transport.
 
 ## M2: Native resource inventory
 

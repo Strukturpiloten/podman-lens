@@ -1,9 +1,14 @@
 //! Compile-time public API contract for the M1 transport and compatibility boundary.
 
+#[cfg(unix)]
+use std::time::Duration;
+
 use podman_lens::{
     ConnectionSpec, LibpodHeaders, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport, LibpodTransportFuture,
-    OpaqueReference, SshConnection, TransportError, UnixConnection,
+    OpaqueReference, SshConnection, TransportError, UnixConnection, probe_libpod_service,
 };
+#[cfg(unix)]
+use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
 
 struct FixtureTransport;
 
@@ -42,4 +47,26 @@ fn external_consumer_can_construct_explicit_connections_and_an_object_safe_trans
 #[test]
 fn crate_can_be_linked_by_an_external_consumer() {
     assert_eq!(env!("CARGO_PKG_NAME"), "podman-lens");
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn external_consumer_can_use_the_fixed_read_only_probe_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let transport: &dyn LibpodTransport = &FixtureTransport;
+    let error = probe_libpod_service(transport)
+        .await
+        .err()
+        .ok_or_else(|| std::io::Error::other("empty fixture response unexpectedly probed"))?;
+    assert_eq!(error.code().as_str(), "PLN0008");
+
+    let unix = UnixConnection::new("/run/user/1000/podman/podman.sock")?;
+    let timeouts = ReadOnlyUnixTransportTimeouts::new(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+    )?;
+    let transport = ReadOnlyUnixTransport::new(unix, TransportLimits::default(), timeouts)?;
+    assert_eq!(transport.timeouts(), timeouts);
+    Ok(())
 }

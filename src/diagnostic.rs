@@ -18,6 +18,18 @@ pub enum DiagnosticCode {
     IncompatibleTargetProfile,
     /// The embedded evidence catalogue cannot be decoded.
     CatalogueUnavailable,
+    /// A Libpod probe received an unexpected HTTP status.
+    ProbeHttpStatus,
+    /// A Libpod probe response header is missing, duplicated, or malformed.
+    ProbeHeader,
+    /// A Libpod probe response body is not valid bounded JSON.
+    ProbeJson,
+    /// A Libpod probe JSON document has an unsupported shape.
+    ProbeShape,
+    /// A Libpod probe does not contain one valid Podman Engine component.
+    ProbeComponent,
+    /// Observed engine and API versions are outside reviewed compatibility evidence.
+    ObservedCompatibility,
 }
 
 impl DiagnosticCode {
@@ -31,6 +43,12 @@ impl DiagnosticCode {
             Self::InvalidVersion => "PLN0004",
             Self::IncompatibleTargetProfile => "PLN0005",
             Self::CatalogueUnavailable => "PLN0006",
+            Self::ProbeHttpStatus => "PLN0007",
+            Self::ProbeHeader => "PLN0008",
+            Self::ProbeJson => "PLN0009",
+            Self::ProbeShape => "PLN0010",
+            Self::ProbeComponent => "PLN0011",
+            Self::ObservedCompatibility => "PLN0012",
         }
     }
 }
@@ -68,6 +86,16 @@ impl Diagnostic {
                     "the requested Podman target profile is not supported by reviewed evidence"
                 }
                 DiagnosticCode::CatalogueUnavailable => "the embedded Podman compatibility catalogue is unavailable",
+                DiagnosticCode::ProbeHttpStatus => "the Libpod probe received an unexpected HTTP status",
+                DiagnosticCode::ProbeHeader => "the Libpod probe response header is invalid",
+                DiagnosticCode::ProbeJson => "the Libpod probe response JSON is invalid or exceeds its safety bound",
+                DiagnosticCode::ProbeShape => "the Libpod probe response has an unsupported JSON shape",
+                DiagnosticCode::ProbeComponent => {
+                    "the Libpod probe response does not identify one valid Podman Engine component"
+                }
+                DiagnosticCode::ObservedCompatibility => {
+                    "the observed Podman engine and Libpod API versions are outside reviewed evidence"
+                }
             },
         }
     }

@@ -188,7 +188,7 @@ impl LibpodPath {
     /// Parses a Libpod path with a narrowly validated encoded query.
     ///
     /// Versioned endpoints must use `/v<semver>/libpod/...`. The unversioned
-    /// `/libpod/_ping` probe is also accepted because the service uses it before API negotiation.
+    /// `/libpod/_ping` probe is also accepted because the service exposes it before version observation.
     /// Query parameter order and duplicates are preserved for the native protocol.
     ///
     /// # Errors
@@ -421,6 +421,18 @@ impl TransportError {
         Self(Diagnostic::new(DiagnosticCode::TransportUnavailable))
     }
 
+    /// Creates a redacted error for a prohibited mutation request.
+    #[must_use]
+    pub const fn read_only_rejected() -> Self {
+        Self::invalid_message()
+    }
+
+    /// Creates a redacted invalid-transport-message error for internal boundary enforcement.
+    #[must_use]
+    pub(crate) const fn invalid_message() -> Self {
+        Self(Diagnostic::new(DiagnosticCode::InvalidTransportMessage))
+    }
+
     /// Returns the stable diagnostic for this transport failure.
     #[must_use]
     pub const fn diagnostic(&self) -> &Diagnostic {
@@ -441,9 +453,9 @@ pub type LibpodTransportFuture<'a> = Pin<Box<dyn Future<Output = Result<LibpodRe
 
 /// A replaceable, object-safe asynchronous Libpod transport.
 ///
-/// This slice intentionally provides no implementation. A caller can implement this trait for a
-/// reviewed Unix, SSH, or mutual-TLS transport without coupling `PodmanLens` to a runtime, HTTP,
-/// SSH, or TLS client.
+/// [`crate::ReadOnlyUnixTransport`] provides bounded local acquisition and rejects mutation before
+/// connecting. A caller can implement this trait for reviewed SSH or mutual-TLS transport without
+/// coupling `PodmanLens` to an SSH or TLS client.
 pub trait LibpodTransport: Send + Sync {
     /// Sends one bounded request and resolves to a bounded response or redacted failure.
     fn send<'a>(&'a self, request: &'a LibpodRequest) -> LibpodTransportFuture<'a>;

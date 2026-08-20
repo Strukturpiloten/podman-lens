@@ -6,13 +6,15 @@
 ## Decision
 
 M6-A renders the evidence-backed basic deployment topology into deterministic CLI argument arrays,
-versioned Libpod request descriptions, a redacted serialization-only JSON snapshot, and a POSIX
+versioned Libpod request descriptions, a serialization-only JSON deployment artifact, and a POSIX
 review script. A target is accepted only when its normalized, identical engine/API version appears
 in the committed renderer evidence. That evidence records the immutable CLI and Libpod route source
 for each operation at every reviewed release, plus the body-decoding source when a body exists. The
 optional non-sensitive output connection survives into the rendering and JSON export. The review
 script safely names every external prerequisite in deterministic comments but never exposes secret
-material or its external reference. Neither the renderer nor the script generator opens a connection
+material or its external reference. A deployment artifact may contain only explicitly
+caller-authorized public declared values; it never contains a sensitive value or sensitive-input
+reference. Neither the renderer nor the script generator opens a connection
 or executes Podman.
 
 Pod networks, pod-member container assignment, and unpodded-container networks are exact. M6-B1a

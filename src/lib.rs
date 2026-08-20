@@ -8,6 +8,8 @@
 
 #![forbid(unsafe_code)]
 
+/// Versioned, serialization-only deployment artifacts.
+pub mod artifact;
 pub mod connection;
 pub mod deployment;
 pub mod diagnostic;
@@ -55,8 +57,8 @@ pub use render::{
 };
 pub use settings::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerSettings, ContainerUser, ContainerWorkdir,
-    DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, LabelValue,
-    NamedVolumeCopyMode, NamedVolumeMount, PlainEnvironmentValue, RestartPolicy, SensitiveInlineEnvironmentValue,
+    DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, NamedVolumeCopyMode,
+    NamedVolumeMount, PublicEnvironmentValue, PublicLabelValue, RestartPolicy, SensitiveInlineEnvironmentValue,
 };
 pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,

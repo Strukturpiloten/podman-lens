@@ -91,8 +91,10 @@ HTTP, JSON, and shell representations.
 
 M6-A exposes `render_deployment`, producing deterministic CLI argument arrays and versioned Libpod
 request descriptions without opening a connection. `DeploymentRendering::connection` preserves the
-optional non-sensitive output-connection name; `snapshot::deployment_v1` exports it as an explicit
-validated string or `null` while always redacting secret material. The accepted name is 1–64 ASCII
+optional non-sensitive output-connection name; `artifact::deployment_v1` exports it as an explicit
+validated string or `null`. A deployment artifact represents declared output, not an observational
+snapshot: it may include only values explicitly constructed as public by the caller and never
+sensitive values or sensitive-input references. The accepted name is 1–64 ASCII
 bytes, begins with an ASCII alphanumeric character, and otherwise uses only ASCII alphanumeric
 characters, dots, underscores, or hyphens. URI, endpoint, socket-path, credential, token, and
 whitespace spellings are rejected with `PLN0034` before rendering or serialization.
@@ -102,7 +104,8 @@ normalized destination, read-only state, and copy mode. `PodIntent::add_infra_mo
 names the Podman infra-container scope: it does not add the mount to each member container. Labels
 and environment assignments retain declaration order and reject duplicate keys;
 `SensitiveInlineEnvironmentValue` and external environment references redact their value in `Debug`.
-These values are semantic-only in M6-B1a: rendering a plan that contains one produces `PLN0046` for
+`PublicLabelValue` and `PublicEnvironmentValue` make caller declassification explicit; do not
+construct them from observed runtime values. These values are semantic-only in M6-B1a: rendering a plan that contains one produces `PLN0046` for
 its field instead of silently dropping it.
 
 `DeploymentRendering::shell_script` is generated solely from those argument arrays, requires

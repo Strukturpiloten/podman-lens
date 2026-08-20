@@ -186,12 +186,16 @@ impl LabelKey {
     }
 }
 
-/// A label value. Empty values are valid.
+/// An explicitly caller-authorized public label value. Empty values are valid.
+///
+/// Constructing this type is an explicit declassification decision: it authorizes this value for
+/// deployment artifacts, CLI arguments, Libpod JSON, and shell-review output once the matching
+/// renderer exists. Do not construct it from observed sensitive runtime values.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LabelValue(String);
+pub struct PublicLabelValue(String);
 
-impl LabelValue {
-    /// Creates a bounded label value.
+impl PublicLabelValue {
+    /// Creates a bounded explicitly public label value.
     ///
     /// # Errors
     ///
@@ -215,13 +219,13 @@ impl LabelValue {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Label {
     key: LabelKey,
-    value: LabelValue,
+    value: PublicLabelValue,
 }
 
 impl Label {
     /// Creates one label from validated key and value types.
     #[must_use]
-    pub const fn new(key: LabelKey, value: LabelValue) -> Self {
+    pub const fn new(key: LabelKey, value: PublicLabelValue) -> Self {
         Self { key, value }
     }
 
@@ -233,7 +237,7 @@ impl Label {
 
     /// Returns the label value.
     #[must_use]
-    pub fn value(&self) -> &LabelValue {
+    pub fn value(&self) -> &PublicLabelValue {
         &self.value
     }
 }
@@ -270,12 +274,16 @@ impl EnvironmentName {
     }
 }
 
-/// A plain environment value. Empty values are valid.
+/// An explicitly caller-authorized public environment value. Empty values are valid.
+///
+/// Constructing this type is an explicit declassification decision: it authorizes this value for
+/// deployment artifacts, CLI arguments, Libpod JSON, and shell-review output once the matching
+/// renderer exists. Do not construct it from observed sensitive runtime values.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlainEnvironmentValue(String);
+pub struct PublicEnvironmentValue(String);
 
-impl PlainEnvironmentValue {
-    /// Creates one bounded plain environment value.
+impl PublicEnvironmentValue {
+    /// Creates one bounded explicitly public environment value.
     ///
     /// # Errors
     ///
@@ -324,8 +332,8 @@ impl fmt::Debug for SensitiveInlineEnvironmentValue {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum DeploymentEnvironmentValue {
-    /// A non-sensitive, directly declared value.
-    Plain(PlainEnvironmentValue),
+    /// An explicitly caller-authorized public, directly declared value.
+    Public(PublicEnvironmentValue),
     /// A directly declared sensitive value that remains redacted.
     SensitiveInline(SensitiveInlineEnvironmentValue),
     /// A sensitive value supplied by a caller-owned external input.

@@ -1,31 +1,38 @@
-//! Version 1 serialization-only, redacted deployment-rendering export.
+//! Version 1 serialization-only deployment artifact.
 
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{DeploymentRendering, RenderStatus, RenderedHttpBody, RenderedHttpMethod, ResourceKind};
 
-/// Schema version emitted by M6-A deployment rendering exports.
+/// Schema version emitted by M6-A deployment artifacts.
 pub const SCHEMA_VERSION: u8 = 1;
 
-/// Returns a redacted, serialization-only deployment rendering export.
+/// Returns a serialization-only deployment artifact.
+///
+/// The artifact contains only explicitly public declared values once their renderers are
+/// implemented. It never contains sensitive values or sensitive-input references.
 #[must_use]
-pub fn deployment(source: &DeploymentRendering) -> DeploymentSnapshot {
-    DeploymentSnapshot::from_rendering(source)
+pub fn deployment(source: &DeploymentRendering) -> DeploymentArtifact {
+    DeploymentArtifact::from_rendering(source)
 }
 
-/// Versioned deployment rendering export. It deliberately does not deserialize.
+/// Versioned deployment-rendering artifact. It deliberately does not deserialize.
+///
+/// This is not an observational snapshot. It represents caller-authorized deployment output and
+/// may therefore contain declared public values, while always excluding sensitive values and
+/// sensitive-input references.
 #[derive(Debug, Serialize)]
-pub struct DeploymentSnapshot {
+pub struct DeploymentArtifact {
     schema_version: u8,
     status: &'static str,
     connection: Option<String>,
-    external_preconditions: Vec<ResourceSnapshot>,
-    operations: Vec<OperationSnapshot>,
+    external_preconditions: Vec<ResourceArtifact>,
+    operations: Vec<OperationArtifact>,
 }
 
-impl DeploymentSnapshot {
-    /// Builds a redacted stable export from rendered deployment semantics.
+impl DeploymentArtifact {
+    /// Builds a stable deployment artifact from rendered deployment semantics.
     #[must_use]
     pub fn from_rendering(source: &DeploymentRendering) -> Self {
         Self {
@@ -43,29 +50,29 @@ impl DeploymentSnapshot {
                 .map(|operation| {
                     let identity = operation.operation().id().resource();
                     let body = match operation.libpod().body() {
-                        RenderedHttpBody::Empty => BodySnapshot {
+                        RenderedHttpBody::Empty => BodyArtifact {
                             kind: "empty",
                             json: None,
                         },
-                        RenderedHttpBody::Json(value) => BodySnapshot {
+                        RenderedHttpBody::Json(value) => BodyArtifact {
                             kind: "json",
                             json: Some(value.clone()),
                         },
-                        RenderedHttpBody::ExternalSensitiveInput(_) => BodySnapshot {
+                        RenderedHttpBody::ExternalSensitiveInput(_) => BodyArtifact {
                             kind: "external_sensitive_input",
                             json: None,
                         },
                     };
-                    OperationSnapshot {
+                    OperationArtifact {
                         status: status(operation.status()),
                         action: action(operation.operation().id().action()),
                         resource: resource(identity.kind(), identity.name()),
-                        cli: CliSnapshot {
+                        cli: CliArtifact {
                             program: operation.cli().program(),
                             argv: operation.cli().argv().to_vec(),
                             external_sensitive_input_required: operation.cli().external_input().is_some(),
                         },
-                        libpod: LibpodSnapshot {
+                        libpod: LibpodArtifact {
                             method: match operation.libpod().method() {
                                 RenderedHttpMethod::Get => "GET",
                                 RenderedHttpMethod::Post => "POST",
@@ -87,39 +94,39 @@ impl DeploymentSnapshot {
 }
 
 #[derive(Debug, Serialize)]
-struct ResourceSnapshot {
+struct ResourceArtifact {
     kind: &'static str,
     name: String,
 }
 #[derive(Debug, Serialize)]
-struct OperationSnapshot {
+struct OperationArtifact {
     status: &'static str,
     action: &'static str,
-    resource: ResourceSnapshot,
-    cli: CliSnapshot,
-    libpod: LibpodSnapshot,
+    resource: ResourceArtifact,
+    cli: CliArtifact,
+    libpod: LibpodArtifact,
 }
 #[derive(Debug, Serialize)]
-struct CliSnapshot {
+struct CliArtifact {
     program: &'static str,
     argv: Vec<String>,
     external_sensitive_input_required: bool,
 }
 #[derive(Debug, Serialize)]
-struct LibpodSnapshot {
+struct LibpodArtifact {
     method: &'static str,
     path_and_query: String,
-    body: BodySnapshot,
+    body: BodyArtifact,
 }
 #[derive(Debug, Serialize)]
-struct BodySnapshot {
+struct BodyArtifact {
     kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     json: Option<Value>,
 }
 
-fn resource(kind: ResourceKind, name: &str) -> ResourceSnapshot {
-    ResourceSnapshot {
+fn resource(kind: ResourceKind, name: &str) -> ResourceArtifact {
+    ResourceArtifact {
         kind: kind_name(kind),
         name: name.to_owned(),
     }

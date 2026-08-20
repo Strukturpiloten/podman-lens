@@ -6,8 +6,8 @@ use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
     DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
-    Label, LabelKey, LabelValue, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion,
-    ObservedPodmanVersion, PlainEnvironmentValue, PodIntent, ResourceKind, RestartPolicy, SecretIntent,
+    Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion,
+    PodIntent, PublicEnvironmentValue, PublicLabelValue, ResourceKind, RestartPolicy, SecretIntent,
     SemanticOperationAction, SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency,
     TargetProfile, VolumeIntent, plan_deployment,
 };
@@ -174,11 +174,19 @@ fn scalar_label_and_environment_grammars_cover_positive_and_negative_boundaries(
     }
 
     let value = "v".repeat(4096);
-    assert_eq!(LabelValue::new(value.clone()).expect("label value").as_str(), value);
+    assert_eq!(
+        PublicLabelValue::new(value.clone())
+            .expect("public label value")
+            .as_str(),
+        value
+    );
     for value in ["bad\nvalue", &"v".repeat(4097)] {
-        assert!(LabelValue::new(value).is_err(), "{value:?}");
+        assert!(PublicLabelValue::new(value).is_err(), "{value:?}");
     }
-    assert_eq!(LabelValue::new("").expect("empty label value").as_str(), "");
+    assert_eq!(
+        PublicLabelValue::new("").expect("empty public label value").as_str(),
+        ""
+    );
 
     let name = format!("A{}", "_".repeat(255));
     assert_eq!(EnvironmentName::new(name.clone()).expect("name").as_str(), name);
@@ -194,11 +202,11 @@ fn scalar_label_and_environment_grammars_cover_positive_and_negative_boundaries(
 
     let value = "v".repeat(4096);
     assert_eq!(
-        PlainEnvironmentValue::new(value).expect("plain value").as_str().len(),
+        PublicEnvironmentValue::new(value).expect("public value").as_str().len(),
         4096
     );
     for value in ["bad\nvalue", &"v".repeat(4097)] {
-        assert!(PlainEnvironmentValue::new(value).is_err(), "{value:?}");
+        assert!(PublicEnvironmentValue::new(value).is_err(), "{value:?}");
         assert!(SensitiveInlineEnvironmentValue::new(value).is_err(), "{value:?}");
     }
     assert!(SensitiveInlineEnvironmentValue::new("").is_ok());
@@ -252,13 +260,13 @@ fn typed_settings_preserve_collection_order_and_redact_sensitive_environment_val
         settings
             .add_label(Label::new(
                 LabelKey::new("org.example.first").expect("key"),
-                LabelValue::new("").expect("empty value"),
+                PublicLabelValue::new("").expect("empty value"),
             ))
             .expect("label");
         settings
             .add_label(Label::new(
                 LabelKey::new("org.example.second").expect("key"),
-                LabelValue::new("two").expect("value"),
+                PublicLabelValue::new("two").expect("value"),
             ))
             .expect("label");
         assert_eq!(
@@ -273,7 +281,7 @@ fn typed_settings_preserve_collection_order_and_redact_sensitive_environment_val
             settings
                 .add_label(Label::new(
                     LabelKey::new("org.example.first").expect("key"),
-                    LabelValue::new("replacement").expect("value"),
+                    PublicLabelValue::new("replacement").expect("value"),
                 ))
                 .expect_err("duplicate label")
                 .code()
@@ -283,7 +291,7 @@ fn typed_settings_preserve_collection_order_and_redact_sensitive_environment_val
         settings
             .add_environment(EnvironmentAssignment::new(
                 EnvironmentName::new("EMPTY").expect("name"),
-                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("").expect("value")),
+                DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new("").expect("value")),
             ))
             .expect("plain environment");
         settings
@@ -306,7 +314,7 @@ fn typed_settings_preserve_collection_order_and_redact_sensitive_environment_val
             settings
                 .add_environment(EnvironmentAssignment::new(
                     EnvironmentName::new("EMPTY").expect("name"),
-                    DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("replacement").expect("value")),
+                    DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new("replacement").expect("value")),
                 ))
                 .expect_err("duplicate environment")
                 .code()
@@ -327,7 +335,7 @@ fn typed_setting_collections_accept_exact_capacity_and_reject_one_more_value() {
         labels
             .add_label(Label::new(
                 LabelKey::new(format!("org.example.{index}")).expect("label key"),
-                LabelValue::new("value").expect("label value"),
+                PublicLabelValue::new("value").expect("label value"),
             ))
             .expect("bounded label");
     }
@@ -336,7 +344,7 @@ fn typed_setting_collections_accept_exact_capacity_and_reject_one_more_value() {
         labels
             .add_label(Label::new(
                 LabelKey::new("org.example.overflow").expect("label key"),
-                LabelValue::new("value").expect("label value"),
+                PublicLabelValue::new("value").expect("label value"),
             ))
             .expect_err("label capacity")
             .code()
@@ -349,7 +357,7 @@ fn typed_setting_collections_accept_exact_capacity_and_reject_one_more_value() {
         environment
             .add_environment(EnvironmentAssignment::new(
                 EnvironmentName::new(format!("VALUE_{index}")).expect("environment name"),
-                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("value").expect("value")),
+                DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new("value").expect("value")),
             ))
             .expect("bounded environment");
     }
@@ -358,7 +366,7 @@ fn typed_setting_collections_accept_exact_capacity_and_reject_one_more_value() {
         environment
             .add_environment(EnvironmentAssignment::new(
                 EnvironmentName::new("VALUE_OVERFLOW").expect("environment name"),
-                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("value").expect("value")),
+                DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new("value").expect("value")),
             ))
             .expect_err("environment capacity")
             .code()

@@ -1,6 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://boxferry.dev/schemas/podman-lens-deployment-v1.schema.json",
+  "title": "PodmanLens deployment artifact v1",
+  "description": "Serialization-only deployment artifact. It may contain explicitly caller-authorized public declared values, but never sensitive values or sensitive-input references.",
   "type": "object",
   "required": ["schema_version", "status", "connection", "external_preconditions", "operations"],
   "properties": {

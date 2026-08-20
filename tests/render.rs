@@ -6,10 +6,10 @@ use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
     DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, Label, LabelKey,
-    LabelValue, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion,
-    PodIntent, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, SecretIntent,
-    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent, plan_deployment,
-    render_deployment, snapshot::deployment_v1,
+    NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
+    PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, SecretIntent,
+    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent, artifact::deployment_v1,
+    plan_deployment, render_deployment,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -235,7 +235,7 @@ fn rendering_uses_explicit_pull_never_encodes_once_and_defers_secret_payloads() 
         .find(|operation| operation.cli().argv().contains(&"container".to_owned()))
         .expect("container");
     assert!(container.cli().argv().contains(&"--pull=never".to_owned()));
-    let json = serde_json::to_string(&deployment_v1::deployment(&rendering)).expect("snapshot JSON");
+    let json = serde_json::to_string(&deployment_v1::deployment(&rendering)).expect("deployment artifact JSON");
     assert!(!json.contains("vault/app-password"));
 }
 
@@ -408,24 +408,24 @@ fn rendering_preserves_connection_and_safely_discloses_every_external_preconditi
         );
     }
     assert!(!script.contains("vault/app-password"));
-    let snapshot = serde_json::to_value(deployment_v1::deployment(&rendering)).expect("snapshot");
-    assert_eq!(snapshot["connection"], "review-remote");
+    let artifact = serde_json::to_value(deployment_v1::deployment(&rendering)).expect("artifact");
+    assert_eq!(artifact["connection"], "review-remote");
 
     let unconnected = render_deployment(&all_operation_plan("6.1.0"))
         .rendering()
         .cloned()
         .expect("rendering");
-    let snapshot = serde_json::to_value(deployment_v1::deployment(&unconnected)).expect("snapshot");
-    assert!(snapshot["connection"].is_null());
+    let artifact = serde_json::to_value(deployment_v1::deployment(&unconnected)).expect("artifact");
+    assert!(artifact["connection"].is_null());
 }
 
 #[test]
-fn endpoint_credential_and_path_connection_sentinels_cannot_reach_debug_or_deployment_snapshots() {
+fn endpoint_credential_and_path_connection_sentinels_cannot_reach_debug_or_deployment_artifacts() {
     let rendering = render_deployment(&complete_plan("6.1.0"))
         .rendering()
         .cloned()
         .expect("rendering");
-    let snapshot = serde_json::to_string(&deployment_v1::deployment(&rendering)).expect("snapshot");
+    let artifact = serde_json::to_string(&deployment_v1::deployment(&rendering)).expect("artifact");
     for sentinel in [
         "ssh://user:password@example.invalid/run/user/1000/podman/podman.sock",
         "unix:///run/user/1000/podman/podman.sock",
@@ -436,7 +436,7 @@ fn endpoint_credential_and_path_connection_sentinels_cannot_reach_debug_or_deplo
         assert_eq!(error.code().as_str(), "PLN0034");
         assert!(!format!("{error:?}").contains(sentinel));
         assert!(
-            !snapshot.contains(sentinel),
+            !artifact.contains(sentinel),
             "an unconstructable connection detail cannot serialize"
         );
     }
@@ -593,7 +593,7 @@ fn renderer_rejects_each_unrendered_container_setting_without_leaking_sensitive_
         settings
             .add_label(Label::new(
                 LabelKey::new("org.example.mode").expect("label key"),
-                LabelValue::new("production").expect("label value"),
+                PublicLabelValue::new("production").expect("public label value"),
             ))
             .expect("label");
         settings
@@ -658,7 +658,7 @@ fn renderer_rejects_api_engine_pairs_without_exact_wire_evidence() {
 }
 
 #[test]
-fn deployment_snapshot_schema_is_strict_and_redacted() -> Result<(), Box<dyn std::error::Error>> {
+fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result<(), Box<dyn std::error::Error>> {
     let rendering = render_deployment(&complete_plan("6.1.0"))
         .rendering()
         .cloned()
@@ -797,7 +797,7 @@ fn checked_in_deployment_artifacts_are_byte_exact_and_never_expose_sensitive_inp
         .expect("rendering");
     let rendered_json = format!(
         "{}\n",
-        serde_json::to_string_pretty(&deployment_v1::deployment(&rendering)).expect("snapshot JSON")
+        serde_json::to_string_pretty(&deployment_v1::deployment(&rendering)).expect("deployment artifact JSON")
     );
     let expected_json = include_str!("../fixtures/deployment/deployment-plan-v1.json");
     let rendered_script = rendering.shell_script();

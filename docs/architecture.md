@@ -135,7 +135,7 @@ settings (command, entrypoint, user, workdir, hostname, labels, environment, res
 preserving their declared order where relevant. The renderer
 does not yet have per-field target-version evidence, so each populated setting or mount yields
 `PLN0046` rather than being omitted. Sensitive inline environment values and external references
-are redacted in plan diagnostics, debug output, snapshots, and artifacts. The caller-selected non-sensitive
+are redacted in plan diagnostics, debug output, observational snapshots, and deployment artifacts. The caller-selected non-sensitive
 output connection survives in the rendering and JSON export only as a validated Podman connection
 name, never a URI, endpoint, path, credential, or token; CLI arrays carry it as `--connection`.
 The review script emits deterministic, shell-quoted comments for every external network, volume,
@@ -177,7 +177,7 @@ contracts:
   PodmanLens.
 - `--output-connection` is recorded only as a validated Podman connection name and rendered into
   CLI/API descriptions. PodmanLens never accepts a destination URI here or connects to it.
-- `snapshot::deployment_v1` and `DeploymentRendering::shell_script` provide review-only
+- `artifact::deployment_v1` and `DeploymentRendering::shell_script` provide review-only
   `deployment-plan.json` and `deployment.sh` content; BoxFerry will own output-directory lifecycle
   and reporting.
 

@@ -14,9 +14,11 @@ Secret inspection returns metadata by default. Payload acquisition requires expl
 authorization and produces an opaque sensitive value type. Runtime environment values are redacted
 by default; callers must explicitly request their inclusion.
 
-Sensitive values never appear in diagnostics, logs, snapshots, `Debug` or `Display` output, or
-serialized deployment plans. Plans refer to external sensitive inputs. Any future file export is an
-explicit unsafe mode and writes restricted files. Base64 is not treated as protection.
+Sensitive values never appear in diagnostics, logs, observational snapshots, deployment artifacts,
+`Debug` or `Display` output, or serialized deployment plans. Plans refer to external sensitive
+inputs. Any future file export is an explicit unsafe mode and writes restricted files. Base64 is not
+treated as protection. A value in a deployment artifact must have been explicitly declared public
+by the caller; no observed sensitive value can be converted into that public contract.
 
 ## Consequences
 

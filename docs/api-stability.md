@@ -47,16 +47,19 @@ serialized plan schemas, and shell artifacts remain M6 contracts and are not imp
 
 M6-A introduces `render_deployment`, `DeploymentRendering`, including its optional non-sensitive,
 strictly validated Podman connection-name `connection`, typed CLI and Libpod invocation descriptions,
-rendering findings, and `snapshot::deployment_v1`. The JSON export is
-serialization-only, uses a committed Draft 2020-12 schema, and remains redacted even when a
-semantic operation references caller-supplied secret material. URI, endpoint, path, credential, and
-token spellings cannot construct this connection type or reach its JSON schema. `shell_script`
+rendering findings, and `artifact::deployment_v1`. The deployment artifact is serialization-only,
+uses a committed Draft 2020-12 schema, may contain only explicitly caller-authorized public declared
+values, and never contains sensitive values or sensitive-input references. URI, endpoint, path,
+credential, and token spellings cannot construct this connection type or reach its JSON schema. `shell_script`
 derives solely from the stored CLI argument arrays and preserved external preconditions; neither it
 nor any M6-A type opens a connection or executes Podman.
 M6-B1a adds provisional typed settings to `ContainerIntent` and `PodIntent`: named-volume mounts
 and explicitly named `PodIntent::add_infra_mount` infra-container mounts,
 plus container command, entrypoint, user, workdir, hostname, labels, environment, and restart
-policy. Sensitive inline environment values and external input references redact `Debug`. These
+policy. Sensitive inline environment values and external input references redact `Debug`. Public
+declared values use `PublicLabelValue`, `PublicEnvironmentValue`, and
+`DeploymentEnvironmentValue::Public`, making caller declassification explicit; no conversion from
+observed sensitive values is provided. These
 settings deliberately have no rendering promise yet: `render_deployment` returns `PLN0046` for each
 populated unrendered field. Bind/tmpfs mounts, ports, health checks, logging, security, namespace,
 and secret attachment targets remain later M6 contracts.

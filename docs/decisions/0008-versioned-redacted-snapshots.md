@@ -1,4 +1,4 @@
-# 0008: Versioned snapshots are serialization-only and always redacted
+# 0008: Versioned observational snapshots are serialization-only and always redacted
 
 - Status: Accepted
 - Date: 2026-08-20
@@ -18,12 +18,14 @@ The exact shape is governed by a committed Draft 2020-12 JSON Schema and golden 
 
 Snapshots are always redacted, even when acquisition retained environment values in memory. They
 exclude environment values, secret payloads, connection details, raw unknown JSON, label values,
-driver-option values, and Compose ownership values. The separate M6
-`snapshot::deployment_v1` export may contain its explicit `connection` field only as `null` or a
-validated 1–64-byte ASCII Podman connection name: an ASCII alphanumeric first character followed
-only by ASCII alphanumeric characters, dots, underscores, or hyphens. It can never represent a
-URI, endpoint, socket path, credential, token, whitespace, colon, slash, backslash, or `@` detail.
-They retain safe structural and evidence data needed to diagnose acquisition and grouping decisions.
+driver-option values, and Compose ownership values. They retain safe structural and evidence data
+needed to diagnose acquisition and grouping decisions. Deployment rendering is a distinct output
+contract in `artifact::deployment_v1`, not a snapshot. It may contain only explicitly
+caller-authorized public declared values and never sensitive values or sensitive-input references.
+Its optional connection field is only `null` or a validated 1–64-byte ASCII Podman connection name:
+an ASCII alphanumeric first character followed only by ASCII alphanumeric characters, dots,
+underscores, or hyphens. It can never represent a URI, endpoint, socket path, credential, token,
+whitespace, colon, slash, backslash, or `@` detail.
 
 An incompatible shape change requires a new versioned module and schema. A schema version never
 silently changes meaning.
@@ -33,8 +35,8 @@ silently changes meaning.
 - Callers can create deterministic reports and support bundles without depending on private Libpod
   response types.
 - Snapshot redaction is independent of acquisition policy and covered by distinctive leak tests.
-- Deployment snapshots preserve only a safe connection selector, never a connection endpoint or
-  credential detail.
+- Deployment artifacts preserve only a safe connection selector, never a connection endpoint,
+  credential detail, secret material, or sensitive-input reference.
 - Snapshots still contain operational metadata such as resource identities, image aliases,
   environment variable names, subnets, and evidence URLs. They are redacted, not anonymous.
 - Replaying or importing snapshots is outside the initial contract and can be designed separately

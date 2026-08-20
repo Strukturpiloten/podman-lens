@@ -7,15 +7,15 @@ use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentPlan, DeploymentResource,
     DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
-    Label, LabelKey, LabelValue, NamedVolumeCopyMode, NamedVolumeMount, ObservedApiVersion, ObservedPodmanVersion,
-    PlainEnvironmentValue, PlanningFinding, PlanningOutcome, PodIntent, RestartPolicy, SemanticOperationAction,
+    Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, ObservedApiVersion, ObservedPodmanVersion, PlanningFinding,
+    PlanningOutcome, PodIntent, PublicEnvironmentValue, PublicLabelValue, RestartPolicy, SemanticOperationAction,
     SensitiveInlineEnvironmentValue, StartupDependency, TargetProfile, VolumeIntent, plan_deployment,
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
     LibpodResponse, LibpodTransport, LibpodTransportFuture, OpaqueReference, ResourceInventory, ResourceKind,
-    ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, discover, probe_libpod_service,
-    snapshot::v1,
+    ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, artifact::deployment_v1,
+    discover, probe_libpod_service, snapshot::v1,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -157,10 +157,13 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
         settings.set_user(ContainerUser::new("1000:1000")?)?;
         settings.set_workdir(ContainerWorkdir::new(AbsoluteContainerPath::new("/srv/web")?))?;
         settings.set_hostname(ContainerHostname::new("web.example")?)?;
-        settings.add_label(Label::new(LabelKey::new("org.example.role")?, LabelValue::new("web")?))?;
+        settings.add_label(Label::new(
+            LabelKey::new("org.example.role")?,
+            PublicLabelValue::new("web")?,
+        ))?;
         settings.add_environment(EnvironmentAssignment::new(
             EnvironmentName::new("MODE")?,
-            DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("production")?),
+            DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new("production")?),
         ))?;
         settings.add_environment(EnvironmentAssignment::new(
             EnvironmentName::new("PASSWORD")?,
@@ -193,6 +196,14 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
         let _ = plan.external_preconditions();
         for operation in plan.operations() {
             let _ = operation.resource_intent();
+        }
+    }
+    if let Some(plan) = outcome.plan() {
+        let rendering = podman_lens::render_deployment(plan);
+        if let Some(rendering) = rendering.rendering() {
+            let artifact = deployment_v1::deployment(rendering);
+            assert_eq!(artifact.schema_version(), deployment_v1::SCHEMA_VERSION);
+            drop(serde_json::to_string(&artifact));
         }
     }
     assert_eq!(ImagePullPolicy::Missing, ImagePullPolicy::default());

@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::settings::{ContainerSettings, NamedVolumeMount};
 use crate::{Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind, TargetProfile};
 
 const MAX_REFERENCE_BYTES: usize = 256;
@@ -277,7 +278,7 @@ impl SecretIntent {
 pub struct PodIntent {
     identity: DeploymentResourceId,
     networks: Vec<DeploymentResourceId>,
-    volumes: Vec<DeploymentResourceId>,
+    infra_mounts: Vec<NamedVolumeMount>,
     members: Vec<DeploymentResourceId>,
 }
 
@@ -292,7 +293,7 @@ impl PodIntent {
         Ok(Self {
             identity,
             networks: Vec::new(),
-            volumes: Vec::new(),
+            infra_mounts: Vec::new(),
             members: Vec::new(),
         })
     }
@@ -308,15 +309,12 @@ impl PodIntent {
         Ok(())
     }
 
-    /// Adds one named volume that must exist before this pod is created.
+    /// Adds one mount for the Podman pod's infra container.
     ///
-    /// # Errors
-    ///
-    /// Returns `PLN0034` when `volume` is not a volume identity.
-    pub fn add_volume(&mut self, volume: DeploymentResourceId) -> PodmanLensResult<()> {
-        require_kind(&volume, ResourceKind::Volume)?;
-        self.volumes.push(volume);
-        Ok(())
+    /// The mount is not a declaration for every pod member. Member containers use
+    /// [`ContainerIntent::add_mount`] instead.
+    pub fn add_infra_mount(&mut self, mount: NamedVolumeMount) {
+        self.infra_mounts.push(mount);
     }
 
     /// Adds one container that this pod explicitly owns.
@@ -344,10 +342,10 @@ impl PodIntent {
         &self.networks
     }
 
-    /// Returns declared named-volume prerequisites in input order.
+    /// Returns declared infra-container mounts in input order.
     #[must_use]
-    pub fn volumes(&self) -> &[DeploymentResourceId] {
-        &self.volumes
+    pub fn infra_mounts(&self) -> &[NamedVolumeMount] {
+        &self.infra_mounts
     }
 
     /// Returns declared pod members in input order.
@@ -364,8 +362,9 @@ pub struct ContainerIntent {
     image: DeploymentResourceId,
     pod: Option<DeploymentResourceId>,
     networks: Vec<DeploymentResourceId>,
-    volumes: Vec<DeploymentResourceId>,
+    mounts: Vec<NamedVolumeMount>,
     secrets: Vec<DeploymentResourceId>,
+    settings: Box<ContainerSettings>,
 }
 
 impl ContainerIntent {
@@ -382,8 +381,9 @@ impl ContainerIntent {
             image,
             pod: None,
             networks: Vec::new(),
-            volumes: Vec::new(),
+            mounts: Vec::new(),
             secrets: Vec::new(),
+            settings: Box::default(),
         })
     }
 
@@ -416,15 +416,9 @@ impl ContainerIntent {
         Ok(())
     }
 
-    /// Adds a named-volume prerequisite.
-    ///
-    /// # Errors
-    ///
-    /// Returns `PLN0034` when `volume` is not a volume identity.
-    pub fn add_volume(&mut self, volume: DeploymentResourceId) -> PodmanLensResult<()> {
-        require_kind(&volume, ResourceKind::Volume)?;
-        self.volumes.push(volume);
-        Ok(())
+    /// Adds one named-volume mount.
+    pub fn add_mount(&mut self, mount: NamedVolumeMount) {
+        self.mounts.push(mount);
     }
 
     /// Adds a secret-metadata prerequisite.
@@ -462,16 +456,28 @@ impl ContainerIntent {
         &self.networks
     }
 
-    /// Returns volume prerequisites.
+    /// Returns named-volume mounts.
     #[must_use]
-    pub fn volumes(&self) -> &[DeploymentResourceId] {
-        &self.volumes
+    pub fn mounts(&self) -> &[NamedVolumeMount] {
+        &self.mounts
     }
 
     /// Returns secret prerequisites.
     #[must_use]
     pub fn secrets(&self) -> &[DeploymentResourceId] {
         &self.secrets
+    }
+
+    /// Returns the typed optional container settings.
+    #[must_use]
+    pub fn settings(&self) -> &ContainerSettings {
+        &self.settings
+    }
+
+    /// Returns mutable typed optional container settings.
+    #[must_use]
+    pub fn settings_mut(&mut self) -> &mut ContainerSettings {
+        &mut self.settings
     }
 }
 
@@ -1023,7 +1029,7 @@ fn validate_pod(
     findings: &mut Vec<PlanningFinding>,
 ) {
     validate_distinct(pod.networks(), pod.identity(), "networks", findings);
-    validate_distinct(pod.volumes(), pod.identity(), "volumes", findings);
+    validate_mounts(resources, pod.infra_mounts(), pod.identity(), "infra_mounts", findings);
     validate_distinct(pod.members(), pod.identity(), "members", findings);
     for network in pod.networks() {
         require_resolved(
@@ -1032,16 +1038,6 @@ fn validate_pod(
             ResourceKind::Network,
             pod.identity(),
             "networks",
-            findings,
-        );
-    }
-    for volume in pod.volumes() {
-        require_resolved(
-            resources,
-            volume,
-            ResourceKind::Volume,
-            pod.identity(),
-            "volumes",
             findings,
         );
     }
@@ -1066,7 +1062,7 @@ fn validate_container(
     findings: &mut Vec<PlanningFinding>,
 ) {
     validate_distinct(container.networks(), container.identity(), "networks", findings);
-    validate_distinct(container.volumes(), container.identity(), "volumes", findings);
+    validate_mounts(resources, container.mounts(), container.identity(), "mounts", findings);
     validate_distinct(container.secrets(), container.identity(), "secrets", findings);
     require_resolved(
         resources,
@@ -1107,12 +1103,35 @@ fn validate_container(
     }
     for (references, kind, field) in [
         (container.networks(), ResourceKind::Network, "networks"),
-        (container.volumes(), ResourceKind::Volume, "volumes"),
         (container.secrets(), ResourceKind::Secret, "secrets"),
     ] {
         for reference in references {
             require_resolved(resources, reference, kind, container.identity(), field, findings);
         }
+    }
+}
+
+fn validate_mounts(
+    resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
+    mounts: &[NamedVolumeMount],
+    owner: &DeploymentResourceId,
+    field: &'static str,
+    findings: &mut Vec<PlanningFinding>,
+) {
+    for (index, mount) in mounts.iter().enumerate() {
+        if mounts[..index]
+            .iter()
+            .any(|previous| previous.destination() == mount.destination())
+        {
+            findings.push(PlanningFinding::detailed(
+                DiagnosticCode::DeploymentDuplicateResource,
+                Some(owner.clone()),
+                vec![mount.source().clone()],
+                Some(field),
+                Some(index + 1),
+            ));
+        }
+        require_resolved(resources, mount.source(), ResourceKind::Volume, owner, field, findings);
     }
 }
 
@@ -1133,9 +1152,9 @@ fn create_dependencies(
                     dependencies.insert(create_operation(network));
                 }
             }
-            for volume in pod.volumes() {
-                if is_managed(resources, volume) {
-                    dependencies.insert(create_operation(volume));
+            for mount in pod.infra_mounts() {
+                if is_managed(resources, mount.source()) {
+                    dependencies.insert(create_operation(mount.source()));
                 }
             }
         }
@@ -1156,9 +1175,9 @@ fn create_dependencies(
                     dependencies.insert(create_operation(network));
                 }
             }
-            for volume in container.volumes() {
-                if is_managed(resources, volume) {
-                    dependencies.insert(create_operation(volume));
+            for mount in container.mounts() {
+                if is_managed(resources, mount.source()) {
+                    dependencies.insert(create_operation(mount.source()));
                 }
             }
             for secret in container.secrets() {

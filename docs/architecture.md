@@ -129,14 +129,21 @@ The order of `operations` is authoritative. `depends_on` records why the order e
 consumer to validate or safely parallelize independent work. The semantic resource action is the
 source of truth. M5 owns only this semantic plan. M6-A renders evidence-backed basic topology into
 argument arrays, Libpod request descriptions, a versioned JSON export, and a POSIX review script;
-it never opens a connection or executes either representation. The caller-selected non-sensitive
+it never opens a connection or executes either representation. M6-B1a retains typed named-volume
+mounts for containers and explicitly infra-container-scoped mounts for pods, plus bounded container
+settings (command, entrypoint, user, workdir, hostname, labels, environment, restart policy), while
+preserving their declared order where relevant. The renderer
+does not yet have per-field target-version evidence, so each populated setting or mount yields
+`PLN0046` rather than being omitted. Sensitive inline environment values and external references
+are redacted in plan diagnostics, debug output, snapshots, and artifacts. The caller-selected non-sensitive
 output connection survives in the rendering and JSON export only as a validated Podman connection
 name, never a URI, endpoint, path, credential, or token; CLI arrays carry it as `--connection`.
 The review script emits deterministic, shell-quoted comments for every external network, volume,
 image, or secret prerequisite, but never a secret-material reference or value. It renders pod
-networks, pod-member assignment, and unpodded-container networks. Pod volumes and container volumes
-or secrets lack the target/mode data required for exact output, so they return structured `PLN0046`
-findings.
+networks, pod-member assignment, and unpodded-container networks. Container mounts, infra-container
+mounts, and every typed container
+setting remain structured `PLN0046` findings until exact renderer coverage exists; secret attachment
+targets are not yet part of the semantic model.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.

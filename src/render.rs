@@ -720,7 +720,7 @@ fn managed_image_sources(plan: &DeploymentPlan) -> BTreeMap<DeploymentResourceId
 
 fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
     match resource {
-        DeploymentResource::Pod(pod) if !pod.volumes().is_empty() => vec!["volumes"],
+        DeploymentResource::Pod(pod) if !pod.infra_mounts().is_empty() => vec!["infra_mounts"],
         DeploymentResource::Container(container) => {
             let mut fields = Vec::new();
             if container.pod().is_some() && !container.networks().is_empty() {
@@ -729,8 +729,33 @@ fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
             if !container.secrets().is_empty() {
                 fields.push("secrets");
             }
-            if !container.volumes().is_empty() {
-                fields.push("volumes");
+            if !container.mounts().is_empty() {
+                fields.push("mounts");
+            }
+            let settings = container.settings();
+            if settings.command().is_some() {
+                fields.push("command");
+            }
+            if settings.entrypoint().is_some() {
+                fields.push("entrypoint");
+            }
+            if settings.user().is_some() {
+                fields.push("user");
+            }
+            if settings.workdir().is_some() {
+                fields.push("workdir");
+            }
+            if settings.hostname().is_some() {
+                fields.push("hostname");
+            }
+            if !settings.labels().is_empty() {
+                fields.push("labels");
+            }
+            if !settings.environment().is_empty() {
+                fields.push("environment");
+            }
+            if settings.restart_policy().is_some() {
+                fields.push("restart_policy");
             }
             fields
         }

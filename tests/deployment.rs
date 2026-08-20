@@ -3,9 +3,12 @@
 #![allow(clippy::expect_used)] // Test-only construction keeps each semantic scenario legible.
 
 use podman_lens::{
-    ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentResource, DeploymentResourceId,
-    ExternalPrecondition, ImageIntent, ImagePullPolicy, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion,
-    PodIntent, ResourceKind, SecretIntent, SemanticOperationAction, SensitiveInputReference, StartupDependency,
+    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
+    DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
+    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
+    Label, LabelKey, LabelValue, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion,
+    ObservedPodmanVersion, PlainEnvironmentValue, PodIntent, ResourceKind, RestartPolicy, SecretIntent,
+    SemanticOperationAction, SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency,
     TargetProfile, VolumeIntent, plan_deployment,
 };
 
@@ -19,6 +22,399 @@ fn target(version: &str) -> TargetProfile {
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
     DeploymentResourceId::new(kind, name).expect("valid resource identity")
+}
+
+fn mount(volume: DeploymentResourceId, destination: &str) -> NamedVolumeMount {
+    NamedVolumeMount::new(
+        volume,
+        AbsoluteContainerPath::new(destination).expect("destination"),
+        false,
+        NamedVolumeCopyMode::Copy,
+    )
+    .expect("mount")
+}
+
+#[test]
+fn typed_setting_scalars_validate_values_and_reject_conflicts() {
+    assert_eq!(
+        ArgumentArray::new(["program", ""])
+            .expect("empty argument is valid")
+            .values(),
+        ["program", ""]
+    );
+    for arguments in [
+        vec!["bad\nargument".to_owned()],
+        vec!["a".repeat(4097)],
+        vec!["argument".to_owned(); 129],
+    ] {
+        assert_eq!(
+            ArgumentArray::new(arguments)
+                .expect_err("invalid arguments")
+                .code()
+                .as_str(),
+            "PLN0034"
+        );
+    }
+    for path in ["/", "/srv/application", "/var/lib/app-data"] {
+        assert_eq!(AbsoluteContainerPath::new(path).expect("path").as_str(), path);
+    }
+    for path in [
+        "",
+        "relative",
+        "/double//slash",
+        "/a/./b",
+        "/a/../b",
+        r"C:\\data",
+        "/bad\npath",
+    ] {
+        assert!(AbsoluteContainerPath::new(path).is_err(), "{path}");
+    }
+    assert_eq!(ContainerUser::new("1000:1000").expect("user").as_str(), "1000:1000");
+    assert!(ContainerUser::new("user name").is_err());
+    assert_eq!(
+        ContainerHostname::new("web-1.example").expect("hostname").as_str(),
+        "web-1.example"
+    );
+    assert!(ContainerHostname::new("-web.example").is_err());
+
+    let mut container = ContainerIntent::new(
+        id(ResourceKind::Container, "web"),
+        id(ResourceKind::Image, "registry.example.invalid/web:1"),
+    )
+    .expect("container");
+    {
+        let settings = container.settings_mut();
+        settings
+            .set_command(ArgumentArray::new(["serve", "--foreground"]).expect("command"))
+            .expect("command");
+        assert_eq!(
+            settings
+                .set_command(ArgumentArray::new(["serve", "--foreground"]).expect("command"))
+                .expect_err("duplicate command")
+                .code()
+                .as_str(),
+            "PLN0035"
+        );
+        assert_eq!(
+            settings
+                .set_command(ArgumentArray::new(["worker"]).expect("command"))
+                .expect_err("conflicting command")
+                .code()
+                .as_str(),
+            "PLN0038"
+        );
+        settings
+            .set_entrypoint(ArgumentArray::new(["/entrypoint"]).expect("entrypoint"))
+            .expect("entrypoint");
+        settings
+            .set_user(ContainerUser::new("1000:1000").expect("user"))
+            .expect("user");
+        settings
+            .set_workdir(ContainerWorkdir::new(
+                AbsoluteContainerPath::new("/srv/application").expect("workdir"),
+            ))
+            .expect("workdir");
+        settings
+            .set_hostname(ContainerHostname::new("web-1.example").expect("hostname"))
+            .expect("hostname");
+        for policy in [
+            RestartPolicy::No,
+            RestartPolicy::OnFailure,
+            RestartPolicy::Always,
+            RestartPolicy::UnlessStopped,
+        ] {
+            let mut settings = podman_lens::ContainerSettings::default();
+            settings.set_restart_policy(policy).expect("policy");
+            assert_eq!(settings.restart_policy(), Some(policy));
+        }
+    }
+}
+
+#[test]
+fn scalar_user_path_and_hostname_grammars_cover_exact_boundaries() {
+    for user in ["root", "1000", "app:1000", "app:group", "a.b_c-1:2._-9"] {
+        assert_eq!(ContainerUser::new(user).expect("valid user").as_str(), user);
+    }
+    for user in ["", ":group", "user:", "user::group", "user:group:extra", "user/name"] {
+        assert!(ContainerUser::new(user).is_err(), "{user}");
+    }
+    assert!(ContainerUser::new("a".repeat(4097)).is_err());
+
+    let longest_path = format!("/{}", "a".repeat(4095));
+    assert_eq!(
+        AbsoluteContainerPath::new(longest_path.clone())
+            .expect("4096-byte path")
+            .as_str(),
+        longest_path
+    );
+    assert!(AbsoluteContainerPath::new(format!("/{}", "a".repeat(4096))).is_err());
+
+    let hostname = ["a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(61)].join(".");
+    assert_eq!(hostname.len(), 253);
+    assert_eq!(
+        ContainerHostname::new(hostname.clone()).expect("hostname").as_str(),
+        hostname
+    );
+    for hostname in [
+        "a".repeat(64),
+        "web-".to_owned(),
+        "web..example".to_owned(),
+        "web_1".to_owned(),
+    ] {
+        assert!(ContainerHostname::new(hostname).is_err());
+    }
+}
+
+#[test]
+fn scalar_label_and_environment_grammars_cover_positive_and_negative_boundaries() {
+    let key = "k".repeat(4096);
+    assert_eq!(LabelKey::new(key.clone()).expect("label key").as_str(), key);
+    for key in ["", "has=equals", "bad\nkey", &"k".repeat(4097)] {
+        assert!(LabelKey::new(key).is_err(), "{key:?}");
+    }
+
+    let value = "v".repeat(4096);
+    assert_eq!(LabelValue::new(value.clone()).expect("label value").as_str(), value);
+    for value in ["bad\nvalue", &"v".repeat(4097)] {
+        assert!(LabelValue::new(value).is_err(), "{value:?}");
+    }
+    assert_eq!(LabelValue::new("").expect("empty label value").as_str(), "");
+
+    let name = format!("A{}", "_".repeat(255));
+    assert_eq!(EnvironmentName::new(name.clone()).expect("name").as_str(), name);
+    for name in [
+        "",
+        "1VALUE",
+        "VALUE-NAME",
+        "VALUE.NAME",
+        &format!("A{}", "_".repeat(256)),
+    ] {
+        assert!(EnvironmentName::new(name).is_err(), "{name:?}");
+    }
+
+    let value = "v".repeat(4096);
+    assert_eq!(
+        PlainEnvironmentValue::new(value).expect("plain value").as_str().len(),
+        4096
+    );
+    for value in ["bad\nvalue", &"v".repeat(4097)] {
+        assert!(PlainEnvironmentValue::new(value).is_err(), "{value:?}");
+        assert!(SensitiveInlineEnvironmentValue::new(value).is_err(), "{value:?}");
+    }
+    assert!(SensitiveInlineEnvironmentValue::new("").is_ok());
+}
+
+#[test]
+fn named_volume_mounts_keep_both_mode_values_and_reject_non_volume_sources() {
+    let volume = id(ResourceKind::Volume, "application-data");
+    let copy = NamedVolumeMount::new(
+        volume.clone(),
+        AbsoluteContainerPath::new("/data").expect("path"),
+        false,
+        NamedVolumeCopyMode::Copy,
+    )
+    .expect("copy mount");
+    assert_eq!(copy.source(), &volume);
+    assert_eq!(copy.destination().as_str(), "/data");
+    assert!(!copy.is_read_only());
+    assert_eq!(copy.copy_mode(), NamedVolumeCopyMode::Copy);
+
+    let no_copy = NamedVolumeMount::new(
+        volume,
+        AbsoluteContainerPath::new("/readonly").expect("path"),
+        true,
+        NamedVolumeCopyMode::NoCopy,
+    )
+    .expect("no-copy mount");
+    assert!(no_copy.is_read_only());
+    assert_eq!(no_copy.copy_mode(), NamedVolumeCopyMode::NoCopy);
+    assert!(
+        NamedVolumeMount::new(
+            id(ResourceKind::Network, "not-a-volume"),
+            AbsoluteContainerPath::new("/data").expect("path"),
+            false,
+            NamedVolumeCopyMode::Copy,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn typed_settings_preserve_collection_order_and_redact_sensitive_environment_values() {
+    let mut container = ContainerIntent::new(
+        id(ResourceKind::Container, "web"),
+        id(ResourceKind::Image, "registry.example.invalid/web:1"),
+    )
+    .expect("container");
+    let sensitive_sentinel = "sensitive-inline-value";
+    {
+        let settings = container.settings_mut();
+        settings
+            .add_label(Label::new(
+                LabelKey::new("org.example.first").expect("key"),
+                LabelValue::new("").expect("empty value"),
+            ))
+            .expect("label");
+        settings
+            .add_label(Label::new(
+                LabelKey::new("org.example.second").expect("key"),
+                LabelValue::new("two").expect("value"),
+            ))
+            .expect("label");
+        assert_eq!(
+            settings
+                .labels()
+                .iter()
+                .map(|label| label.key().as_str())
+                .collect::<Vec<_>>(),
+            ["org.example.first", "org.example.second"]
+        );
+        assert_eq!(
+            settings
+                .add_label(Label::new(
+                    LabelKey::new("org.example.first").expect("key"),
+                    LabelValue::new("replacement").expect("value"),
+                ))
+                .expect_err("duplicate label")
+                .code()
+                .as_str(),
+            "PLN0035"
+        );
+        settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("EMPTY").expect("name"),
+                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("").expect("value")),
+            ))
+            .expect("plain environment");
+        settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("PASSWORD").expect("name"),
+                DeploymentEnvironmentValue::SensitiveInline(
+                    SensitiveInlineEnvironmentValue::new(sensitive_sentinel).expect("sensitive value"),
+                ),
+            ))
+            .expect("sensitive environment");
+        settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("TOKEN_FILE").expect("name"),
+                DeploymentEnvironmentValue::External(
+                    SensitiveInputReference::new("vault/token-file").expect("external value"),
+                ),
+            ))
+            .expect("external environment");
+        assert_eq!(
+            settings
+                .add_environment(EnvironmentAssignment::new(
+                    EnvironmentName::new("EMPTY").expect("name"),
+                    DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("replacement").expect("value")),
+                ))
+                .expect_err("duplicate environment")
+                .code()
+                .as_str(),
+            "PLN0035"
+        );
+        assert_eq!(settings.environment().len(), 3);
+    }
+    let debug = format!("{container:?}");
+    assert!(!debug.contains(sensitive_sentinel));
+    assert!(!debug.contains("vault/token-file"));
+}
+
+#[test]
+fn typed_setting_collections_accept_exact_capacity_and_reject_one_more_value() {
+    let mut labels = podman_lens::ContainerSettings::default();
+    for index in 0..128 {
+        labels
+            .add_label(Label::new(
+                LabelKey::new(format!("org.example.{index}")).expect("label key"),
+                LabelValue::new("value").expect("label value"),
+            ))
+            .expect("bounded label");
+    }
+    assert_eq!(labels.labels().len(), 128);
+    assert_eq!(
+        labels
+            .add_label(Label::new(
+                LabelKey::new("org.example.overflow").expect("label key"),
+                LabelValue::new("value").expect("label value"),
+            ))
+            .expect_err("label capacity")
+            .code()
+            .as_str(),
+        "PLN0034"
+    );
+
+    let mut environment = podman_lens::ContainerSettings::default();
+    for index in 0..128 {
+        environment
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new(format!("VALUE_{index}")).expect("environment name"),
+                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("value").expect("value")),
+            ))
+            .expect("bounded environment");
+    }
+    assert_eq!(environment.environment().len(), 128);
+    assert_eq!(
+        environment
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("VALUE_OVERFLOW").expect("environment name"),
+                DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("value").expect("value")),
+            ))
+            .expect_err("environment capacity")
+            .code()
+            .as_str(),
+        "PLN0034"
+    );
+}
+
+#[test]
+fn mounts_resolve_volume_dependencies_and_reject_duplicate_destinations() {
+    let volume = id(ResourceKind::Volume, "data");
+    let image = id(ResourceKind::Image, "registry.example.invalid/web:1");
+    let container = id(ResourceKind::Container, "web");
+    let mut managed_container = ContainerIntent::new(container, image.clone()).expect("container");
+    managed_container.add_mount(mount(volume.clone(), "/data"));
+    let mut managed = DeploymentIntent::new(target("6.1.0"));
+    managed.add_resource(DeploymentResource::Volume(
+        VolumeIntent::new(volume.clone()).expect("volume"),
+    ));
+    managed.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/web:1").expect("image"),
+    ));
+    managed.add_resource(DeploymentResource::Container(managed_container));
+    let managed_outcome = plan_deployment(&managed);
+    let plan = managed_outcome.plan().expect("plan");
+    assert!(
+        plan.operations()[2]
+            .depends_on()
+            .iter()
+            .any(|dependency| dependency.resource() == &volume)
+    );
+
+    let mut duplicate = PodIntent::new(id(ResourceKind::Pod, "duplicate")).expect("pod");
+    duplicate.add_infra_mount(mount(volume.clone(), "/data"));
+    duplicate.add_infra_mount(
+        NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/data").expect("destination"),
+            true,
+            NamedVolumeCopyMode::NoCopy,
+        )
+        .expect("mount"),
+    );
+    let mut invalid = DeploymentIntent::new(target("6.1.0"));
+    invalid.add_resource(DeploymentResource::Pod(duplicate));
+    invalid.add_resource(DeploymentResource::ExternalPrecondition(
+        ExternalPrecondition::new(volume).expect("external volume"),
+    ));
+    let invalid_outcome = plan_deployment(&invalid);
+    let finding = invalid_outcome
+        .findings()
+        .iter()
+        .find(|finding| finding.field() == Some("infra_mounts"))
+        .expect("duplicate mount finding");
+    assert_eq!(finding.code().as_str(), "PLN0035");
+    assert_eq!(finding.occurrence(), Some(2));
 }
 
 fn complete_pod_intent(version: &str) -> DeploymentIntent {
@@ -37,7 +433,7 @@ fn complete_pod_intent(version: &str) -> DeploymentIntent {
     container_intent
         .set_pod(pod_intent.identity().clone())
         .expect("pod identity");
-    container_intent.add_volume(volume.clone()).expect("volume identity");
+    container_intent.add_mount(mount(volume.clone(), "/var/lib/application"));
     container_intent.add_secret(secret.clone()).expect("secret identity");
 
     let mut intent = DeploymentIntent::new(target(version));
@@ -435,7 +831,7 @@ fn validation_collects_independent_missing_resources_and_startup_errors() {
     let mut broken = ContainerIntent::new(container.clone(), image).expect("container");
     broken.set_pod(pod.clone()).expect("pod identity");
     broken.add_network(network).expect("network identity");
-    broken.add_volume(volume).expect("volume identity");
+    broken.add_mount(mount(volume, "/var/lib/application"));
     broken.add_secret(secret).expect("secret identity");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Container(broken));
@@ -505,11 +901,13 @@ fn invalid_declaration_permutations_produce_identical_sorted_findings() {
 }
 
 #[test]
-fn pod_volume_prerequisites_support_managed_external_and_duplicate_boundaries() {
+fn infra_container_mounts_support_managed_external_and_duplicate_boundaries() {
     let pod = id(ResourceKind::Pod, "application");
     let volume = id(ResourceKind::Volume, "application-data");
     let mut managed_pod = PodIntent::new(pod.clone()).expect("pod");
-    managed_pod.add_volume(volume.clone()).expect("volume");
+    managed_pod.add_infra_mount(mount(volume.clone(), "/data"));
+    assert_eq!(managed_pod.infra_mounts().len(), 1);
+    assert_eq!(managed_pod.infra_mounts()[0].destination().as_str(), "/data");
     let mut managed = DeploymentIntent::new(target("6.1.0"));
     managed.add_resource(DeploymentResource::Pod(managed_pod));
     managed.add_resource(DeploymentResource::Volume(
@@ -519,7 +917,7 @@ fn pod_volume_prerequisites_support_managed_external_and_duplicate_boundaries() 
     assert_eq!(managed_plan.operations()[0].id().resource(), &volume);
 
     let mut external_pod = PodIntent::new(pod).expect("pod");
-    external_pod.add_volume(volume.clone()).expect("volume");
+    external_pod.add_infra_mount(mount(volume.clone(), "/data"));
     let mut external = DeploymentIntent::new(target("6.1.0"));
     external.add_resource(DeploymentResource::Pod(external_pod));
     external.add_resource(DeploymentResource::ExternalPrecondition(
@@ -535,8 +933,8 @@ fn pod_volume_prerequisites_support_managed_external_and_duplicate_boundaries() 
     );
 
     let mut duplicate_pod = PodIntent::new(id(ResourceKind::Pod, "duplicate")).expect("pod");
-    duplicate_pod.add_volume(volume.clone()).expect("volume");
-    duplicate_pod.add_volume(volume).expect("volume");
+    duplicate_pod.add_infra_mount(mount(volume.clone(), "/data"));
+    duplicate_pod.add_infra_mount(mount(volume, "/data"));
     let mut duplicate = DeploymentIntent::new(target("6.1.0"));
     duplicate.add_resource(DeploymentResource::Pod(duplicate_pod));
     assert_eq!(plan_deployment(&duplicate).findings()[0].code().as_str(), "PLN0035");
@@ -667,7 +1065,15 @@ fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references()
     );
     let mut pod = PodIntent::new(id(ResourceKind::Pod, "pod")).expect("pod");
     assert!(pod.add_network(id(ResourceKind::Volume, "wrong")).is_err());
-    assert!(pod.add_volume(id(ResourceKind::Network, "wrong")).is_err());
+    assert!(
+        NamedVolumeMount::new(
+            id(ResourceKind::Network, "wrong"),
+            AbsoluteContainerPath::new("/data").expect("path"),
+            false,
+            NamedVolumeCopyMode::Copy,
+        )
+        .is_err()
+    );
     assert!(pod.add_member(id(ResourceKind::Pod, "wrong")).is_err());
     let mut container = ContainerIntent::new(
         id(ResourceKind::Container, "container"),
@@ -675,7 +1081,6 @@ fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references()
     )
     .expect("container");
     assert!(container.add_network(id(ResourceKind::Volume, "wrong")).is_err());
-    assert!(container.add_volume(id(ResourceKind::Network, "wrong")).is_err());
     assert!(container.add_secret(id(ResourceKind::Volume, "wrong")).is_err());
     assert!(StartupDependency::new(id(ResourceKind::Pod, "wrong"), id(ResourceKind::Container, "container")).is_err());
 }

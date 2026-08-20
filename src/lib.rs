@@ -18,6 +18,7 @@ pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
 pub mod render;
+pub mod settings;
 pub mod snapshot;
 pub mod transport;
 pub mod version;
@@ -51,6 +52,11 @@ pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport
 pub use render::{
     CliInvocation, DeploymentRendering, LibpodInvocation, RenderStatus, RenderedHttpBody, RenderedHttpMethod,
     RenderedOperation, RenderingFinding, RenderingOutcome, render_deployment,
+};
+pub use settings::{
+    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerSettings, ContainerUser, ContainerWorkdir,
+    DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, LabelValue,
+    NamedVolumeCopyMode, NamedVolumeMount, PlainEnvironmentValue, RestartPolicy, SensitiveInlineEnvironmentValue,
 };
 pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,

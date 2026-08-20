@@ -96,12 +96,22 @@ validated string or `null` while always redacting secret material. The accepted 
 bytes, begins with an ASCII alphanumeric character, and otherwise uses only ASCII alphanumeric
 characters, dots, underscores, or hyphens. URI, endpoint, socket-path, credential, token, and
 whitespace spellings are rejected with `PLN0034` before rendering or serialization.
+`ContainerIntent::settings_mut` exposes bounded typed command, entrypoint, user, workdir, hostname,
+label, environment, and restart-policy values. `NamedVolumeMount` keeps one managed volume identity,
+normalized destination, read-only state, and copy mode. `PodIntent::add_infra_mount` deliberately
+names the Podman infra-container scope: it does not add the mount to each member container. Labels
+and environment assignments retain declaration order and reject duplicate keys;
+`SensitiveInlineEnvironmentValue` and external environment references redact their value in `Debug`.
+These values are semantic-only in M6-B1a: rendering a plan that contains one produces `PLN0046` for
+its field instead of silently dropping it.
+
 `DeploymentRendering::shell_script` is generated solely from those argument arrays, requires
 explicit secret file paths, and safely names every external prerequisite in a review comment.
 Rendering accepts only an identical engine/API version listed in its committed per-operation renderer
-evidence. Pod networks, pod membership, and unpodded-container networks are exact. Pod volumes and
-container volumes or secrets are rejected with `PLN0046` until the semantic model carries their
-mount/target/mode data.
+evidence. Pod networks, pod membership, and unpodded-container networks are exact. Typed container
+and infra-container mounts and container settings are rejected with `PLN0046` until their renderer
+evidence lands; secret attachments remain unmodelled because their target and option semantics are
+not yet retained.
 
 `PlanningFinding::occurrence` is a one-based list position for a duplicate prerequisite or
 startup edge. Grouped duplicate or conflicting resource declarations have no single position;

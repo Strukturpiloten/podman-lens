@@ -15,15 +15,19 @@ script safely names every external prerequisite in deterministic comments but ne
 material or its external reference. Neither the renderer nor the script generator opens a connection
 or executes Podman.
 
-Pod networks, pod-member container assignment, and unpodded-container networks are exact. The
-current semantic model does not retain mount targets, modes, secret targets, or related options, so
-pod volumes and container volumes or secrets produce `PLN0046` findings instead of an `Exact`
-rendering. Secret bytes remain an explicit external input requirement.
+Pod networks, pod-member container assignment, and unpodded-container networks are exact. M6-B1a
+adds bounded, typed named-volume mounts (source, normalized destination, read-only, copy mode) for
+containers and explicitly named infra-container mounts for pods, plus
+container command, entrypoint, user, workdir, hostname, labels, environment, and restart policy to
+the semantic plan. They remain deliberately unrendered until per-field CLI/Libpod evidence proves
+their exact target spelling. Any populated field produces `PLN0046`, never a partially configured
+rendering. Secret attachment targets and related options remain unmodelled; secret bytes remain an
+explicit external input requirement.
 
 ## Consequences
 
 - Committed renderer evidence covers eight semantic operation categories across every reviewed line
   with per-operation immutable source provenance.
-- M6-B must add the typed data and evidence needed for mounts and secret attachment rather than
-  guessing their target spelling.
-- M6-B adds broader settings and per-field historical evidence.
+- M6-B1a establishes the typed settings foundation and rejects all unrendered values uniformly.
+- Later M6-B work adds per-field historical evidence and exact renderings, plus secret attachment
+  targets and other still-unmodelled native settings.

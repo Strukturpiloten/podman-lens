@@ -136,12 +136,18 @@ remain external; only a redacted external material reference is available to M6.
       evidence-backed basic topology into review-only CLI/Libpod representations; preserve the
       explicit output connection, safely disclose external prerequisites in review scripts, and
       reject fields without sufficient semantics rather than marking a lossy rendering exact.
+- [x] M6-B1a: Add bounded typed named-volume mounts, explicitly infra-container-scoped pod mounts,
+      and container command, entrypoint, user,
+      workdir, hostname, labels, environment, and restart-policy intent. Preserve order where it
+      is semantic, redact sensitive environment values, and reject every populated unrendered
+      field with `PLN0046`.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.
 - [ ] Cover pods, containers, networks, named volumes, images, and secrets in dependency order.
 - [ ] Preserve explicit pod membership and validate unpodded output intent.
-- [ ] Cover environment, mounts, ports, health, restart, security, namespace, and resource settings.
+- [ ] Add evidence-backed renderings for typed mounts and container settings.
+- [ ] Cover ports, health, security, namespace, logging, bind/tmpfs mounts, and resource settings.
 - [ ] Add positive and negative tests for every supported value and version boundary.
 - [ ] Emit structured outcomes for every approximation, omission, and manual action.
 - [ ] Render `deployment.sh` and `deployment-plan.json` from the same plan.

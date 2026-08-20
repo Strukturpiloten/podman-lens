@@ -4,16 +4,18 @@
 use std::time::Duration;
 
 use podman_lens::{
+    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
+    DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentPlan, DeploymentResource,
+    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
+    Label, LabelKey, LabelValue, NamedVolumeCopyMode, NamedVolumeMount, ObservedApiVersion, ObservedPodmanVersion,
+    PlainEnvironmentValue, PlanningFinding, PlanningOutcome, PodIntent, RestartPolicy, SemanticOperationAction,
+    SensitiveInlineEnvironmentValue, StartupDependency, TargetProfile, VolumeIntent, plan_deployment,
+};
+use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
     LibpodResponse, LibpodTransport, LibpodTransportFuture, OpaqueReference, ResourceInventory, ResourceKind,
     ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, discover, probe_libpod_service,
     snapshot::v1,
-};
-use podman_lens::{
-    ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentPlan, DeploymentResource,
-    DeploymentResourceId, ExternalPrecondition, ImageIntent, ImagePullPolicy, ObservedApiVersion,
-    ObservedPodmanVersion, PlanningFinding, PlanningOutcome, SemanticOperationAction, StartupDependency, TargetProfile,
-    plan_deployment,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -132,15 +134,47 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
     )?;
     let image = DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/web:1")?;
     let container = DeploymentResourceId::new(ResourceKind::Container, "web")?;
+    let volume = DeploymentResourceId::new(ResourceKind::Volume, "web-data")?;
+    let mut pod_intent = PodIntent::new(DeploymentResourceId::new(ResourceKind::Pod, "web-pod")?)?;
+    pod_intent.add_infra_mount(NamedVolumeMount::new(
+        volume.clone(),
+        AbsoluteContainerPath::new("/var/lib/infra")?,
+        false,
+        NamedVolumeCopyMode::Copy,
+    )?);
+    assert_eq!(pod_intent.infra_mounts().len(), 1);
+    let mut container_intent = ContainerIntent::new(container.clone(), image.clone())?;
+    container_intent.add_mount(NamedVolumeMount::new(
+        volume.clone(),
+        AbsoluteContainerPath::new("/var/lib/web")?,
+        false,
+        NamedVolumeCopyMode::NoCopy,
+    )?);
+    {
+        let settings = container_intent.settings_mut();
+        settings.set_command(ArgumentArray::new(["serve"])?)?;
+        settings.set_entrypoint(ArgumentArray::new(["/entrypoint"])?)?;
+        settings.set_user(ContainerUser::new("1000:1000")?)?;
+        settings.set_workdir(ContainerWorkdir::new(AbsoluteContainerPath::new("/srv/web")?))?;
+        settings.set_hostname(ContainerHostname::new("web.example")?)?;
+        settings.add_label(Label::new(LabelKey::new("org.example.role")?, LabelValue::new("web")?))?;
+        settings.add_environment(EnvironmentAssignment::new(
+            EnvironmentName::new("MODE")?,
+            DeploymentEnvironmentValue::Plain(PlainEnvironmentValue::new("production")?),
+        ))?;
+        settings.add_environment(EnvironmentAssignment::new(
+            EnvironmentName::new("PASSWORD")?,
+            DeploymentEnvironmentValue::SensitiveInline(SensitiveInlineEnvironmentValue::new("redacted")?),
+        ))?;
+        settings.set_restart_policy(RestartPolicy::Always)?;
+    }
     let mut intent = DeploymentIntent::new(target);
     intent.set_connection(DeploymentConnectionReference::new("production")?);
     intent.add_resource(DeploymentResource::ExternalPrecondition(ExternalPrecondition::new(
         image.clone(),
     )?));
-    intent.add_resource(DeploymentResource::Container(ContainerIntent::new(
-        container.clone(),
-        image,
-    )?));
+    intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume)?));
+    intent.add_resource(DeploymentResource::Container(container_intent));
     intent.add_startup_dependency(StartupDependency::new(container.clone(), container.clone())?);
     let outcome = plan_deployment(&intent);
     let _: &PlanningOutcome = &outcome;

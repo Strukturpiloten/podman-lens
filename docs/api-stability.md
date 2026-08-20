@@ -53,7 +53,13 @@ semantic operation references caller-supplied secret material. URI, endpoint, pa
 token spellings cannot construct this connection type or reach its JSON schema. `shell_script`
 derives solely from the stored CLI argument arrays and preserved external preconditions; neither it
 nor any M6-A type opens a connection or executes Podman.
-Broader native setting coverage remains an explicit later M6 contract.
+M6-B1a adds provisional typed settings to `ContainerIntent` and `PodIntent`: named-volume mounts
+and explicitly named `PodIntent::add_infra_mount` infra-container mounts,
+plus container command, entrypoint, user, workdir, hostname, labels, environment, and restart
+policy. Sensitive inline environment values and external input references redact `Debug`. These
+settings deliberately have no rendering promise yet: `render_deployment` returns `PLN0046` for each
+populated unrendered field. Bind/tmpfs mounts, ports, health checks, logging, security, namespace,
+and secret attachment targets remain later M6 contracts.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

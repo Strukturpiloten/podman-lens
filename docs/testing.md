@@ -71,5 +71,8 @@ kind/action/method/path/body/input-flag pairings and the explicit output-connect
 reject unlisted, build-metadata, and non-identical API/engine targets; prove that external network,
 volume, image, and secret prerequisites are safely disclosed in the review script; and prove the
 sensitive external-input reference sentinel never reaches an artifact. They also prove pod and
-unpodded network topology is emitted while volumes or secret attachments return `PLN0046` instead
-of a lossy rendering. They use no live connection and never execute generated commands.
+unpodded network topology is emitted while every typed mount and container setting returns its own
+`PLN0046` finding instead of a lossy rendering. Tests exercise valid and invalid boundaries,
+ordering, duplicate and conflicting settings, every restart policy, public-consumer compilation,
+and sentinel redaction for inline and external environment values. They use no live connection and
+never execute generated commands.

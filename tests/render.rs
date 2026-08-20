@@ -3,14 +3,27 @@
 #![allow(clippy::expect_used)]
 
 use podman_lens::{
-    ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentResource, DeploymentResourceId,
-    ExternalPrecondition, ImageIntent, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
-    RenderStatus, RenderedHttpBody, ResourceKind, SecretIntent, SensitiveInputReference, TargetProfile, VolumeIntent,
-    plan_deployment, render_deployment, snapshot::deployment_v1,
+    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
+    DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
+    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, Label, LabelKey,
+    LabelValue, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion,
+    PodIntent, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, SecretIntent,
+    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent, plan_deployment,
+    render_deployment, snapshot::deployment_v1,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
     DeploymentResourceId::new(kind, name).expect("valid identity")
+}
+
+fn mount(volume: DeploymentResourceId, destination: &str) -> NamedVolumeMount {
+    NamedVolumeMount::new(
+        volume,
+        AbsoluteContainerPath::new(destination).expect("destination"),
+        false,
+        NamedVolumeCopyMode::Copy,
+    )
+    .expect("mount")
 }
 
 fn target(engine: &str, api: &str) -> TargetProfile {
@@ -512,9 +525,9 @@ fn renderer_reports_every_unrepresentable_topology_field_without_partial_output(
     let pod = id(ResourceKind::Pod, "pod");
     let container = id(ResourceKind::Container, "container");
     let mut pod_intent = PodIntent::new(pod).expect("pod");
-    pod_intent.add_volume(volume.clone()).expect("volume");
+    pod_intent.add_infra_mount(mount(volume.clone(), "/pod-data"));
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
-    container_intent.add_volume(volume.clone()).expect("volume");
+    container_intent.add_mount(mount(volume.clone(), "/container-data"));
     container_intent.add_secret(secret.clone()).expect("secret");
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
@@ -545,11 +558,84 @@ fn renderer_reports_every_unrepresentable_topology_field_without_partial_output(
             ))
             .collect::<Vec<_>>(),
         vec![
+            ("PLN0046", "container", Some("mounts")),
             ("PLN0046", "container", Some("secrets")),
-            ("PLN0046", "container", Some("volumes")),
-            ("PLN0046", "pod", Some("volumes")),
+            ("PLN0046", "pod", Some("infra_mounts")),
         ]
     );
+}
+
+#[test]
+fn renderer_rejects_each_unrendered_container_setting_without_leaking_sensitive_values() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let container = id(ResourceKind::Container, "container");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    let sensitive_sentinel = "must-not-reach-rendering";
+    {
+        let settings = container_intent.settings_mut();
+        settings
+            .set_command(ArgumentArray::new(["serve"]).expect("command"))
+            .expect("command");
+        settings
+            .set_entrypoint(ArgumentArray::new(["/entrypoint"]).expect("entrypoint"))
+            .expect("entrypoint");
+        settings
+            .set_user(ContainerUser::new("1000:1000").expect("user"))
+            .expect("user");
+        settings
+            .set_workdir(ContainerWorkdir::new(
+                AbsoluteContainerPath::new("/srv/application").expect("workdir"),
+            ))
+            .expect("workdir");
+        settings
+            .set_hostname(ContainerHostname::new("app.example").expect("hostname"))
+            .expect("hostname");
+        settings
+            .add_label(Label::new(
+                LabelKey::new("org.example.mode").expect("label key"),
+                LabelValue::new("production").expect("label value"),
+            ))
+            .expect("label");
+        settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("PASSWORD").expect("environment name"),
+                DeploymentEnvironmentValue::SensitiveInline(
+                    SensitiveInlineEnvironmentValue::new(sensitive_sentinel).expect("sensitive value"),
+                ),
+            ))
+            .expect("environment");
+        settings
+            .set_restart_policy(RestartPolicy::UnlessStopped)
+            .expect("restart policy");
+    }
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let planning = plan_deployment(&intent);
+    let plan = planning.plan().expect("valid semantic plan");
+    let outcome = render_deployment(plan);
+    assert!(!outcome.is_success());
+    assert_eq!(
+        outcome
+            .findings()
+            .iter()
+            .map(podman_lens::RenderingFinding::field)
+            .collect::<Vec<_>>(),
+        vec![
+            Some("command"),
+            Some("entrypoint"),
+            Some("environment"),
+            Some("hostname"),
+            Some("labels"),
+            Some("restart_policy"),
+            Some("user"),
+            Some("workdir"),
+        ]
+    );
+    let debug = format!("{outcome:?}");
+    assert!(!debug.contains(sensitive_sentinel));
 }
 
 #[test]

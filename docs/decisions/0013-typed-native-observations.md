@@ -34,6 +34,17 @@ from configured image evidence; local resolution never becomes a desired-image e
 environment values remain redacted or explicitly authorized opaque values, and secret payload
 bytes remain unrepresentable.
 
+Image repository tags and repository digests remain separate local-resolution collections; neither
+is authored deployment intent. Image digest, creation time, architecture, operating system, and
+manifest type are effective evidence, while author is configured metadata. Volume driver,
+creation time, and anonymous status are effective evidence. Secret creation/update times and its
+driver object are effective metadata, but driver option names and values are discarded immediately;
+only option state, provenance, and count remain observable.
+
+Native image, volume, and secret timestamps use `NativeTimestamp`. It validates RFC 3339 while
+preserving the exact wire spelling, including offset and fractional precision, so observation does
+not silently normalize evidence before a caller maps it.
+
 Volume UID and GID are effective native observations, never configured intent. Podman's reviewed
 `omitempty` response shape can omit either field while still applying an effective default of zero;
 that exceptional wire absence is represented as an observed `WireAbsentMayMeanZero` value with
@@ -60,6 +71,10 @@ redacted detail summaries. No deprecated aliases or legacy record projections ar
 - A decoder error cannot silently become an empty or deployable field value.
 - Native ID/name aliases cannot accidentally become duplicate graph edges or cause one spelling
   to win over contradictory evidence.
+- Local image repository references cannot be mistaken for authored image intent, and exact native
+  timestamp spelling remains available for evidence and diagnostics.
+- Secret driver option names and values cannot escape through public observation values, debug
+  output, or snapshots.
 - Snapshots retain structural state and provenance while continuing to redact protected values.
 - The coverage ledger and focused tests must name typed observation owners, rather than generic
   record accessors, as the API reaches its first release.

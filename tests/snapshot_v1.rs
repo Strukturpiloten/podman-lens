@@ -109,6 +109,11 @@ async fn secret_driver_is_typed_not_unsupported_in_inventory_snapshots() -> Resu
         .and_then(|observations| observations.first())
         .ok_or("inventory snapshot must contain the secret observation")?;
     assert_eq!(secret["details"]["secret_driver"]["state"], "observed");
+    assert_eq!(secret["details"]["secret_driver"]["options"]["count"], 1);
+    assert_eq!(secret["details"]["secret_created_at"]["origin"], "effective");
+    assert_eq!(secret["details"]["secret_updated_at"]["origin"], "effective");
+    assert!(!snapshot.to_string().contains("SENTINEL_OPTION_NAME"));
+    assert!(!snapshot.to_string().contains("SENTINEL_OPTION_VALUE"));
     assert_eq!(secret["header"]["unmodelled_fields"], json!([]));
     assert!(
         secret["header"]["findings"]
@@ -202,7 +207,7 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     assert!(!validator.is_valid(&mismatched_detail_kind));
 
     let mut irrelevant_typed_payload = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
-    irrelevant_typed_payload["sections"][0]["observations"][0]["details"]["image_aliases"] = json!({
+    irrelevant_typed_payload["sections"][0]["observations"][0]["details"]["image_repo_tags"] = json!({
         "state": "observed",
         "origin": "local_resolution",
         "count": 1

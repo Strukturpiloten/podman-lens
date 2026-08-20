@@ -78,6 +78,24 @@ macro_rules! expected {
     };
 }
 
+macro_rules! b4_input {
+    ($id:literal, $resource_kind:literal, $native_path:literal, $decoder:literal, $public_contract:literal) => {
+        expected!(
+            $id,
+            $resource_kind,
+            $native_path,
+            "observation-only",
+            $decoder,
+            "not_applicable",
+            "not_applicable",
+            $public_contract,
+            "PLN0017",
+            "tests::inventory::native_image_volume_and_secret_metadata_are_typed_and_redacted",
+            "tests::inventory::native_image_volume_and_secret_metadata_malformed_fields_fail_closed"
+        )
+    };
+}
+
 const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
     expected!(
         "PLN-FLD-0001",
@@ -446,15 +464,15 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
     expected!(
         "PLN-FLD-0029",
         "image",
-        "$.Names",
+        "$.RepoTags",
         "observation-only",
         "inventory::decode_image",
         "not_applicable",
         "not_applicable",
-        "ImageObservation::aliases",
+        "ImageObservation::repo_tags",
         "PLN0017",
-        "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
-        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+        "tests::inventory::native_image_volume_and_secret_metadata_are_typed_and_redacted",
+        "tests::inventory::native_image_volume_and_secret_metadata_malformed_fields_fail_closed"
     ),
     expected!(
         "PLN-FLD-0030",
@@ -1716,6 +1734,130 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "PLN0017",
         "tests::inventory::container_security_namespaces_and_resources_are_typed_effective_observations",
         "tests::inventory::container_b3b_malformed_fields_fail_closed"
+    ),
+    expected!(
+        "PLN-FLD-0129",
+        "volume",
+        "$.UID",
+        "observation-only",
+        "inventory::decode_volume_owner",
+        "not_applicable",
+        "not_applicable",
+        "VolumeObservation::uid",
+        "PLN0017",
+        "tests::inventory::volume_owner_ids_preserve_absence_zero_bounds_and_unavailability",
+        "tests::inventory::volume_owner_ids_preserve_absence_zero_bounds_and_unavailability"
+    ),
+    expected!(
+        "PLN-FLD-0130",
+        "volume",
+        "$.GID",
+        "observation-only",
+        "inventory::decode_volume_owner",
+        "not_applicable",
+        "not_applicable",
+        "VolumeObservation::gid",
+        "PLN0017",
+        "tests::inventory::volume_owner_ids_preserve_absence_zero_bounds_and_unavailability",
+        "tests::inventory::volume_owner_ids_preserve_absence_zero_bounds_and_unavailability"
+    ),
+    b4_input!(
+        "PLN-FLD-0131",
+        "volume",
+        "$.Driver",
+        "inventory::decode_volume",
+        "VolumeObservation::driver"
+    ),
+    b4_input!(
+        "PLN-FLD-0132",
+        "volume",
+        "$.CreatedAt",
+        "inventory::decode_volume",
+        "VolumeObservation::created_at"
+    ),
+    b4_input!(
+        "PLN-FLD-0133",
+        "volume",
+        "$.Anonymous",
+        "inventory::decode_volume",
+        "VolumeObservation::anonymous"
+    ),
+    b4_input!(
+        "PLN-FLD-0134",
+        "image",
+        "$.RepoDigests",
+        "inventory::decode_image",
+        "ImageObservation::repo_digests"
+    ),
+    b4_input!(
+        "PLN-FLD-0135",
+        "image",
+        "$.Digest",
+        "inventory::decode_image",
+        "ImageObservation::digest"
+    ),
+    b4_input!(
+        "PLN-FLD-0136",
+        "image",
+        "$.Created",
+        "inventory::decode_image",
+        "ImageObservation::created"
+    ),
+    b4_input!(
+        "PLN-FLD-0137",
+        "image",
+        "$.Author",
+        "inventory::decode_image",
+        "ImageObservation::author"
+    ),
+    b4_input!(
+        "PLN-FLD-0138",
+        "image",
+        "$.Architecture",
+        "inventory::decode_image",
+        "ImageObservation::architecture"
+    ),
+    b4_input!(
+        "PLN-FLD-0139",
+        "image",
+        "$.Os",
+        "inventory::decode_image",
+        "ImageObservation::operating_system"
+    ),
+    b4_input!(
+        "PLN-FLD-0140",
+        "image",
+        "$.ManifestType",
+        "inventory::decode_image",
+        "ImageObservation::manifest_type"
+    ),
+    b4_input!(
+        "PLN-FLD-0141",
+        "secret",
+        "$.Spec.Driver.Name",
+        "inventory::decode_secret_driver",
+        "NativeSecretDriverObservation::name"
+    ),
+    b4_input!(
+        "PLN-FLD-0142",
+        "secret",
+        "$.Spec.Driver.Options",
+        "inventory::decode_secret_driver",
+        "NativeSecretDriverObservation::options"
+    ),
+    b4_input!(
+        "PLN-FLD-0143",
+        "secret",
+        "$.CreatedAt",
+        "inventory::decode_secret",
+        "SecretObservation::created_at"
+    ),
+    b4_input!(
+        "PLN-FLD-0144",
+        "secret",
+        "$.UpdatedAt",
+        "inventory::decode_secret",
+        "SecretObservation::updated_at"
     ),
 ];
 

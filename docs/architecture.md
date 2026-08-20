@@ -186,6 +186,15 @@ never retained. CPU shares/period remain unsigned, quota/memory/PID limits remai
 ulimits retain native order plus zero and `-1` without output-intent range validation. One malformed
 ulimit member poisons the complete collection. No field is converted to deployment runtime intent.
 
+M7-B4 completes the bounded non-container resource metadata needed by the first BoxFerry adapter.
+Image `RepoTags` and `RepoDigests` are separate local-resolution collections; neither is deployment
+intent. Digest, creation time, architecture, operating system, and manifest type are effective
+observations, while author is configured metadata. Volumes expose effective driver, creation time,
+anonymous status, and their existing wire-level UID/GID observations. Secrets expose effective
+creation/update times and a driver object whose option names and values are discarded immediately;
+only option state, provenance, and count survive. Native timestamps preserve their exact validated
+RFC 3339 spelling. Snapshots retain only state, provenance, and collection counts for this batch.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

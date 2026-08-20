@@ -68,12 +68,13 @@ pub use observation::{
     NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
     NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
     NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeResourceControlObservation,
-    NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation, NativeSecurityObservation,
-    NativeStartupHealthCheckObservation, NativeUlimitObservation, NetworkObservation, NetworkOptionKeys,
-    ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
-    ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand, ResourceDetails, ResourceObservation,
-    ResourceObservationState, SecretObservation, UnixId as ObservedUnixId, UnmodelledCompleteness, UnmodelledField,
-    UnmodelledFieldId, VolumeObservation, VolumeOwnerIdWireValue,
+    NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation, NativeSecretDriverObservation,
+    NativeSecretDriverOptions, NativeSecurityObservation, NativeStartupHealthCheckObservation, NativeTimestamp,
+    NativeUlimitObservation, NetworkObservation, NetworkOptionKeys, ObservationField, ObservationHeader,
+    ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment, ProtectedEnvironmentEntry,
+    ProtectedEnvironmentValue, ProtectedHealthCommand, ResourceDetails, ResourceObservation, ResourceObservationState,
+    SecretObservation, UnixId as ObservedUnixId, UnmodelledCompleteness, UnmodelledField, UnmodelledFieldId,
+    VolumeObservation, VolumeOwnerIdWireValue,
 };
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]

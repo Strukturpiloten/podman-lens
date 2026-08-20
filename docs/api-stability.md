@@ -52,7 +52,13 @@ bounded `PLN0023` metadata. Security options are count-only and their values are
 CPU, memory, PID, and ulimit values preserve native zero and `-1` spellings without applying
 output-intent validation.
 
-The packaged ledger currently contains 126 input-observation rows and 50 output-intent rows (176
+M7-B4 adds `NativeTimestamp`, `NativeSecretDriverObservation`, and
+`NativeSecretDriverOptions`, plus image, volume, and secret accessors for the remaining bounded
+metadata batch. Image repository tags and digests retain local-resolution provenance and are
+separate collections. Secret driver options expose only their count; option names and values have
+no public representation. These observations do not convert to deployment intent.
+
+The packaged ledger currently contains 142 input-observation rows and 50 output-intent rows (192
 total). M7-B3 contributes 38 observation-only restart, health, logging, security, namespace, and
 resource-control rows. M6-B4 extends the latter beyond container runtime settings to container
 mounts and secret grants, volume

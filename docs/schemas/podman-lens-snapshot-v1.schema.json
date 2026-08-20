@@ -244,6 +244,57 @@
         }
       ]
     },
+    "native_secret_driver": {
+      "type": "object",
+      "required": ["state", "origin", "name", "options"],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/observation_field_state"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/observation_origin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/field_state"
+        },
+        "options": {
+          "$ref": "#/$defs/field_count"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "observed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "origin": {
+                "$ref": "#/$defs/observation_origin"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "origin": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
     "environment_entry": {
       "type": "object",
       "required": ["name", "value_state"],
@@ -520,15 +571,27 @@
         "native_dependencies",
         "mounts",
         "secret_grants",
-        "image_aliases",
+        "image_repo_tags",
+        "image_repo_digests",
+        "image_digest",
+        "image_created",
+        "image_author",
+        "image_architecture",
+        "image_operating_system",
+        "image_manifest_type",
         "network",
         "networking",
         "memory_swappiness",
         "infra",
         "create_infra",
         "secret_driver",
+        "secret_created_at",
+        "secret_updated_at",
         "volume_uid",
         "volume_gid",
+        "volume_driver",
+        "volume_created_at",
+        "volume_anonymous",
         "restart_policy",
         "health_check",
         "health_failure_action",
@@ -675,10 +738,80 @@
             }
           ]
         },
-        "image_aliases": {
+        "image_repo_tags": {
           "anyOf": [
             {
               "$ref": "#/$defs/field_count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_repo_digests": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_created": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_author": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_architecture": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_operating_system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_manifest_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
             },
             {
               "type": "null"
@@ -738,6 +871,26 @@
         "secret_driver": {
           "anyOf": [
             {
+              "$ref": "#/$defs/native_secret_driver"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secret_created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secret_updated_at": {
+          "anyOf": [
+            {
               "$ref": "#/$defs/field_state"
             },
             {
@@ -759,6 +912,36 @@
           "anyOf": [
             {
               "$ref": "#/$defs/volume_owner"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume_driver": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume_created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume_anonymous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_state"
             },
             {
               "type": "null"
@@ -903,7 +1086,28 @@
             "infra": {
               "$ref": "#/$defs/field_state"
             },
-            "image_aliases": {
+            "image_repo_tags": {
+              "type": "null"
+            },
+            "image_repo_digests": {
+              "type": "null"
+            },
+            "image_digest": {
+              "type": "null"
+            },
+            "image_created": {
+              "type": "null"
+            },
+            "image_author": {
+              "type": "null"
+            },
+            "image_architecture": {
+              "type": "null"
+            },
+            "image_operating_system": {
+              "type": "null"
+            },
+            "image_manifest_type": {
               "type": "null"
             },
             "network": {
@@ -918,10 +1122,25 @@
             "secret_driver": {
               "type": "null"
             },
+            "secret_created_at": {
+              "type": "null"
+            },
+            "secret_updated_at": {
+              "type": "null"
+            },
             "volume_uid": {
               "type": "null"
             },
             "volume_gid": {
+              "type": "null"
+            },
+            "volume_driver": {
+              "type": "null"
+            },
+            "volume_created_at": {
+              "type": "null"
+            },
+            "volume_anonymous": {
               "type": "null"
             },
             "restart_policy": {
@@ -1001,7 +1220,28 @@
             "secret_grants": {
               "type": "null"
             },
-            "image_aliases": {
+            "image_repo_tags": {
+              "type": "null"
+            },
+            "image_repo_digests": {
+              "type": "null"
+            },
+            "image_digest": {
+              "type": "null"
+            },
+            "image_created": {
+              "type": "null"
+            },
+            "image_author": {
+              "type": "null"
+            },
+            "image_architecture": {
+              "type": "null"
+            },
+            "image_operating_system": {
+              "type": "null"
+            },
+            "image_manifest_type": {
               "type": "null"
             },
             "network": {
@@ -1022,10 +1262,25 @@
             "secret_driver": {
               "type": "null"
             },
+            "secret_created_at": {
+              "type": "null"
+            },
+            "secret_updated_at": {
+              "type": "null"
+            },
             "volume_uid": {
               "type": "null"
             },
             "volume_gid": {
+              "type": "null"
+            },
+            "volume_driver": {
+              "type": "null"
+            },
+            "volume_created_at": {
+              "type": "null"
+            },
+            "volume_anonymous": {
               "type": "null"
             },
             "restart_policy": {
@@ -1111,7 +1366,28 @@
             "secret_grants": {
               "type": "null"
             },
-            "image_aliases": {
+            "image_repo_tags": {
+              "type": "null"
+            },
+            "image_repo_digests": {
+              "type": "null"
+            },
+            "image_digest": {
+              "type": "null"
+            },
+            "image_created": {
+              "type": "null"
+            },
+            "image_author": {
+              "type": "null"
+            },
+            "image_architecture": {
+              "type": "null"
+            },
+            "image_operating_system": {
+              "type": "null"
+            },
+            "image_manifest_type": {
               "type": "null"
             },
             "memory_swappiness": {
@@ -1126,10 +1402,25 @@
             "secret_driver": {
               "type": "null"
             },
+            "secret_created_at": {
+              "type": "null"
+            },
+            "secret_updated_at": {
+              "type": "null"
+            },
             "volume_uid": {
               "type": "null"
             },
             "volume_gid": {
+              "type": "null"
+            },
+            "volume_driver": {
+              "type": "null"
+            },
+            "volume_created_at": {
+              "type": "null"
+            },
+            "volume_anonymous": {
               "type": "null"
             },
             "restart_policy": {
@@ -1176,6 +1467,15 @@
             "volume_gid": {
               "$ref": "#/$defs/volume_owner"
             },
+            "volume_driver": {
+              "$ref": "#/$defs/field_state"
+            },
+            "volume_created_at": {
+              "$ref": "#/$defs/field_state"
+            },
+            "volume_anonymous": {
+              "$ref": "#/$defs/field_state"
+            },
             "configured_image": {
               "type": "null"
             },
@@ -1215,7 +1515,28 @@
             "secret_grants": {
               "type": "null"
             },
-            "image_aliases": {
+            "image_repo_tags": {
+              "type": "null"
+            },
+            "image_repo_digests": {
+              "type": "null"
+            },
+            "image_digest": {
+              "type": "null"
+            },
+            "image_created": {
+              "type": "null"
+            },
+            "image_author": {
+              "type": "null"
+            },
+            "image_architecture": {
+              "type": "null"
+            },
+            "image_operating_system": {
+              "type": "null"
+            },
+            "image_manifest_type": {
               "type": "null"
             },
             "network": {
@@ -1234,6 +1555,12 @@
               "type": "null"
             },
             "secret_driver": {
+              "type": "null"
+            },
+            "secret_created_at": {
+              "type": "null"
+            },
+            "secret_updated_at": {
               "type": "null"
             },
             "restart_policy": {
@@ -1277,8 +1604,29 @@
             "environment": {
               "$ref": "#/$defs/protected_environment"
             },
-            "image_aliases": {
+            "image_repo_tags": {
               "$ref": "#/$defs/field_count"
+            },
+            "image_repo_digests": {
+              "$ref": "#/$defs/field_count"
+            },
+            "image_digest": {
+              "$ref": "#/$defs/field_state"
+            },
+            "image_created": {
+              "$ref": "#/$defs/field_state"
+            },
+            "image_author": {
+              "$ref": "#/$defs/field_state"
+            },
+            "image_architecture": {
+              "$ref": "#/$defs/field_state"
+            },
+            "image_operating_system": {
+              "$ref": "#/$defs/field_state"
+            },
+            "image_manifest_type": {
+              "$ref": "#/$defs/field_state"
             },
             "configured_image": {
               "type": "null"
@@ -1334,10 +1682,25 @@
             "secret_driver": {
               "type": "null"
             },
+            "secret_created_at": {
+              "type": "null"
+            },
+            "secret_updated_at": {
+              "type": "null"
+            },
             "volume_uid": {
               "type": "null"
             },
             "volume_gid": {
+              "type": "null"
+            },
+            "volume_driver": {
+              "type": "null"
+            },
+            "volume_created_at": {
+              "type": "null"
+            },
+            "volume_anonymous": {
               "type": "null"
             },
             "restart_policy": {
@@ -1379,6 +1742,12 @@
               "const": "secret"
             },
             "secret_driver": {
+              "$ref": "#/$defs/native_secret_driver"
+            },
+            "secret_created_at": {
+              "$ref": "#/$defs/field_state"
+            },
+            "secret_updated_at": {
               "$ref": "#/$defs/field_state"
             },
             "configured_image": {
@@ -1420,7 +1789,28 @@
             "secret_grants": {
               "type": "null"
             },
-            "image_aliases": {
+            "image_repo_tags": {
+              "type": "null"
+            },
+            "image_repo_digests": {
+              "type": "null"
+            },
+            "image_digest": {
+              "type": "null"
+            },
+            "image_created": {
+              "type": "null"
+            },
+            "image_author": {
+              "type": "null"
+            },
+            "image_architecture": {
+              "type": "null"
+            },
+            "image_operating_system": {
+              "type": "null"
+            },
+            "image_manifest_type": {
               "type": "null"
             },
             "network": {
@@ -1442,6 +1832,15 @@
               "type": "null"
             },
             "volume_gid": {
+              "type": "null"
+            },
+            "volume_driver": {
+              "type": "null"
+            },
+            "volume_created_at": {
+              "type": "null"
+            },
+            "volume_anonymous": {
               "type": "null"
             },
             "restart_policy": {

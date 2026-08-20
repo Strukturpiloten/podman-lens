@@ -26,8 +26,9 @@ expected metadata; syntactically plausible substitutions are not accepted.
 An accepted object is never a blanket acceptance for its descendants. A typed member is modeled;
 every other direct member is retained as `UnmodelledField` metadata and receives `PLN0023`.
 `HostConfig.MemorySwappiness` is the initial enforced example. `Secret.Spec.Driver` is an explicit
-typed metadata field. Secret payload material remains a manual, redacted boundary and is never
-retained.
+typed metadata object. Its option names and values are discarded immediately; only option state,
+provenance, and count survive. Secret payload material remains a manual, redacted boundary and is
+never retained.
 
 Unknown metadata remains bounded. `ObservationHeader::unmodelled_completeness()` is incomplete for
 an unavailable or malformed inspection or whenever `PLN0021` reports overflow. Consumers must not
@@ -49,8 +50,14 @@ mistake the retained slice for complete native configuration in either case.
   plus manual source-portability, no-copy-subpath, and pod-infra-mount boundaries. M7-B2a adds ten
   input-only native network IPAM and route rows. M7-B2b adds 22 pod-infra and unpodded-container
   networking rows. M7-B3a adds 20 observation-only restart, health, and logging rows, including
-  parent objects. M7-B3b adds 18 security, namespace, and resource-control rows. This avoids
-  silently accepting nested descendants. The ledger has 126 input-observation rows and 50
-  output-intent rows (176 total). Every reviewed line records
+  parent objects. M7-B3b adds 18 security, namespace, and resource-control rows. M7-B4 adds 16
+  input rows for volume UID/GID, driver, creation time, and anonymous state; image repository
+  digests, digest, creation time, author, architecture, operating system, and manifest type; and
+  secret driver name/options plus creation/update times. It also corrects the existing image
+  reference row to the native `RepoTags` field. Repository tags and digests remain separate
+  local-resolution evidence, native timestamps retain their exact validated RFC 3339 spelling,
+  and secret driver options are count-only. This avoids silently accepting nested descendants.
+  The ledger has 142 input-observation rows and 50 output-intent rows (192 total). Every reviewed
+  line records
   immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

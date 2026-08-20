@@ -21,7 +21,7 @@ renderers. An `OutputIntent` row links a declared field to its planner, exact CL
 Libpod renderer, reviewed target versions, public accessor, diagnostic rule, and focused tests.
 `not_applicable` means no contract exists in that plane; it never authorizes a conversion. The B3b
 runtime rows name all seven reviewed targets except journald labels (6.0+) and unlimited rlimits
-(5.6+). The 16 B4 rows include exact typed mount and secret-grant forms, 5.6+ volume ownership and
+(5.6+). The 16 M6-B4 output rows include exact typed mount and secret-grant forms, 5.6+ volume ownership and
 all four explicit image pull policies, and manual no-copy-subpath, source-portability, and
 pod-infra-mount boundaries. Sensitive and external health commands are manual redacted boundaries
 that apply to all reviewed targets and block the complete resource artifact with `PLN0046`.
@@ -98,6 +98,15 @@ malformed.
 Resource observations preserve native signed sentinels and ulimit order without enforcing deployment constraints.
 Snapshots contain only states, origins, and collection counts.
 
+M7-B4 adds bounded image, volume, and secret metadata. `ImageObservation` exposes repository tags
+and repository digests as distinct local-resolution collections, plus effective digest, creation,
+architecture, operating-system, and manifest-type fields and configured author metadata.
+`VolumeObservation` exposes effective driver, creation time, and anonymous status alongside its
+wire-level UID/GID fields. `SecretObservation` exposes effective creation/update times and a typed
+driver: its name is observable, while options expose only state, origin, and count. Every timestamp
+is an exact validated RFC 3339 spelling through `NativeTimestamp::as_str`. None of these accessors
+implies an observation-to-intent mapping.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,
@@ -144,7 +153,7 @@ connection data, raw unknown JSON, label values, driver-option values, and Compo
 values, regardless of in-memory acquisition policy.
 
 Snapshots retain resource IDs and names, environment variable names, evidence URLs, and source
-field paths. Image aliases and network subnets are deliberately exported as counts only, because
+field paths. Image repository tags/digests and network subnets are deliberately exported as counts only, because
 their spellings may disclose private registry, topology, or addressing information. Always-redacted
 does not mean anonymous; callers must still handle reports as operational data.
 

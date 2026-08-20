@@ -2175,22 +2175,103 @@ impl UnixId {
     }
 }
 
+/// An exact, validated RFC 3339 timestamp from a native Podman response.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeTimestamp(String);
+
+impl NativeTimestamp {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the exact timestamp spelling reported by Podman.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Count-only evidence for secret-driver options. Option names and values are never retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeSecretDriverOptions {
+    count: usize,
+}
+
+impl NativeSecretDriverOptions {
+    pub(crate) const fn new(count: usize) -> Self {
+        Self { count }
+    }
+
+    /// Returns the number of opaque driver options.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.count
+    }
+
+    /// Returns whether no driver options were observed.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
+/// Native secret-driver metadata without option names or values.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeSecretDriverObservation {
+    name: ObservationField<String>,
+    options: ObservationField<NativeSecretDriverOptions>,
+}
+
+impl NativeSecretDriverObservation {
+    pub(crate) const fn new(
+        name: ObservationField<String>,
+        options: ObservationField<NativeSecretDriverOptions>,
+    ) -> Self {
+        Self { name, options }
+    }
+
+    /// Returns the effective driver name.
+    #[must_use]
+    pub fn name(&self) -> &ObservationField<String> {
+        &self.name
+    }
+
+    /// Returns only the state and count of opaque driver options.
+    #[must_use]
+    pub fn options(&self) -> &ObservationField<NativeSecretDriverOptions> {
+        &self.options
+    }
+}
+
 /// Volume-specific native observations.
 #[derive(Clone, Eq, PartialEq)]
 pub struct VolumeObservation {
     labels: ObservationField<Labels>,
     uid: ObservationField<VolumeOwnerIdWireValue>,
     gid: ObservationField<VolumeOwnerIdWireValue>,
+    driver: ObservationField<String>,
+    created_at: ObservationField<NativeTimestamp>,
+    anonymous: ObservationField<bool>,
 }
-observation_debug!(VolumeObservation, labels, uid, gid);
+observation_debug!(VolumeObservation, labels, uid, gid, driver, created_at, anonymous);
 
 impl VolumeObservation {
     pub(crate) fn new(
         labels: ObservationField<Labels>,
         uid: ObservationField<VolumeOwnerIdWireValue>,
         gid: ObservationField<VolumeOwnerIdWireValue>,
+        driver: ObservationField<String>,
+        created_at: ObservationField<NativeTimestamp>,
+        anonymous: ObservationField<bool>,
     ) -> Self {
-        Self { labels, uid, gid }
+        Self {
+            labels,
+            uid,
+            gid,
+            driver,
+            created_at,
+            anonymous,
+        }
     }
     /// Returns the configured volume labels or their observation state.
     #[must_use]
@@ -2207,27 +2288,89 @@ impl VolumeObservation {
     pub fn gid(&self) -> &ObservationField<VolumeOwnerIdWireValue> {
         &self.gid
     }
+    /// Returns the effective volume driver name.
+    #[must_use]
+    pub fn driver(&self) -> &ObservationField<String> {
+        &self.driver
+    }
+    /// Returns the effective creation timestamp.
+    #[must_use]
+    pub fn created_at(&self) -> &ObservationField<NativeTimestamp> {
+        &self.created_at
+    }
+    /// Returns whether Podman reported this as an anonymous volume.
+    #[must_use]
+    pub fn anonymous(&self) -> &ObservationField<bool> {
+        &self.anonymous
+    }
 }
 
 /// Image-specific native observations.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ImageObservation {
     labels: ObservationField<Labels>,
-    aliases: ObservationField<Vec<String>>,
+    repo_tags: ObservationField<Vec<String>>,
+    repo_digests: ObservationField<Vec<String>>,
     environment: ObservationField<ProtectedEnvironment>,
+    digest: ObservationField<String>,
+    created: ObservationField<NativeTimestamp>,
+    author: ObservationField<String>,
+    architecture: ObservationField<String>,
+    operating_system: ObservationField<String>,
+    manifest_type: ObservationField<String>,
 }
-observation_debug!(ImageObservation, labels, aliases, environment);
+
+pub(crate) struct ImageObservationFields {
+    pub(crate) labels: ObservationField<Labels>,
+    pub(crate) repo_tags: ObservationField<Vec<String>>,
+    pub(crate) repo_digests: ObservationField<Vec<String>>,
+    pub(crate) environment: ObservationField<ProtectedEnvironment>,
+    pub(crate) digest: ObservationField<String>,
+    pub(crate) created: ObservationField<NativeTimestamp>,
+    pub(crate) author: ObservationField<String>,
+    pub(crate) architecture: ObservationField<String>,
+    pub(crate) operating_system: ObservationField<String>,
+    pub(crate) manifest_type: ObservationField<String>,
+}
+observation_debug!(
+    ImageObservation,
+    labels,
+    repo_tags,
+    repo_digests,
+    environment,
+    digest,
+    created,
+    author,
+    architecture,
+    operating_system,
+    manifest_type
+);
 
 impl ImageObservation {
-    pub(crate) fn new(
-        labels: ObservationField<Labels>,
-        aliases: ObservationField<Vec<String>>,
-        environment: ObservationField<ProtectedEnvironment>,
-    ) -> Self {
+    pub(crate) fn new(fields: ImageObservationFields) -> Self {
+        let ImageObservationFields {
+            labels,
+            repo_tags,
+            repo_digests,
+            environment,
+            digest,
+            created,
+            author,
+            architecture,
+            operating_system,
+            manifest_type,
+        } = fields;
         Self {
             labels,
-            aliases,
+            repo_tags,
+            repo_digests,
             environment,
+            digest,
+            created,
+            author,
+            architecture,
+            operating_system,
+            manifest_type,
         }
     }
     /// Returns the configured image labels or their observation state.
@@ -2235,15 +2378,50 @@ impl ImageObservation {
     pub fn labels(&self) -> &ObservationField<Labels> {
         &self.labels
     }
-    /// Returns locally resolved image aliases or their observation state.
+    /// Returns locally resolved repository tags or their observation state.
     #[must_use]
-    pub fn aliases(&self) -> &ObservationField<Vec<String>> {
-        &self.aliases
+    pub fn repo_tags(&self) -> &ObservationField<Vec<String>> {
+        &self.repo_tags
+    }
+    /// Returns locally resolved repository digests or their observation state.
+    #[must_use]
+    pub fn repo_digests(&self) -> &ObservationField<Vec<String>> {
+        &self.repo_digests
     }
     /// Returns protected image-environment observations or their observation state.
     #[must_use]
     pub fn environment(&self) -> &ObservationField<ProtectedEnvironment> {
         &self.environment
+    }
+    /// Returns the effective image digest.
+    #[must_use]
+    pub fn digest(&self) -> &ObservationField<String> {
+        &self.digest
+    }
+    /// Returns the effective image creation timestamp.
+    #[must_use]
+    pub fn created(&self) -> &ObservationField<NativeTimestamp> {
+        &self.created
+    }
+    /// Returns the configured image author metadata.
+    #[must_use]
+    pub fn author(&self) -> &ObservationField<String> {
+        &self.author
+    }
+    /// Returns the effective image architecture.
+    #[must_use]
+    pub fn architecture(&self) -> &ObservationField<String> {
+        &self.architecture
+    }
+    /// Returns the effective image operating-system name.
+    #[must_use]
+    pub fn operating_system(&self) -> &ObservationField<String> {
+        &self.operating_system
+    }
+    /// Returns the effective image manifest media type.
+    #[must_use]
+    pub fn manifest_type(&self) -> &ObservationField<String> {
+        &self.manifest_type
     }
 }
 
@@ -2251,13 +2429,25 @@ impl ImageObservation {
 #[derive(Clone, Eq, PartialEq)]
 pub struct SecretObservation {
     labels: ObservationField<Labels>,
-    driver: ObservationField<String>,
+    driver: ObservationField<NativeSecretDriverObservation>,
+    created_at: ObservationField<NativeTimestamp>,
+    updated_at: ObservationField<NativeTimestamp>,
 }
-observation_debug!(SecretObservation, labels, driver);
+observation_debug!(SecretObservation, labels, driver, created_at, updated_at);
 
 impl SecretObservation {
-    pub(crate) fn new(labels: ObservationField<Labels>, driver: ObservationField<String>) -> Self {
-        Self { labels, driver }
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        driver: ObservationField<NativeSecretDriverObservation>,
+        created_at: ObservationField<NativeTimestamp>,
+        updated_at: ObservationField<NativeTimestamp>,
+    ) -> Self {
+        Self {
+            labels,
+            driver,
+            created_at,
+            updated_at,
+        }
     }
     /// Returns the configured secret labels or their observation state.
     #[must_use]
@@ -2266,8 +2456,18 @@ impl SecretObservation {
     }
     /// Returns the secret-driver metadata or its observation state.
     #[must_use]
-    pub fn driver(&self) -> &ObservationField<String> {
+    pub fn driver(&self) -> &ObservationField<NativeSecretDriverObservation> {
         &self.driver
+    }
+    /// Returns the effective creation timestamp.
+    #[must_use]
+    pub fn created_at(&self) -> &ObservationField<NativeTimestamp> {
+        &self.created_at
+    }
+    /// Returns the effective last-update timestamp.
+    #[must_use]
+    pub fn updated_at(&self) -> &ObservationField<NativeTimestamp> {
+        &self.updated_at
     }
 }
 
@@ -2375,9 +2575,16 @@ impl ResourceObservation {
         }
     }
 
-    pub(crate) fn image_aliases(&self) -> Option<&ObservationField<Vec<String>>> {
+    pub(crate) fn image_repo_tags(&self) -> Option<&ObservationField<Vec<String>>> {
         match &self.details {
-            ResourceDetails::Image(value) => Some(value.aliases()),
+            ResourceDetails::Image(value) => Some(value.repo_tags()),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn image_repo_digests(&self) -> Option<&ObservationField<Vec<String>>> {
+        match &self.details {
+            ResourceDetails::Image(value) => Some(value.repo_digests()),
             _ => None,
         }
     }
@@ -2437,15 +2644,28 @@ fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> Re
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
-        )),
-        ResourceKind::Image => ResourceDetails::Image(ImageObservation::new(
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
         )),
-        ResourceKind::Secret => {
-            ResourceDetails::Secret(SecretObservation::new(incomplete_field(state), incomplete_field(state)))
-        }
+        ResourceKind::Image => ResourceDetails::Image(ImageObservation::new(ImageObservationFields {
+            labels: incomplete_field(state),
+            repo_tags: incomplete_field(state),
+            repo_digests: incomplete_field(state),
+            environment: incomplete_field(state),
+            digest: incomplete_field(state),
+            created: incomplete_field(state),
+            author: incomplete_field(state),
+            architecture: incomplete_field(state),
+            operating_system: incomplete_field(state),
+            manifest_type: incomplete_field(state),
+        })),
+        ResourceKind::Secret => ResourceDetails::Secret(SecretObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
     }
 }
 

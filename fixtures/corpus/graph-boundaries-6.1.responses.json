@@ -148,7 +148,7 @@
     {
       "status": 200,
       "headers": [],
-      "body": { "Id": "sha256:graph", "Names": ["example.invalid/graph:1"] }
+      "body": { "Id": "sha256:graph", "RepoTags": ["example.invalid/graph:1"] }
     },
     {
       "status": 200,

@@ -84,12 +84,15 @@
     {
       "status": 200,
       "headers": [],
-      "body": { "Id": "sha256:rootful", "Names": ["example.invalid/rootful:1"] }
+      "body": { "Id": "sha256:rootful", "RepoTags": ["example.invalid/rootful:1"] }
     },
     {
       "status": 200,
       "headers": [],
-      "body": { "ID": "rootful-secret", "Spec": { "Name": "rootful-secret", "Driver": "file" } }
+      "body": {
+        "ID": "rootful-secret",
+        "Spec": { "Name": "rootful-secret", "Driver": { "Name": "file", "Options": {} } }
+      }
     }
   ]
 }

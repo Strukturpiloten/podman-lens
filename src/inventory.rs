@@ -10,14 +10,15 @@ use serde_json::{Map, Value};
 use crate::observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
     ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
-    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
-    NativeCapability, NativeHealthCheckObservation, NativeHealthCommand, NativeHealthFailureAction,
-    NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode, NativeNamespaceObservation,
-    NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
-    NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
+    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation,
+    ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation, NativeHealthCommand,
+    NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode,
+    NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
+    NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
     NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeRelationship,
     NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation,
-    NativeSecurityObservation, NativeStartupHealthCheckObservation, NativeUlimitObservation, NetworkObservation,
+    NativeSecretDriverObservation, NativeSecretDriverOptions, NativeSecurityObservation,
+    NativeStartupHealthCheckObservation, NativeTimestamp, NativeUlimitObservation, NetworkObservation,
     NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation,
     ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
     ResourceDetails, ResourceObservation, ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId,
@@ -531,12 +532,14 @@ fn reconcile_relationships(sections: &mut [InventorySection]) {
                     .or_default()
                     .push(identity.id().to_owned());
             }
-            if let Some(ObservationField::Observed(aliases)) = observation.image_aliases() {
-                for alias in aliases.value() {
-                    targets
-                        .entry((identity.kind(), alias.clone()))
-                        .or_default()
-                        .push(identity.id().to_owned());
+            for aliases in [observation.image_repo_tags(), observation.image_repo_digests()] {
+                if let Some(ObservationField::Observed(aliases)) = aliases {
+                    for alias in aliases.value() {
+                        targets
+                            .entry((identity.kind(), alias.clone()))
+                            .or_default()
+                            .push(identity.id().to_owned());
+                    }
                 }
             }
         }
@@ -872,7 +875,7 @@ fn decode_observation(
         native_dependencies,
         mounts,
         secret_grants,
-        image_aliases,
+        image_repo_tags,
         network,
         memory_swappiness,
         configured_image,
@@ -885,6 +888,7 @@ fn decode_observation(
         volume_owner_user,
         volume_owner_group,
         container_b3,
+        b4,
         mut findings,
         known,
     ) = match listed_identity.kind {
@@ -924,7 +928,7 @@ fn decode_observation(
                 native_dependencies,
                 mounts,
                 secret_grants,
-                image_aliases,
+                image_repo_tags,
                 network,
                 memory_swappiness,
                 configured_image,
@@ -937,6 +941,7 @@ fn decode_observation(
                 secret_driver,
                 volume_owner_user,
                 volume_owner_group,
+                b4,
             },
         ),
     )
@@ -1004,10 +1009,11 @@ type Decoded = (
     Option<ObservationField<NativeNetworkingObservation>>,
     Option<ObservationField<bool>>,
     Option<ObservationField<NativeNetworkingObservation>>,
-    Option<ObservationField<String>>,
+    Option<ObservationField<NativeSecretDriverObservation>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
     Option<ContainerB3Decoded>,
+    Option<B4Decoded>,
     Vec<InventoryFinding>,
     &'static [&'static str],
 );
@@ -1028,6 +1034,27 @@ struct ContainerB3Decoded {
     namespaces: ObservationField<NativeNamespaceObservation>,
     resource_controls: ObservationField<NativeResourceControlObservation>,
     unmodelled: Vec<(String, JsonValueKind)>,
+}
+
+enum B4Decoded {
+    Volume {
+        driver: ObservationField<String>,
+        created_at: ObservationField<NativeTimestamp>,
+        anonymous: ObservationField<bool>,
+    },
+    Image {
+        repo_digests: ObservationField<Vec<String>>,
+        digest: ObservationField<String>,
+        created: ObservationField<NativeTimestamp>,
+        author: ObservationField<String>,
+        architecture: ObservationField<String>,
+        operating_system: ObservationField<String>,
+        manifest_type: ObservationField<String>,
+    },
+    Secret {
+        created_at: ObservationField<NativeTimestamp>,
+        updated_at: ObservationField<NativeTimestamp>,
+    },
 }
 
 impl Default for ContainerB3Decoded {
@@ -1059,7 +1086,7 @@ struct DecodedDetails {
     native_dependencies: Option<ObservationField<Vec<NativeResourceReference>>>,
     mounts: Option<ObservationField<Vec<ContainerMountObservation>>>,
     secret_grants: Option<ObservationField<Vec<ContainerSecretGrantObservation>>>,
-    image_aliases: ObservationField<Vec<String>>,
+    image_repo_tags: ObservationField<Vec<String>>,
     network: Option<NetworkDecoded>,
     memory_swappiness: Option<ObservationField<u64>>,
     configured_image: Option<ObservationField<String>>,
@@ -1069,39 +1096,24 @@ struct DecodedDetails {
     container_networking: Option<ObservationField<NativeNetworkingObservation>>,
     pod_create_infra: Option<ObservationField<bool>>,
     pod_networking: Option<ObservationField<NativeNetworkingObservation>>,
-    secret_driver: Option<ObservationField<String>>,
+    secret_driver: Option<ObservationField<NativeSecretDriverObservation>>,
     volume_owner_user: Option<ObservationField<VolumeOwnerIdWireValue>>,
     volume_owner_group: Option<ObservationField<VolumeOwnerIdWireValue>>,
+    b4: Option<B4Decoded>,
 }
 
 fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> ResourceDetails {
-    let DecodedDetails {
-        labels,
-        relationships,
-        environment,
-        command,
-        entrypoint,
-        user,
-        working_directory,
-        hostname,
-        pod_membership,
-        native_dependencies,
-        mounts,
-        secret_grants,
-        image_aliases,
-        network,
-        memory_swappiness,
-        configured_image,
-        local_image_id,
-        is_infra,
-        container_networking,
-        pod_create_infra,
-        pod_networking,
-        secret_driver,
-        volume_owner_user,
-        container_b3,
-        volume_owner_group,
-    } = details;
+    match kind {
+        ResourceKind::Container => container_details_from_decoded(details),
+        ResourceKind::Pod => pod_details_from_decoded(details),
+        ResourceKind::Network => network_details_from_decoded(details),
+        ResourceKind::Volume => volume_details_from_decoded(details),
+        ResourceKind::Image => image_details_from_decoded(details),
+        ResourceKind::Secret => secret_details_from_decoded(details),
+    }
+}
+
+fn container_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
     let ContainerB3Decoded {
         restart_policy,
         health_check,
@@ -1112,61 +1124,136 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
         namespaces,
         resource_controls,
         unmodelled: _,
-    } = container_b3.unwrap_or_default();
-    match kind {
-        ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
-            labels,
-            configured_image.unwrap_or(ObservationField::NotApplicable),
-            local_image_id.unwrap_or(ObservationField::NotApplicable),
-            relationships,
-            environment,
-            command.unwrap_or(ObservationField::NotApplicable),
-            entrypoint.unwrap_or(ObservationField::NotApplicable),
-            user.unwrap_or(ObservationField::NotApplicable),
-            working_directory.unwrap_or(ObservationField::NotApplicable),
-            hostname.unwrap_or(ObservationField::NotApplicable),
-            pod_membership.unwrap_or(ObservationField::Absent),
-            native_dependencies.unwrap_or(ObservationField::Absent),
-            mounts.unwrap_or(ObservationField::Absent),
-            secret_grants.unwrap_or(ObservationField::Absent),
-            memory_swappiness.unwrap_or(ObservationField::NotApplicable),
-            is_infra.unwrap_or(ObservationField::Absent),
-            restart_policy,
-            health_check,
-            health_failure_action,
-            startup_health_check,
-            logging,
-            security,
-            namespaces,
-            resource_controls,
-            container_networking.unwrap_or(ObservationField::Absent),
-        )),
-        ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(
-            labels,
-            relationships,
-            pod_create_infra.unwrap_or(ObservationField::Absent),
-            pod_networking.unwrap_or(ObservationField::Absent),
-        )),
-        ResourceKind::Network => {
-            let (internal, options, subnets, routes) = network.unwrap_or((
-                ObservationField::NotApplicable,
-                ObservationField::NotApplicable,
-                ObservationField::NotApplicable,
-                ObservationField::NotApplicable,
-            ));
-            ResourceDetails::Network(NetworkObservation::new(labels, internal, options, subnets, routes))
-        }
-        ResourceKind::Volume => ResourceDetails::Volume(VolumeObservation::new(
-            labels,
-            volume_owner_user.unwrap_or(ObservationField::Malformed),
-            volume_owner_group.unwrap_or(ObservationField::Malformed),
-        )),
-        ResourceKind::Image => ResourceDetails::Image(ImageObservation::new(labels, image_aliases, environment)),
-        ResourceKind::Secret => ResourceDetails::Secret(SecretObservation::new(
-            labels,
-            secret_driver.unwrap_or(ObservationField::Absent),
-        )),
-    }
+    } = details.container_b3.unwrap_or_default();
+    ResourceDetails::Container(ContainerObservation::new(
+        details.labels,
+        details.configured_image.unwrap_or(ObservationField::NotApplicable),
+        details.local_image_id.unwrap_or(ObservationField::NotApplicable),
+        details.relationships,
+        details.environment,
+        details.command.unwrap_or(ObservationField::NotApplicable),
+        details.entrypoint.unwrap_or(ObservationField::NotApplicable),
+        details.user.unwrap_or(ObservationField::NotApplicable),
+        details.working_directory.unwrap_or(ObservationField::NotApplicable),
+        details.hostname.unwrap_or(ObservationField::NotApplicable),
+        details.pod_membership.unwrap_or(ObservationField::Absent),
+        details.native_dependencies.unwrap_or(ObservationField::Absent),
+        details.mounts.unwrap_or(ObservationField::Absent),
+        details.secret_grants.unwrap_or(ObservationField::Absent),
+        details.memory_swappiness.unwrap_or(ObservationField::NotApplicable),
+        details.is_infra.unwrap_or(ObservationField::Absent),
+        restart_policy,
+        health_check,
+        health_failure_action,
+        startup_health_check,
+        logging,
+        security,
+        namespaces,
+        resource_controls,
+        details.container_networking.unwrap_or(ObservationField::Absent),
+    ))
+}
+
+fn pod_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
+    ResourceDetails::Pod(PodObservation::new(
+        details.labels,
+        details.relationships,
+        details.pod_create_infra.unwrap_or(ObservationField::Absent),
+        details.pod_networking.unwrap_or(ObservationField::Absent),
+    ))
+}
+
+fn network_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
+    let (internal, options, subnets, routes) = details.network.unwrap_or((
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+    ));
+    ResourceDetails::Network(NetworkObservation::new(
+        details.labels,
+        internal,
+        options,
+        subnets,
+        routes,
+    ))
+}
+
+fn volume_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
+    let (driver, created_at, anonymous) = match details.b4 {
+        Some(B4Decoded::Volume {
+            driver,
+            created_at,
+            anonymous,
+        }) => (driver, created_at, anonymous),
+        _ => (
+            ObservationField::Malformed,
+            ObservationField::Malformed,
+            ObservationField::Malformed,
+        ),
+    };
+    ResourceDetails::Volume(VolumeObservation::new(
+        details.labels,
+        details.volume_owner_user.unwrap_or(ObservationField::Malformed),
+        details.volume_owner_group.unwrap_or(ObservationField::Malformed),
+        driver,
+        created_at,
+        anonymous,
+    ))
+}
+
+fn image_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
+    let metadata = match details.b4 {
+        Some(B4Decoded::Image {
+            repo_digests,
+            digest,
+            created,
+            author,
+            architecture,
+            operating_system,
+            manifest_type,
+        }) => ImageObservationFields {
+            labels: details.labels,
+            repo_tags: details.image_repo_tags,
+            repo_digests,
+            environment: details.environment,
+            digest,
+            created,
+            author,
+            architecture,
+            operating_system,
+            manifest_type,
+        },
+        _ => ImageObservationFields {
+            labels: details.labels,
+            repo_tags: details.image_repo_tags,
+            repo_digests: ObservationField::Malformed,
+            environment: details.environment,
+            digest: ObservationField::Malformed,
+            created: ObservationField::Malformed,
+            author: ObservationField::Malformed,
+            architecture: ObservationField::Malformed,
+            operating_system: ObservationField::Malformed,
+            manifest_type: ObservationField::Malformed,
+        },
+    };
+    ResourceDetails::Image(ImageObservation::new(metadata))
+}
+
+fn secret_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
+    let (driver, created_at, updated_at) = match details.b4 {
+        Some(B4Decoded::Secret { created_at, updated_at }) => (
+            details.secret_driver.unwrap_or(ObservationField::Absent),
+            created_at,
+            updated_at,
+        ),
+        _ => (
+            details.secret_driver.unwrap_or(ObservationField::Malformed),
+            ObservationField::Malformed,
+            ObservationField::Malformed,
+        ),
+    };
+    ResourceDetails::Secret(SecretObservation::new(details.labels, driver, created_at, updated_at))
 }
 
 fn partial_observation(
@@ -1269,6 +1356,7 @@ fn decode_container(
         None,
         None,
         Some(container_b3),
+        None,
         findings,
         &[
             "Id",
@@ -1322,6 +1410,7 @@ fn decode_pod(
         None,
         Some(create_infra),
         Some(networking),
+        None,
         None,
         None,
         None,
@@ -2307,6 +2396,7 @@ fn decode_network(
         None,
         None,
         None,
+        None,
         findings,
         &["id", "name", "labels", "internal", "options", "subnets", "routes"],
     ))
@@ -2705,6 +2795,21 @@ fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
     let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
     let uid = decode_volume_owner(object.get("UID"), "$.UID", &identity, &mut findings);
     let gid = decode_volume_owner(object.get("GID"), "$.GID", &identity, &mut findings);
+    let driver = optional_string_field(
+        object.get("Driver"),
+        "$.Driver",
+        &identity,
+        ObservationOrigin::Effective,
+        &mut findings,
+    );
+    let created_at = native_timestamp_field(object.get("CreatedAt"), "$.CreatedAt", &identity, &mut findings);
+    let anonymous = match object.get("Anonymous") {
+        None => ObservationField::Observed(ObservedValue::new(false, ObservationOrigin::Effective)),
+        Some(Value::Bool(value)) => {
+            ObservationField::Observed(ObservedValue::new(*value, ObservationOrigin::Effective))
+        }
+        Some(_) => native_malformed_field("$.Anonymous", &identity, &mut findings),
+    };
     Ok((
         identity,
         labels,
@@ -2732,8 +2837,13 @@ fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         Some(uid),
         Some(gid),
         None,
+        Some(B4Decoded::Volume {
+            driver,
+            created_at,
+            anonymous,
+        }),
         findings,
-        &["Name", "Labels", "UID", "GID"],
+        &["Name", "Labels", "UID", "GID", "Driver", "CreatedAt", "Anonymous"],
     ))
 }
 
@@ -2786,7 +2896,7 @@ fn decode_image(
     object: &Map<String, Value>,
     options: AcquisitionOptions,
 ) -> PodmanLensResult<Decoded> {
-    let identity = identity_from_inspect(listed, object, &["Id"], &["Names"])?;
+    let identity = identity_from_inspect(listed, object, &["Id"], &[])?;
     let mut findings = Vec::new();
     let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
     let (config, config_malformed) = match object.get("Config") {
@@ -2813,7 +2923,7 @@ fn decode_image(
         findings.append(&mut environment_findings);
         environment
     };
-    let aliases = image_aliases(object.get("Names"), &identity, &mut findings);
+    let (repo_tags, b4) = decode_image_b4(object, &identity, &mut findings);
     Ok((
         identity,
         labels,
@@ -2828,7 +2938,7 @@ fn decode_image(
         None,
         None,
         None,
-        aliases,
+        repo_tags,
         None,
         None,
         None,
@@ -2841,9 +2951,79 @@ fn decode_image(
         None,
         None,
         None,
+        Some(b4),
         findings,
-        &["Id", "Names", "Labels", "Config"],
+        &[
+            "Id",
+            "Digest",
+            "RepoTags",
+            "RepoDigests",
+            "Created",
+            "Author",
+            "Architecture",
+            "Os",
+            "ManifestType",
+            "Labels",
+            "Config",
+        ],
     ))
+}
+
+fn decode_image_b4(
+    object: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> (ObservationField<Vec<String>>, B4Decoded) {
+    let repo_tags = image_aliases(object.get("RepoTags"), "$.RepoTags", identity, findings);
+    let repo_digests = image_aliases(object.get("RepoDigests"), "$.RepoDigests", identity, findings);
+    let digest = optional_string_field(
+        object.get("Digest"),
+        "$.Digest",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let created = native_timestamp_field(object.get("Created"), "$.Created", identity, findings);
+    let author = optional_string_or_empty_field(
+        object.get("Author"),
+        "$.Author",
+        identity,
+        ObservationOrigin::Configured,
+        findings,
+    );
+    let architecture = optional_string_field(
+        object.get("Architecture"),
+        "$.Architecture",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let operating_system = optional_string_field(
+        object.get("Os"),
+        "$.Os",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let manifest_type = optional_string_field(
+        object.get("ManifestType"),
+        "$.ManifestType",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    (
+        repo_tags,
+        B4Decoded::Image {
+            repo_digests,
+            digest,
+            created,
+            author,
+            architecture,
+            operating_system,
+            manifest_type,
+        },
+    )
 }
 
 fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
@@ -2862,18 +3042,14 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
     }
     let driver = match spec.get("Driver") {
         None | Some(Value::Null) => ObservationField::Absent,
-        Some(Value::String(driver)) => {
-            ObservationField::Observed(ObservedValue::new(driver.to_owned(), ObservationOrigin::Configured))
-        }
-        Some(_) => {
-            findings.push(InventoryFinding::field(
-                DiagnosticCode::ResourceMalformed,
-                identity.clone(),
-                "$.Spec.Driver",
-            ));
-            ObservationField::Malformed
-        }
+        Some(Value::Object(driver)) => ObservationField::Observed(ObservedValue::new(
+            decode_secret_driver(driver, &identity, &mut findings),
+            ObservationOrigin::Effective,
+        )),
+        Some(_) => native_malformed_field("$.Spec.Driver", &identity, &mut findings),
     };
+    let created_at = native_timestamp_field(object.get("CreatedAt"), "$.CreatedAt", &identity, &mut findings);
+    let updated_at = native_timestamp_field(object.get("UpdatedAt"), "$.UpdatedAt", &identity, &mut findings);
     Ok((
         identity,
         labels,
@@ -2901,9 +3077,35 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         None,
         None,
         None,
+        Some(B4Decoded::Secret { created_at, updated_at }),
         findings,
-        &["ID", "Spec", "SecretData"],
+        &["ID", "CreatedAt", "UpdatedAt", "Spec", "SecretData"],
     ))
+}
+
+fn decode_secret_driver(
+    driver: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> NativeSecretDriverObservation {
+    let name = optional_string_field(
+        driver.get("Name"),
+        "$.Spec.Driver.Name",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let options = match driver.get("Options") {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Object(options)) if options.values().all(Value::is_string) => {
+            ObservationField::Observed(ObservedValue::new(
+                NativeSecretDriverOptions::new(options.len()),
+                ObservationOrigin::Effective,
+            ))
+        }
+        Some(_) => native_malformed_field("$.Spec.Driver.Options", identity, findings),
+    };
+    NativeSecretDriverObservation::new(name, options)
 }
 
 fn identity_from_inspect(
@@ -4428,6 +4630,7 @@ fn decode_is_infra(
 
 fn image_aliases(
     value: Option<&Value>,
+    path: &str,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
 ) -> ObservationField<Vec<String>> {
@@ -4441,7 +4644,7 @@ fn image_aliases(
         findings.push(InventoryFinding::field(
             DiagnosticCode::ResourceMalformed,
             identity.clone(),
-            "$.Names",
+            path,
         ));
         return ObservationField::Malformed;
     };
@@ -4455,7 +4658,7 @@ fn image_aliases(
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
-                "$.Names",
+                path,
                 index,
             ));
         }
@@ -4464,6 +4667,114 @@ fn image_aliases(
         ObservationField::Malformed
     } else {
         ObservationField::Observed(ObservedValue::new(aliases, ObservationOrigin::LocalResolution))
+    }
+}
+
+fn optional_string_or_empty_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<String> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) if value.is_empty() => ObservationField::Absent,
+        Some(Value::String(value)) => ObservationField::Observed(ObservedValue::new(value.clone(), origin)),
+        Some(_) => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_timestamp_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeTimestamp> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) if native_timestamp_is_rfc3339(value) => ObservationField::Observed(
+            ObservedValue::new(NativeTimestamp::new(value.clone()), ObservationOrigin::Effective),
+        ),
+        Some(_) => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_timestamp_is_rfc3339(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if !(20..=35).contains(&bytes.len())
+        || bytes.get(4) != Some(&b'-')
+        || bytes.get(7) != Some(&b'-')
+        || bytes.get(10) != Some(&b'T')
+        || bytes.get(13) != Some(&b':')
+        || bytes.get(16) != Some(&b':')
+    {
+        return false;
+    }
+    let Some(year) = timestamp_digits(bytes, 0, 4) else {
+        return false;
+    };
+    let Some(month) = timestamp_digits(bytes, 5, 2) else {
+        return false;
+    };
+    let Some(day) = timestamp_digits(bytes, 8, 2) else {
+        return false;
+    };
+    let Some(hour) = timestamp_digits(bytes, 11, 2) else {
+        return false;
+    };
+    let Some(minute) = timestamp_digits(bytes, 14, 2) else {
+        return false;
+    };
+    let Some(second) = timestamp_digits(bytes, 17, 2) else {
+        return false;
+    };
+    if !(1..=12).contains(&month)
+        || day == 0
+        || day > timestamp_days_in_month(year, month)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return false;
+    }
+    let mut suffix = 19;
+    if bytes.get(suffix) == Some(&b'.') {
+        suffix += 1;
+        let fraction_start = suffix;
+        while bytes.get(suffix).is_some_and(u8::is_ascii_digit) {
+            suffix += 1;
+        }
+        if suffix == fraction_start || suffix - fraction_start > 9 {
+            return false;
+        }
+    }
+    match bytes.get(suffix) {
+        Some(b'Z') => suffix + 1 == bytes.len(),
+        Some(b'+' | b'-') => {
+            suffix + 6 == bytes.len()
+                && bytes.get(suffix + 3) == Some(&b':')
+                && timestamp_digits(bytes, suffix + 1, 2).is_some_and(|hour| hour <= 23)
+                && timestamp_digits(bytes, suffix + 4, 2).is_some_and(|minute| minute <= 59)
+        }
+        _ => false,
+    }
+}
+
+fn timestamp_digits(bytes: &[u8], start: usize, len: usize) -> Option<u32> {
+    let digits = bytes.get(start..start + len)?;
+    digits.iter().try_fold(0_u32, |value, digit| {
+        digit.is_ascii_digit().then_some(value * 10 + u32::from(*digit - b'0'))
+    })
+}
+
+const fn timestamp_days_in_month(year: u32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) => 29,
+        2 => 28,
+        _ => 0,
     }
 }
 
@@ -4846,6 +5157,15 @@ fn unknown_nested_fields(
                 &["Name", "Labels", "Driver", "SecretData"],
                 fields,
             );
+            unknown_object_members(
+                object
+                    .get("Spec")
+                    .and_then(Value::as_object)
+                    .and_then(|spec| spec.get("Driver")),
+                "$.Spec.Driver",
+                &["Name", "Options"],
+                fields,
+            );
         }
         ResourceKind::Volume => {}
     }
@@ -5073,13 +5393,25 @@ mod typed_observation_constructor_tests {
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
-            )),
-            ResourceDetails::Image(ImageObservation::new(
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
             )),
+            ResourceDetails::Image(ImageObservation::new(ImageObservationFields {
+                labels: ObservationField::Absent,
+                repo_tags: ObservationField::Absent,
+                repo_digests: ObservationField::Absent,
+                environment: ObservationField::Absent,
+                digest: ObservationField::Absent,
+                created: ObservationField::Absent,
+                author: ObservationField::Absent,
+                architecture: ObservationField::Absent,
+                operating_system: ObservationField::Absent,
+                manifest_type: ObservationField::Absent,
+            })),
             ResourceDetails::Secret(SecretObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
             )),
@@ -5099,6 +5431,31 @@ mod typed_observation_constructor_tests {
         )
         .expect_err("kind mismatch must be a structured construction failure");
         assert_eq!(error.code(), DiagnosticCode::ResourceMalformed);
+    }
+
+    #[test]
+    fn native_timestamp_validation_accepts_rfc3339_boundaries_and_rejects_invalid_dates() {
+        for value in [
+            "0000-02-29T00:00:00Z",
+            "2000-02-29T23:59:60Z",
+            "2024-02-29T12:34:56.123456789+23:59",
+            "2026-08-20T12:34:56-00:00",
+        ] {
+            assert!(native_timestamp_is_rfc3339(value), "{value}");
+        }
+        for value in [
+            "2025-02-29T00:00:00Z",
+            "1900-02-29T00:00:00Z",
+            "2026-04-31T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:60:00Z",
+            "2026-01-01T00:00:61Z",
+            "2026-01-01T00:00:00.1234567890Z",
+            "2026-01-01 00:00:00Z",
+            "2026-01-01T00:00:00+24:00",
+        ] {
+            assert!(!native_timestamp_is_rfc3339(value), "{value}");
+        }
     }
 }
 

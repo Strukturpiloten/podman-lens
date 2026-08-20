@@ -58,12 +58,12 @@
     {
       "status": 200,
       "headers": [],
-      "body": { "Id": "sha256:malformed-a", "Names": ["example.invalid/ambiguous:1"] }
+      "body": { "Id": "sha256:malformed-a", "RepoTags": ["example.invalid/ambiguous:1"] }
     },
     {
       "status": 200,
       "headers": [],
-      "body": { "Id": "sha256:malformed-b", "Names": ["example.invalid/ambiguous:1"] }
+      "body": { "Id": "sha256:malformed-b", "RepoTags": ["example.invalid/ambiguous:1"] }
     },
     {
       "status": 200,

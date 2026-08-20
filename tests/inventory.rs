@@ -97,7 +97,7 @@ impl ObservationTestAccess for ResourceObservation {
     fn image_aliases(&self) -> Vec<String> {
         match self.details() {
             ResourceDetails::Image(value) => value
-                .aliases()
+                .repo_tags()
                 .observed()
                 .map(|value| value.value().clone())
                 .unwrap_or_default(),
@@ -138,7 +138,11 @@ impl ObservationTestAccess for ResourceObservation {
         let ResourceDetails::Secret(value) = self.details() else {
             return None;
         };
-        value.driver().observed().map(|value| value.value().as_str())
+        value
+            .driver()
+            .observed()
+            .and_then(|value| value.value().name().observed())
+            .map(|value| value.value().as_str())
     }
     fn unknown_fields(&self) -> &[podman_lens::UnmodelledField] {
         self.header().unmodelled_fields()
@@ -415,6 +419,272 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
         )
         .contains("fixture-option")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_image_volume_and_secret_metadata_are_typed_and_redacted() -> Result<(), Box<dyn std::error::Error>> {
+    let inventory = acquire_inventory(
+        &RecordingTransport::new(fixture_responses("6.1.0")?),
+        AcquisitionOptions::redacted(),
+    )
+    .await?;
+
+    assert_native_volume_metadata(&inventory)?;
+    assert_native_image_metadata(&inventory)?;
+    assert_native_secret_metadata(&inventory)?;
+    Ok(())
+}
+
+fn assert_native_volume_metadata(inventory: &podman_lens::ResourceInventory) -> Result<(), Box<dyn std::error::Error>> {
+    let ResourceDetails::Volume(volume) = inventory
+        .section(ResourceKind::Volume)
+        .ok_or("volume section")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must contain volume details".into());
+    };
+    assert_eq!(
+        volume
+            .driver()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("local", ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        volume
+            .created_at()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("2026-08-20T12:34:56.123456789+02:00", ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        volume
+            .anonymous()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((false, ObservationOrigin::Effective))
+    );
+    Ok(())
+}
+
+fn assert_native_image_metadata(inventory: &podman_lens::ResourceInventory) -> Result<(), Box<dyn std::error::Error>> {
+    let ResourceDetails::Image(image) = inventory
+        .section(ResourceKind::Image)
+        .ok_or("image section")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must contain image details".into());
+    };
+    assert_eq!(
+        image.repo_tags().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::LocalResolution)
+    );
+    assert_eq!(
+        image.repo_digests().observed().map(|value| value.value().clone()),
+        Some(vec!["registry.example.invalid/team/image@sha256:abc".to_owned()])
+    );
+    assert_eq!(
+        image
+            .digest()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("sha256:abc", ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        image.created().observed().map(|value| value.value().as_str()),
+        Some("2026-08-19T10:20:30Z")
+    );
+    assert_eq!(
+        image
+            .author()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("fixture author", ObservationOrigin::Configured))
+    );
+    assert_eq!(
+        image.architecture().observed().map(|value| value.value().as_str()),
+        Some("amd64")
+    );
+    assert_eq!(
+        image.operating_system().observed().map(|value| value.value().as_str()),
+        Some("linux")
+    );
+    assert_eq!(
+        image.manifest_type().observed().map(|value| value.value().as_str()),
+        Some("application/vnd.oci.image.manifest.v1+json")
+    );
+    Ok(())
+}
+
+fn assert_native_secret_metadata(inventory: &podman_lens::ResourceInventory) -> Result<(), Box<dyn std::error::Error>> {
+    let secret_observation = &inventory
+        .section(ResourceKind::Secret)
+        .ok_or("secret section")?
+        .observations()[0];
+    let ResourceDetails::Secret(secret) = secret_observation.details() else {
+        return Err("fixture must contain secret details".into());
+    };
+    let driver = secret.driver().observed().ok_or("secret driver")?;
+    assert_eq!(driver.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        driver
+            .value()
+            .name()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("file", ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        driver
+            .value()
+            .options()
+            .observed()
+            .map(|value| (value.value().len(), value.origin())),
+        Some((1, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        secret.created_at().observed().map(|value| value.value().as_str()),
+        Some("2026-08-18T09:08:07Z")
+    );
+    assert_eq!(
+        secret.updated_at().observed().map(|value| value.value().as_str()),
+        Some("2026-08-19T10:09:08+00:00")
+    );
+    let debug = format!("{secret_observation:?} {driver:?}");
+    assert!(!debug.contains("SENTINEL_OPTION_NAME"));
+    assert!(!debug.contains("SENTINEL_OPTION_VALUE"));
+    assert!(!debug.contains("registry.example.invalid"));
+    Ok(())
+}
+
+const B4_MALFORMED_CASES: &[(usize, ResourceKind, &str, &str)] = &[
+    (
+        12,
+        ResourceKind::Volume,
+        r#"{"Name":"database-data","Driver":false}"#,
+        "$.Driver",
+    ),
+    (
+        12,
+        ResourceKind::Volume,
+        r#"{"Name":"database-data","CreatedAt":"2025-02-29T00:00:00Z"}"#,
+        "$.CreatedAt",
+    ),
+    (
+        12,
+        ResourceKind::Volume,
+        r#"{"Name":"database-data","Anonymous":"false"}"#,
+        "$.Anonymous",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","RepoTags":[false]}"#,
+        "$.RepoTags",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","RepoDigests":[false]}"#,
+        "$.RepoDigests",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","Digest":false}"#,
+        "$.Digest",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","Created":"2026-01-01 00:00:00Z"}"#,
+        "$.Created",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","Author":false}"#,
+        "$.Author",
+    ),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","Architecture":false}"#,
+        "$.Architecture",
+    ),
+    (13, ResourceKind::Image, r#"{"Id":"sha256:abc","Os":false}"#, "$.Os"),
+    (
+        13,
+        ResourceKind::Image,
+        r#"{"Id":"sha256:abc","ManifestType":false}"#,
+        "$.ManifestType",
+    ),
+    (
+        14,
+        ResourceKind::Secret,
+        r#"{"ID":"secret-1","CreatedAt":"not-a-timestamp","Spec":{"Name":"db-password"}}"#,
+        "$.CreatedAt",
+    ),
+    (
+        14,
+        ResourceKind::Secret,
+        r#"{"ID":"secret-1","UpdatedAt":false,"Spec":{"Name":"db-password"}}"#,
+        "$.UpdatedAt",
+    ),
+    (
+        14,
+        ResourceKind::Secret,
+        r#"{"ID":"secret-1","Spec":{"Name":"db-password","Driver":{"Name":false}}}"#,
+        "$.Spec.Driver.Name",
+    ),
+    (
+        14,
+        ResourceKind::Secret,
+        r#"{"ID":"secret-1","Spec":{"Name":"db-password","Driver":{"Options":{"private":false}}}}"#,
+        "$.Spec.Driver.Options",
+    ),
+];
+
+#[tokio::test]
+async fn native_image_volume_and_secret_metadata_malformed_fields_fail_closed() -> Result<(), Box<dyn std::error::Error>>
+{
+    for &(response_index, kind, body, expected_path) in B4_MALFORMED_CASES {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[response_index] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory.section(kind).ok_or("resource section")?.observations()[0];
+        let malformed = match (observation.details(), expected_path) {
+            (ResourceDetails::Volume(value), "$.Driver") => value.driver().is_malformed(),
+            (ResourceDetails::Volume(value), "$.CreatedAt") => value.created_at().is_malformed(),
+            (ResourceDetails::Volume(value), "$.Anonymous") => value.anonymous().is_malformed(),
+            (ResourceDetails::Image(value), "$.RepoTags") => value.repo_tags().is_malformed(),
+            (ResourceDetails::Image(value), "$.RepoDigests") => value.repo_digests().is_malformed(),
+            (ResourceDetails::Image(value), "$.Digest") => value.digest().is_malformed(),
+            (ResourceDetails::Image(value), "$.Created") => value.created().is_malformed(),
+            (ResourceDetails::Image(value), "$.Author") => value.author().is_malformed(),
+            (ResourceDetails::Image(value), "$.Architecture") => value.architecture().is_malformed(),
+            (ResourceDetails::Image(value), "$.Os") => value.operating_system().is_malformed(),
+            (ResourceDetails::Image(value), "$.ManifestType") => value.manifest_type().is_malformed(),
+            (ResourceDetails::Secret(value), "$.CreatedAt") => value.created_at().is_malformed(),
+            (ResourceDetails::Secret(value), "$.UpdatedAt") => value.updated_at().is_malformed(),
+            (ResourceDetails::Secret(value), "$.Spec.Driver.Name") => value
+                .driver()
+                .observed()
+                .is_some_and(|driver| driver.value().name().is_malformed()),
+            (ResourceDetails::Secret(value), "$.Spec.Driver.Options") => value
+                .driver()
+                .observed()
+                .is_some_and(|driver| driver.value().options().is_malformed()),
+            _ => false,
+        };
+        assert!(malformed, "{kind:?} {expected_path}");
+        assert!(observation.findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(expected_path)
+        }));
+    }
     Ok(())
 }
 
@@ -1318,7 +1588,7 @@ async fn modeled_nested_boundaries_report_the_precise_path_without_hiding_the_re
         (
             13,
             ResourceKind::Image,
-            r#"{"Id":"sha256:abc","Names":["image:latest"],"Config":false}"#,
+            r#"{"Id":"sha256:abc","RepoTags":["image:latest"],"Config":false}"#,
             "$.Config",
         ),
         (
@@ -1422,7 +1692,7 @@ async fn malformed_enclosing_config_marks_every_modeled_child_malformed() -> Res
     );
 
     let mut responses = fixture_responses("6.1.0")?;
-    responses[13] = json(r#"{"Id":"sha256:abc","Names":["example.invalid/image:1"],"Config":false}"#)?;
+    responses[13] = json(r#"{"Id":"sha256:abc","RepoTags":["example.invalid/image:1"],"Config":false}"#)?;
     let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
     let image = &inventory.section(ResourceKind::Image).expect("images").observations()[0];
     let ResourceDetails::Image(details) = image.details() else {
@@ -1774,7 +2044,8 @@ async fn host_config_members_not_yet_modeled_are_retained_as_unknown_metadata() 
 async fn secret_driver_is_modeled_without_unsupported_metadata() -> Result<(), Box<dyn std::error::Error>> {
     for version in ["5.4.0", "6.1.0"] {
         let mut responses = fixture_responses(version)?;
-        responses[14] = json(r#"{"ID":"secret-1","Spec":{"Name":"database-password","Driver":"file"}}"#)?;
+        responses[14] =
+            json(r#"{"ID":"secret-1","Spec":{"Name":"database-password","Driver":{"Name":"file","Options":{}}}}"#)?;
         let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
         let record = &inventory.section(ResourceKind::Secret).expect("secrets").observations()[0];
         assert_eq!(record.secret_driver(), Some("file"), "{version}");
@@ -1932,10 +2203,10 @@ async fn public_debug_output_and_network_options_never_leak_protected_values() -
     responses[12] =
         json(r#"{"Name":"database-data","Labels":{"SENTINEL_VOLUME_LABEL":"SENTINEL_VOLUME_LABEL_VALUE"}}"#)?;
     responses[13] = json(
-        r#"{"Id":"sha256:abc","Names":["SENTINEL_IMAGE_ALIAS"],"Labels":{"SENTINEL_IMAGE_LABEL":"SENTINEL_IMAGE_LABEL_VALUE"},"Config":{"Env":["SENTINEL_IMAGE_ENV=SENTINEL_IMAGE_ENV_VALUE"]}}"#,
+        r#"{"Id":"sha256:abc","RepoTags":["SENTINEL_IMAGE_ALIAS"],"Labels":{"SENTINEL_IMAGE_LABEL":"SENTINEL_IMAGE_LABEL_VALUE"},"Config":{"Env":["SENTINEL_IMAGE_ENV=SENTINEL_IMAGE_ENV_VALUE"]}}"#,
     )?;
     responses[14] = json(
-        r#"{"ID":"secret-1","Spec":{"Name":"db-password","Labels":{"SENTINEL_SECRET_LABEL":"SENTINEL_SECRET_LABEL_VALUE"},"Driver":"SENTINEL_SECRET_DRIVER"}}"#,
+        r#"{"ID":"secret-1","Spec":{"Name":"db-password","Labels":{"SENTINEL_SECRET_LABEL":"SENTINEL_SECRET_LABEL_VALUE"},"Driver":{"Name":"SENTINEL_SECRET_DRIVER","Options":{"SENTINEL_SECRET_OPTION":"SENTINEL_SECRET_OPTION_VALUE"}}}}"#,
     )?;
     let inventory = acquire_inventory(
         &RecordingTransport::new(responses),

@@ -139,7 +139,14 @@
                 }
               ]
             },
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": null,
             "networking": {
               "port_bindings": {
@@ -355,8 +362,13 @@
             },
             "create_infra": null,
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": {
               "state": "absent",
               "origin": null,
@@ -450,7 +462,14 @@
               "origin": null,
               "entries": []
             },
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": null,
             "networking": {
               "port_bindings": {
@@ -666,8 +685,13 @@
             },
             "create_infra": null,
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": {
               "state": "absent",
               "origin": null,
@@ -793,7 +817,14 @@
               "count": 1
             },
             "environment": null,
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": null,
             "networking": {
               "port_bindings": {
@@ -870,8 +901,13 @@
               "origin": null
             },
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": null,
             "entrypoint": null,
             "user": null,
@@ -926,7 +962,14 @@
             "local_image_id": null,
             "relationships": null,
             "environment": null,
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": {
               "internal": {
                 "state": "observed",
@@ -961,8 +1004,13 @@
             "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": null,
             "entrypoint": null,
             "user": null,
@@ -1038,7 +1086,14 @@
             "local_image_id": null,
             "relationships": null,
             "environment": null,
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": null,
             "networking": null,
             "memory_swappiness": null,
@@ -1053,6 +1108,8 @@
             "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": {
               "state": "observed",
               "origin": "effective",
@@ -1062,6 +1119,18 @@
               "state": "observed",
               "origin": "effective",
               "wire_value": "wire_absent_may_mean_zero"
+            },
+            "volume_driver": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "volume_created_at": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "volume_anonymous": {
+              "state": "observed",
+              "origin": "effective"
             },
             "command": null,
             "entrypoint": null,
@@ -1126,10 +1195,39 @@
                 }
               ]
             },
-            "image_aliases": {
+            "image_repo_tags": {
               "state": "observed",
               "origin": "local_resolution",
               "count": 2
+            },
+            "image_repo_digests": {
+              "state": "observed",
+              "origin": "local_resolution",
+              "count": 1
+            },
+            "image_digest": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "image_created": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "image_author": {
+              "state": "observed",
+              "origin": "configured"
+            },
+            "image_architecture": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "image_operating_system": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "image_manifest_type": {
+              "state": "observed",
+              "origin": "effective"
             },
             "network": null,
             "networking": null,
@@ -1145,8 +1243,13 @@
             "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
+            "secret_created_at": null,
+            "secret_updated_at": null,
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": null,
             "entrypoint": null,
             "user": null,
@@ -1212,7 +1315,14 @@
             "local_image_id": null,
             "relationships": null,
             "environment": null,
-            "image_aliases": null,
+            "image_repo_tags": null,
+            "image_repo_digests": null,
+            "image_digest": null,
+            "image_created": null,
+            "image_author": null,
+            "image_architecture": null,
+            "image_operating_system": null,
+            "image_manifest_type": null,
             "network": null,
             "networking": null,
             "memory_swappiness": null,
@@ -1228,10 +1338,30 @@
             "create_infra": null,
             "secret_driver": {
               "state": "observed",
-              "origin": "configured"
+              "origin": "effective",
+              "name": {
+                "state": "observed",
+                "origin": "effective"
+              },
+              "options": {
+                "state": "observed",
+                "origin": "effective",
+                "count": 1
+              }
+            },
+            "secret_created_at": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "secret_updated_at": {
+              "state": "observed",
+              "origin": "effective"
             },
             "volume_uid": null,
             "volume_gid": null,
+            "volume_driver": null,
+            "volume_created_at": null,
+            "volume_anonymous": null,
             "command": null,
             "entrypoint": null,
             "user": null,

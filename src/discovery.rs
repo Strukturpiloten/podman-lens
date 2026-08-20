@@ -875,11 +875,15 @@ fn observed_relationships(record: &ResourceObservation) -> Option<&[crate::obser
     }
 }
 
-fn observed_aliases(record: &ResourceObservation) -> Option<&[String]> {
-    match record.image_aliases()? {
-        ObservationField::Observed(value) => Some(value.value()),
-        _ => None,
-    }
+fn observed_image_alias_matches(record: &ResourceObservation, reference: &str) -> bool {
+    [record.image_repo_tags(), record.image_repo_digests()]
+        .into_iter()
+        .flatten()
+        .any(|field| {
+            field
+                .observed()
+                .is_some_and(|aliases| aliases.value().iter().any(|alias| alias == reference))
+        })
 }
 
 fn observed_labels(record: &ResourceObservation) -> Option<&crate::Labels> {
@@ -915,8 +919,7 @@ fn resolve_selector(
                 && (identity.id() == selector.reference
                     || identity.name() == Some(selector.reference.as_str())
                     || (selector.kind == ResourceKind::Image
-                        && observed_aliases(record)
-                            .is_some_and(|aliases| aliases.iter().any(|alias| alias == &selector.reference))))
+                        && observed_image_alias_matches(record, &selector.reference)))
         })
         .map(|(identity, _)| identity.clone())
         .collect::<Vec<_>>();
@@ -1038,9 +1041,7 @@ fn resolve_reference_count(
             identity.kind() == kind
                 && (identity.id() == reference
                     || identity.name() == Some(reference)
-                    || (kind == ResourceKind::Image
-                        && observed_aliases(record)
-                            .is_some_and(|aliases| aliases.iter().any(|alias| alias == reference))))
+                    || (kind == ResourceKind::Image && observed_image_alias_matches(record, reference)))
         })
         .map(|(identity, _)| identity.clone())
         .collect::<Vec<_>>();

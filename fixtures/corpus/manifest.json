@@ -11,7 +11,7 @@
       "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
       "source_url": "https://docs.podman.io/en/v5.4.0/_static/api.html",
       "artifact": "rootless-5.4.responses.json",
-      "sha256": "72815cc6457e0d1b9637d8958c73e4f4d7de46499883290760359b643b7c88a2",
+      "sha256": "6f32acd6f5269e08e8de8e9095df7960d19eab66010ac79df09f0055a2103a07",
       "synthetic": true,
       "coverage": [
         "unpodded containers",
@@ -29,7 +29,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
       "artifact": "rootful-6.1.responses.json",
-      "sha256": "8d05ea92d7b486603ba3dc5fd54f8b1660cdc9b6317e078cf54e19180d2c922b",
+      "sha256": "41922e74bb12e3a3765e9a7a93563b50a757cdf4741d5205cd44945aeec8b389",
       "synthetic": true,
       "coverage": [
         "pod",
@@ -48,7 +48,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
       "artifact": "malformed-6.1.responses.json",
-      "sha256": "5b044a818908ae657f36b51866937ae7a3189e9f902ccf918fa3547089b2e1d0",
+      "sha256": "c62659cb5652fcc075db5b092bbf4929205aeacb49fea823908f4bebde3f37ce",
       "synthetic": true,
       "coverage": [
         "duplicate list identities",
@@ -67,7 +67,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
       "artifact": "graph-boundaries-6.1.responses.json",
-      "sha256": "6b7bbbec35428ca6fa7d2c48a5ebafb09ae2b2b5baf5816985c671cba2265f16",
+      "sha256": "9761c813febf15a14fb08944436ab4fc1361fe02d33ced360ffd615e3c2b5b51",
       "synthetic": true,
       "coverage": [
         "shared prerequisite",

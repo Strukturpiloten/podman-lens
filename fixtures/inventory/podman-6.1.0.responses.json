@@ -105,14 +105,27 @@
     {
       "status": 200,
       "headers": [["content-type", "application/json"]],
-      "body": { "Name": "database-data", "Labels": { "volume": "one" } }
+      "body": {
+        "Name": "database-data",
+        "Labels": { "volume": "one" },
+        "Driver": "local",
+        "CreatedAt": "2026-08-20T12:34:56.123456789+02:00",
+        "Anonymous": false
+      }
     },
     {
       "status": 200,
       "headers": [["content-type", "application/json"]],
       "body": {
         "Id": "sha256:abc",
-        "Names": ["registry.example.invalid/team/image:1@sha256:abc", "image:latest"],
+        "RepoTags": ["registry.example.invalid/team/image:1@sha256:abc", "image:latest"],
+        "RepoDigests": ["registry.example.invalid/team/image@sha256:abc"],
+        "Digest": "sha256:abc",
+        "Created": "2026-08-19T10:20:30Z",
+        "Author": "fixture author",
+        "Architecture": "amd64",
+        "Os": "linux",
+        "ManifestType": "application/vnd.oci.image.manifest.v1+json",
         "Labels": { "image": "shared" },
         "Config": { "Env": ["IMAGE_ENV=value"] }
       }
@@ -122,7 +135,16 @@
       "headers": [["content-type", "application/json"]],
       "body": {
         "ID": "secret-1",
-        "Spec": { "Name": "db-password", "Labels": { "secret": "metadata" }, "Driver": "file" },
+        "CreatedAt": "2026-08-18T09:08:07Z",
+        "UpdatedAt": "2026-08-19T10:09:08+00:00",
+        "Spec": {
+          "Name": "db-password",
+          "Labels": { "secret": "metadata" },
+          "Driver": {
+            "Name": "file",
+            "Options": { "SENTINEL_OPTION_NAME": "SENTINEL_OPTION_VALUE" }
+          }
+        },
         "SecretData": "discarded"
       }
     }

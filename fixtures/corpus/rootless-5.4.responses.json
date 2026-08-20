@@ -62,12 +62,15 @@
     {
       "status": 200,
       "headers": [],
-      "body": { "Id": "sha256:rootless", "Names": ["example.invalid/rootless:1"] }
+      "body": { "Id": "sha256:rootless", "RepoTags": ["example.invalid/rootless:1"] }
     },
     {
       "status": 200,
       "headers": [],
-      "body": { "ID": "rootless-secret", "Spec": { "Name": "rootless-secret", "Driver": "file" } }
+      "body": {
+        "ID": "rootless-secret",
+        "Spec": { "Name": "rootless-secret", "Driver": { "Name": "file", "Options": {} } }
+      }
     }
   ]
 }

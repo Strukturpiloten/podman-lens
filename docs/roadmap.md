@@ -234,6 +234,11 @@ without silent loss; all other native output remains explicitly outside that con
       Namespace observations remain visible on pod members. CPU, memory, PID, and ulimit values
       preserve native zero/`-1` and order without output validation; malformed ulimit members fail
       the complete collection closed. This batch adds no output mapping.
+- [x] M7-B4: Add observation-only image repository tags/digests and immutable metadata, volume
+      driver/creation/anonymous metadata, and secret creation/update plus count-only driver-option
+      metadata. Native timestamps retain an exact validated RFC 3339 spelling. Image repository
+      references remain local-resolution evidence, secret option names/values are discarded, and
+      this batch adds no output mapping.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.
 - [ ] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.

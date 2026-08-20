@@ -35,8 +35,8 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The coverage ledger is parsed as a strict public two-plane catalogue with 88 input-observation and
-50 output-intent rows (138 total). Its unit tests reject schema,
+The coverage ledger is parsed as a strict public two-plane catalogue with 142 input-observation and
+50 output-intent rows (192 total). Its unit tests reject schema,
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
 become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
@@ -157,3 +157,9 @@ ulimit member. Any malformed ulimit member poisons the collection. Unknown capab
 namespace modes remain bounded `PLN0023` metadata. The private-default case covers empty PID, IPC,
 and UTS modes while keeping empty cgroup mode malformed. Snapshot and external-consumer tests cover
 the new state/origin/count-only contract without reusing deployment runtime types.
+
+M7-B4 offline tests cover every new image, volume, secret, and nested driver field with positive
+provenance and malformed-wire cases. Timestamp tests cover leap dates, leap seconds, fractional
+precision, offsets, and invalid calendar/time boundaries. Snapshots retain image reference counts,
+field state/origin, and secret option count only; distinctive option names and values must never
+reach debug output or serialized snapshots.

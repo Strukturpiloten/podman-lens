@@ -278,6 +278,49 @@ fn consume_typed_observation(source: &ResourceObservation) {
             })
         });
     }
+    if let ResourceDetails::Volume(volume) = source.details() {
+        let _ = volume.uid().observed().map(podman_lens::ObservedValue::value);
+        let _ = volume.gid().observed().map(podman_lens::ObservedValue::value);
+        let _ = volume.driver().observed().map(podman_lens::ObservedValue::value);
+        let _ = volume
+            .created_at()
+            .observed()
+            .map(|timestamp| timestamp.value().as_str());
+        let _ = volume.anonymous().observed().map(podman_lens::ObservedValue::value);
+    }
+    if let ResourceDetails::Image(image) = source.details() {
+        let _ = image.repo_tags().observed().map(podman_lens::ObservedValue::value);
+        let _ = image.repo_digests().observed().map(podman_lens::ObservedValue::value);
+        let _ = image.digest().observed().map(podman_lens::ObservedValue::value);
+        let _ = image.created().observed().map(|timestamp| timestamp.value().as_str());
+        let _ = image.author().observed().map(podman_lens::ObservedValue::value);
+        let _ = image.architecture().observed().map(podman_lens::ObservedValue::value);
+        let _ = image
+            .operating_system()
+            .observed()
+            .map(podman_lens::ObservedValue::value);
+        let _ = image.manifest_type().observed().map(podman_lens::ObservedValue::value);
+    }
+    if let ResourceDetails::Secret(secret) = source.details() {
+        let _ = secret.driver().observed().map(|driver| {
+            (
+                driver.value().name().observed().map(podman_lens::ObservedValue::value),
+                driver
+                    .value()
+                    .options()
+                    .observed()
+                    .map(|options| (options.value().len(), options.value().is_empty())),
+            )
+        });
+        let _ = secret
+            .created_at()
+            .observed()
+            .map(|timestamp| timestamp.value().as_str());
+        let _ = secret
+            .updated_at()
+            .observed()
+            .map(|timestamp| timestamp.value().as_str());
+    }
 }
 
 fn consume_graph_contract(
@@ -360,7 +403,15 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
-    assert_eq!(entries.len(), 176);
+    assert_eq!(entries.len(), 192);
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0142"
+            && entry.plane() == NativeFieldCoveragePlane::InputObservation
+            && entry.field_path() == "$.Spec.Driver.Options"
+            && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+            && entry.public_contract() == "NativeSecretDriverObservation::options"
+            && entry.finding() == "PLN0017"
+    }));
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0112"
             && entry.plane() == NativeFieldCoveragePlane::InputObservation

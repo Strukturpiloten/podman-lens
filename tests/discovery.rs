@@ -76,8 +76,8 @@ fn responses() -> Result<Vec<LibpodResponse>, Box<dyn std::error::Error>> {
         json(r#"{"id":"network-2","name":"internal","internal":true}"#)?,
         json(r#"{"Name":"data"}"#)?,
         json(r#"{"Name":"standalone-data"}"#)?,
-        json(r#"{"Id":"sha256:cache","Names":["example.invalid/cache:1"]}"#)?,
-        json(r#"{"Id":"sha256:one","Names":["example.invalid/one:1"]}"#)?,
+        json(r#"{"Id":"sha256:cache","RepoTags":["example.invalid/cache:1"]}"#)?,
+        json(r#"{"Id":"sha256:one","RepoTags":["example.invalid/one:1"]}"#)?,
         json(r#"{"ID":"secret-1","Spec":{"Name":"credential"}}"#)?,
         json(r#"{"ID":"secret-2","Spec":{"Name":"standalone-secret"}}"#)?,
     ])
@@ -221,7 +221,7 @@ async fn all_seeds_only_pods_unpodded_non_infra_containers_standalone_prerequisi
 -> Result<(), Box<dyn std::error::Error>> {
     let mut fixture = responses()?;
     fixture[18] = json(
-        r#"{"Id":"sha256:one","Names":["example.invalid/one:1"],"Labels":{"com.docker.compose.project":"demo","com.docker.compose.service":"web","io.podman.compose.project":"demo","io.podman.compose.service":"web"}}"#,
+        r#"{"Id":"sha256:one","RepoTags":["example.invalid/one:1"],"Labels":{"com.docker.compose.project":"demo","com.docker.compose.service":"web","io.podman.compose.project":"demo","io.podman.compose.service":"web"}}"#,
     )?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let mut request = DiscoveryRequest::new();
@@ -449,8 +449,8 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
 -> Result<(), Box<dyn std::error::Error>> {
     let mut fixture = responses()?;
     fixture[8] = json(r#"{"Id":"container-a","Name":"a","Pod":"pod-1","Image":"sha256:one","ImageName":"shared:1"}"#)?;
-    fixture[17] = json(r#"{"Id":"sha256:cache","Names":["shared:1"]}"#)?;
-    fixture[18] = json(r#"{"Id":"sha256:one","Names":["shared:1"]}"#)?;
+    fixture[17] = json(r#"{"Id":"sha256:cache","RepoTags":["shared:1"]}"#)?;
+    fixture[18] = json(r#"{"Id":"sha256:one","RepoTags":["shared:1"]}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
     assert!(graph.findings().iter().any(|finding| {
@@ -640,8 +640,8 @@ async fn configured_and_locally_resolved_container_images_remain_separate() -> R
 
     let mut fixture = responses()?;
     fixture[8] = json(r#"{"Id":"container-a","Name":"a","Image":"sha256:one","ImageName":"shared:1"}"#)?;
-    fixture[17] = json(r#"{"Id":"sha256:cache","Names":["shared:1"]}"#)?;
-    fixture[18] = json(r#"{"Id":"sha256:one","Names":["shared:1"]}"#)?;
+    fixture[17] = json(r#"{"Id":"sha256:cache","RepoTags":["shared:1"]}"#)?;
+    fixture[18] = json(r#"{"Id":"sha256:one","RepoTags":["shared:1"]}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
     assert!(graph.findings().iter().any(|finding| {

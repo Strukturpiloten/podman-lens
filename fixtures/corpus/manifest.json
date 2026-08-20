@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "source-derived-synthetic-sanitized",
+  "sanitization": "Synthetic, compact Libpod response artifacts derived from published endpoint contracts. They contain no real endpoint, user, container, image, environment, secret, connection, or credential data.",
+  "artifacts": [
+    {
+      "name": "rootless Podman 5.4",
+      "engine_version": "5.4.0",
+      "api_version": "5.4.0",
+      "release_tag": "v5.4.0",
+      "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+      "source_url": "https://docs.podman.io/en/v5.4.0/_static/api.html",
+      "artifact": "rootless-5.4.responses.json",
+      "sha256": "72815cc6457e0d1b9637d8958c73e4f4d7de46499883290760359b643b7c88a2",
+      "synthetic": true,
+      "coverage": [
+        "unpodded containers",
+        "user network",
+        "named volume",
+        "labels",
+        "partial inspection"
+      ]
+    },
+    {
+      "name": "rootful Podman 6.1",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
+      "artifact": "rootful-6.1.responses.json",
+      "sha256": "e80ef7780573b6018b1eeb860c44a9706346a186940f8e92b548b7f6228fc29e",
+      "synthetic": true,
+      "coverage": [
+        "pod",
+        "infra member",
+        "bridge and user networks",
+        "named volume",
+        "secret metadata",
+        "shared image"
+      ]
+    },
+    {
+      "name": "malformed Podman 6.1",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
+      "artifact": "malformed-6.1.responses.json",
+      "sha256": "5b044a818908ae657f36b51866937ae7a3189e9f902ccf918fa3547089b2e1d0",
+      "synthetic": true,
+      "coverage": [
+        "duplicate list identities",
+        "inspect race",
+        "ambiguous aliases",
+        "malformed environment",
+        "unexpected SecretData",
+        "bounded unknown fields"
+      ]
+    },
+    {
+      "name": "graph-boundary Podman 6.1",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
+      "artifact": "graph-boundaries-6.1.responses.json",
+      "sha256": "6b7bbbec35428ca6fa7d2c48a5ebafb09ae2b2b5baf5816985c671cba2265f16",
+      "synthetic": true,
+      "coverage": [
+        "shared prerequisite",
+        "explicit shared root",
+        "network name and ID crossing",
+        "no crossing",
+        "ownership labels",
+        "all seeding",
+        "dependency cycle"
+      ]
+    }
+  ]
+}

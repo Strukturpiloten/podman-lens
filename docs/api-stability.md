@@ -5,24 +5,36 @@ contract. M1 publishes the explicit connection, redacted diagnostic, bounded Lib
 messages, GET-only Unix acquisition transport, version probe, target-profile, and evidence-catalogue
 contracts. They are exercised by the external-consumer `public_api` integration test.
 
-M2 additionally publishes the provisional read-only `acquire_inventory` boundary,
+`ConnectionKind`, `ConnectionSpec`, and `LibpodMethod` are intentionally closed protocol and
+control enums. Exhaustive matching makes every supported endpoint category and mutating-capability
+boundary reviewable; adding one is a deliberate public API change. Evolving native-data enums,
+such as `ResourceKind`, observation states, graph evidence, and diagnostics, are
+`#[non_exhaustive]` so callers retain a forward-compatible fallback branch.
+
+M2 introduced the read-only `acquire_inventory` boundary,
 `AcquisitionOptions`, and redacted typed inventory records. Its wire decoder and Libpod JSON types
 remain private. The inventory carries all six fixed sections, per-section availability, partial
 records for non-atomic races, labels, relationships, source/version evidence, field-path and JSON
 kind metadata for unsupported fields, and structured findings. `SensitiveEnvironmentValue` may be
 used only through its callback accessor; it does not serialize or print its plaintext value.
 
-M3 additionally publishes provisional `ResourceSelector`, `LabelSelector`, `DiscoveryRequest`,
-`discover_resources`, and deterministic `ResourceGraph` contracts. The graph exposes requested
+M3 introduced `ResourceSelector`, `LabelSelector`, `DiscoveryRequest`,
+`discover`, and deterministic `ResourceGraph` contracts. The graph exposes requested
 selectors, the `all` choice, resolved roots with redacted origin positions, directed dependencies,
 separate grouping evidence, `PLN0027`–`PLN0033` findings, and an explanation trace. Exact resource and network
 boundary references accept a name or ID; they never accept patterns. Label selectors represent
 exact key presence or an exact key-value pair, while their `Debug` forms redact values. Graph
 explanations account for every included resource, stopped boundary, authorized crossing,
 strong-evidence merge, and ordering decision. Public fields remain private and extension enums are
-non-exhaustive. These provisional contracts intentionally do not promise SSH or TLS transport
-implementations or deployment plans. M4 will explicitly stabilize the native input contract after
-its corpus and graph boundaries are complete.
+non-exhaustive.
+
+M4 stabilizes `acquire_inventory`, `discover`, the documented inventory/graph accessors, and their
+diagnostic/evidence values as the native input contract. Private Libpod decoder DTOs and response
+shapes are not public API. `snapshot::v1` is a separate serialization-only schema contract with an
+exact committed Draft 2020-12 schema. It has no deserialization API. An incompatible snapshot
+shape requires a new versioned module and schema; compatible additions must still preserve the
+always-redacted boundary recorded in ADR 0008. These contracts intentionally do not promise SSH or
+TLS transport implementations or deployment plans.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

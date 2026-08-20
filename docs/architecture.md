@@ -110,6 +110,18 @@ identity, leaving every unrelated list and record available. Unknown data is rep
 path, JSON kind, record identity, and source/version evidence—not raw JSON. Podman image names and
 IDs are treated as raw identifiers and percent-encoded once before an inspect path is generated.
 
+## M4 stable input and snapshots
+
+`acquire_inventory` and `discover` form the stable native input façade. Inventory and graph types
+expose typed observations, evidence, findings, deterministic topology, and explanations. Libpod
+response DTOs stay private so protocol revisions do not become accidental public Rust contracts.
+
+`snapshot::v1` copies that state into strict serialization-only inventory and graph views. The
+views never contain environment values, secret payloads, connection details, raw unknown JSON,
+label values, driver-option values, or Compose ownership values. They intentionally retain useful
+operational metadata and are therefore redacted, not anonymous. PodmanLens does not deserialize
+snapshots or treat them as trusted input.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

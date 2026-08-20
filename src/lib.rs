@@ -16,6 +16,7 @@ pub mod inventory;
 pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
+pub mod snapshot;
 pub mod transport;
 pub mod version;
 
@@ -27,7 +28,7 @@ pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use discovery::{
     DependencyEvidence, DiscoveryExplanation, DiscoveryExplanationKind, DiscoveryFinding, DiscoveryRequest,
     DiscoveryRootOrigin, GroupingEdge, GroupingEvidence, LabelSelector, ResourceDependency, ResourceGraph,
-    ResourceGroup, ResourceSelector, discover_resources,
+    ResourceGroup, ResourceSelector, discover,
 };
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
 pub use inventory::{

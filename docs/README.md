@@ -1,6 +1,7 @@
 # PodmanLens documentation
 
 - [Architecture](architecture.md)
+- [Library API](library-api.md)
 - [Roadmap](roadmap.md)
 - [Project structure](project-structure.md)
 - [API stability](api-stability.md)

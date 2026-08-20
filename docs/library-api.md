@@ -1,10 +1,10 @@
 # Library API
 
-The native input API is provisional through M3. M4 will stabilize it after redacted snapshot and
-offline corpus coverage are complete.
+The native input API is stable from M4. It is exercised as an external consumer and by fixed
+rootless, rootful, malformed, and graph-boundary corpora.
 
 ```text
-acquire_inventory → DiscoveryRequest → discover_resources → ResourceGraph
+acquire_inventory → DiscoveryRequest → discover → ResourceGraph
 ```
 
 ## Acquire an inventory
@@ -44,9 +44,23 @@ merges groups. `network.internal` describes connectivity only.
 
 ## Determinism and sensitive values
 
-All collections use deterministic ordering. A group ID is its smallest member `(kind, id)`. Debug
-output redacts label values and Compose ownership values. Environment values and secret payloads
-must not appear in diagnostics, debug output, or later snapshots.
+All collections use deterministic ordering. `ResourceKind::canonical_rank` fixes resource and
+group ordering as container, pod, network, volume, image, then secret; a group ID is its smallest
+`(kind, id)` member under that order. Debug output redacts label values and Compose ownership
+values. Environment values and secret payloads must not appear in diagnostics, debug output, or
+versioned snapshots.
+
+## Export a redacted snapshot
+
+`snapshot::v1::inventory` and `snapshot::v1::graph` create serialization-only reports with
+`schema_version: 1`. They implement `Serialize`, not `Deserialize`, and conform to the committed
+Draft 2020-12 schema. Snapshot creation always removes environment values, secret payloads,
+connection data, raw unknown JSON, label values, driver-option values, and Compose ownership
+values, regardless of in-memory acquisition policy.
+
+Snapshots still contain operational metadata such as resource IDs and names, image aliases,
+environment variable names, network subnets, evidence URLs, and source field paths. Always-redacted
+does not mean anonymous; callers must still handle reports as operational data.
 
 ## Non-goals
 

@@ -7,7 +7,7 @@ use std::{collections::VecDeque, sync::Mutex};
 use podman_lens::{
     AcquisitionOptions, DiagnosticCode, DiscoveryExplanationKind, DiscoveryRequest, DiscoveryRootOrigin,
     GroupingEvidence, LabelSelector, LibpodHeader, LibpodHeaders, LibpodRequest, LibpodResponse, LibpodTransport,
-    LibpodTransportFuture, ResourceKind, ResourceSelector, TransportError, acquire_inventory, discover_resources,
+    LibpodTransportFuture, ResourceKind, ResourceSelector, TransportError, acquire_inventory, discover,
 };
 
 struct Transport {
@@ -92,7 +92,7 @@ fn root(kind: ResourceKind, reference: &str) -> Result<DiscoveryRequest, Box<dyn
 #[tokio::test]
 async fn container_closure_keeps_dependencies_and_pods_together_but_not_shared_prerequisites()
 -> Result<(), Box<dyn std::error::Error>> {
-    let graph = discover_resources(&inventory().await?, &root(ResourceKind::Container, "a")?)?;
+    let graph = discover(&inventory().await?, &root(ResourceKind::Container, "a")?)?;
     assert_eq!(graph.groups().len(), 1);
     let group = &graph.groups()[0];
     assert_eq!(group.id().id(), "container-a");
@@ -132,7 +132,7 @@ async fn shared_networks_never_merge_groups_but_explicit_and_named_crossings_add
 -> Result<(), Box<dyn std::error::Error>> {
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "c")?);
-    let graph = discover_resources(&inventory().await?, &request)?;
+    let graph = discover(&inventory().await?, &request)?;
     assert_eq!(graph.groups().len(), 2);
     assert_eq!(
         graph
@@ -143,7 +143,7 @@ async fn shared_networks_never_merge_groups_but_explicit_and_named_crossings_add
         ["network-1", "sha256:one"]
     );
 
-    let graph = discover_resources(&inventory().await?, &root(ResourceKind::Network, "app")?)?;
+    let graph = discover(&inventory().await?, &root(ResourceKind::Network, "app")?)?;
     assert_eq!(graph.groups().len(), 2);
     assert!(
         graph
@@ -154,7 +154,7 @@ async fn shared_networks_never_merge_groups_but_explicit_and_named_crossings_add
 
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_network_boundary_override("app")?;
-    let graph = discover_resources(&inventory().await?, &request)?;
+    let graph = discover(&inventory().await?, &request)?;
     assert_eq!(graph.groups().len(), 2);
     assert!(
         graph
@@ -177,7 +177,7 @@ async fn all_seeds_only_pods_unpodded_non_infra_containers_standalone_prerequisi
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let mut request = DiscoveryRequest::new();
     request.select_all();
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     assert!(graph.all_requested());
     let roots = graph.groups().iter().map(|group| group.id().id()).collect::<Vec<_>>();
     assert!(roots.contains(&"container-c"));
@@ -207,7 +207,7 @@ async fn selector_and_compose_label_failures_are_structured_and_do_not_create_gr
     assert!(ResourceSelector::exact(ResourceKind::Container, "").is_err());
     assert!(ResourceSelector::exact(ResourceKind::Container, "web*").is_err());
     let request = root(ResourceKind::Container, "absent")?;
-    let graph = discover_resources(&inventory().await?, &request)?;
+    let graph = discover(&inventory().await?, &request)?;
     assert!(graph.groups().is_empty());
     assert_eq!(graph.findings()[0].code(), DiagnosticCode::SelectorUnresolved);
 
@@ -221,7 +221,7 @@ async fn selector_and_compose_label_failures_are_structured_and_do_not_create_gr
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "b")?);
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     assert!(
         graph
             .findings()
@@ -246,7 +246,7 @@ async fn selector_and_compose_label_failures_are_structured_and_do_not_create_gr
         r#"{"Id":"container-a","Name":"a","Config":{"Labels":{"com.docker.compose.project":"demo","com.docker.compose.service":"web","io.podman.compose.project":"other","io.podman.compose.service":"web"}}}"#,
     )?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-    let graph = discover_resources(&inventory, &root(ResourceKind::Container, "a")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
     assert!(
         graph
             .findings()
@@ -266,7 +266,7 @@ async fn matching_complete_compose_alias_pairs_are_advisory_grouping_evidence() 
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "c")?);
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     assert_eq!(graph.groups().len(), 1);
     assert!(
         graph
@@ -293,7 +293,7 @@ async fn label_roots_support_presence_exact_and_empty_values_without_debug_leaks
 
     let mut presence = DiscoveryRequest::new();
     presence.add_label_root(LabelSelector::presence("private.team")?);
-    let graph = discover_resources(&inventory, &presence)?;
+    let graph = discover(&inventory, &presence)?;
     assert_eq!(presence.label_roots().len(), 1);
     assert_eq!(graph.requested_label_roots()[0].name(), "private.team");
     assert_eq!(
@@ -307,7 +307,7 @@ async fn label_roots_support_presence_exact_and_empty_values_without_debug_leaks
 
     let mut exact = DiscoveryRequest::new();
     exact.add_label_root(LabelSelector::exact("private.team", "private-alpha")?);
-    let graph = discover_resources(&inventory, &exact)?;
+    let graph = discover(&inventory, &exact)?;
     assert_eq!(graph.resolved_roots().len(), 1);
     assert_eq!(graph.resolved_roots()[0].id(), "container-a");
     let rendered = format!(
@@ -319,7 +319,7 @@ async fn label_roots_support_presence_exact_and_empty_values_without_debug_leaks
 
     let mut missing = DiscoveryRequest::new();
     missing.add_label_root(LabelSelector::exact("private.team", "missing")?);
-    let graph = discover_resources(&inventory, &missing)?;
+    let graph = discover(&inventory, &missing)?;
     let finding = graph
         .findings()
         .iter()
@@ -379,7 +379,7 @@ async fn compose_config_hash_aliases_cover_absent_equal_incomplete_empty_conflic
         fixture[8] =
             json(&serde_json::json!({"Id": "container-a", "Name": "a", "Config": {"Labels": labels}}).to_string())?;
         let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-        let graph = discover_resources(&inventory, &root(ResourceKind::Container, "a")?)?;
+        let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
         let observed = graph
             .findings()
             .iter()
@@ -403,7 +403,7 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
     fixture[17] = json(r#"{"Id":"sha256:cache","Names":["shared:1"]}"#)?;
     fixture[18] = json(r#"{"Id":"sha256:one","Names":["shared:1"]}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-    let graph = discover_resources(&inventory, &root(ResourceKind::Container, "a")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
     assert!(graph.findings().iter().any(|finding| {
         finding.code() == DiagnosticCode::RelationshipAmbiguous && finding.field_path() == Some("$.ImageName")
     }));
@@ -426,7 +426,7 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
     let mut fixture = responses()?;
     fixture[8] = json(r#"{"Id":"container-a","Name":"a"}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-    let graph = discover_resources(&inventory, &root(ResourceKind::Pod, "pod")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Pod, "pod")?)?;
     assert!(
         graph.groups()[0]
             .members()
@@ -437,7 +437,7 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
     let mut fixture = responses()?;
     fixture[12] = json(r#"{"Id":"pod-1","Name":"pod","Containers":[{"Id":"missing"}]}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-    let graph = discover_resources(&inventory, &root(ResourceKind::Pod, "pod")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Pod, "pod")?)?;
     assert!(graph.findings().iter().any(|finding| {
         finding.code() == DiagnosticCode::UnresolvedRelationship
             && finding
@@ -451,7 +451,7 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
     fixture[9] = json(r#"{"Id":"container-b","Name":"duplicate"}"#)?;
     fixture[12] = json(r#"{"Id":"pod-1","Name":"pod","Containers":[{"Id":"duplicate"}]}"#)?;
     let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
-    let graph = discover_resources(&inventory, &root(ResourceKind::Pod, "pod")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Pod, "pod")?)?;
     assert!(graph.findings().iter().any(|finding| {
         finding.code() == DiagnosticCode::RelationshipAmbiguous
             && finding
@@ -472,7 +472,7 @@ async fn root_explanations_preserve_redacted_selector_origin_and_select_all() ->
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_label_root(LabelSelector::exact("private.team", "private-alpha")?);
     request.select_all();
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     assert!(graph.all_requested());
     assert!(graph.explanations().iter().any(|explanation| {
         matches!(explanation.kind(), DiscoveryExplanationKind::Root)
@@ -505,7 +505,7 @@ async fn boundary_and_group_explanations_cover_every_included_resource_and_order
     let inventory = inventory().await?;
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "c")?);
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     for (position, group) in graph.groups().iter().enumerate() {
         assert!(graph.explanations().iter().any(|explanation| {
             matches!(explanation.kind(), DiscoveryExplanationKind::GroupOrdering)
@@ -540,13 +540,13 @@ async fn boundary_and_group_explanations_cover_every_included_resource_and_order
 
     let mut request = root(ResourceKind::Container, "a")?;
     request.add_network_boundary_override("network-1")?;
-    let graph = discover_resources(&inventory, &request)?;
+    let graph = discover(&inventory, &request)?;
     assert!(graph.explanations().iter().any(|explanation| {
         matches!(explanation.kind(), DiscoveryExplanationKind::AuthorizedNetworkCrossing)
             && explanation.resource().id() == "network-1"
     }));
 
-    let graph = discover_resources(&inventory, &root(ResourceKind::Image, "sha256:one")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Image, "sha256:one")?)?;
     assert!(graph.explanations().iter().any(|explanation| {
         matches!(explanation.kind(), DiscoveryExplanationKind::AuthorizedSharedCrossing)
             && explanation.resource().id() == "sha256:one"
@@ -565,17 +565,17 @@ async fn boundary_failures_root_kinds_filtering_and_selector_order_are_determini
         (ResourceKind::Image, "sha256:cache"),
         (ResourceKind::Secret, "standalone-secret"),
     ] {
-        let graph = discover_resources(&inventory, &root(kind, reference)?)?;
+        let graph = discover(&inventory, &root(kind, reference)?)?;
         assert_eq!(graph.resolved_roots().len(), 1, "{kind:?}");
         assert!(!graph.groups().is_empty(), "{kind:?}");
     }
-    let graph = discover_resources(&inventory, &root(ResourceKind::Network, "internal")?)?;
+    let graph = discover(&inventory, &root(ResourceKind::Network, "internal")?)?;
     assert!(graph.grouping_edges().is_empty());
 
     let mut unused = root(ResourceKind::Container, "a")?;
     unused.add_network_boundary_override("network-2")?;
     unused.add_network_boundary_override("internal")?;
-    let graph = discover_resources(&inventory, &unused)?;
+    let graph = discover(&inventory, &unused)?;
     assert_eq!(
         graph
             .findings()
@@ -589,7 +589,7 @@ async fn boundary_failures_root_kinds_filtering_and_selector_order_are_determini
 
     let mut unresolved = root(ResourceKind::Container, "a")?;
     unresolved.add_network_boundary_override("absent")?;
-    let graph = discover_resources(&inventory, &unresolved)?;
+    let graph = discover(&inventory, &unresolved)?;
     assert!(
         graph
             .findings()
@@ -603,7 +603,7 @@ async fn boundary_failures_root_kinds_filtering_and_selector_order_are_determini
     let ambiguous_inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
     let mut ambiguous = root(ResourceKind::Container, "a")?;
     ambiguous.add_network_boundary_override("app")?;
-    let graph = discover_resources(&ambiguous_inventory, &ambiguous)?;
+    let graph = discover(&ambiguous_inventory, &ambiguous)?;
     assert!(
         graph
             .findings()
@@ -615,9 +615,68 @@ async fn boundary_failures_root_kinds_filtering_and_selector_order_are_determini
     first.add_root(ResourceSelector::exact(ResourceKind::Container, "c")?);
     let mut second = root(ResourceKind::Container, "c")?;
     second.add_root(ResourceSelector::exact(ResourceKind::Container, "a")?);
+    assert_eq!(discover(&inventory, &first)?, discover(&inventory, &second)?);
+    Ok(())
+}
+
+#[test]
+fn resource_kind_canonical_rank_is_the_explicit_identity_order() {
+    let mut kinds = [
+        ResourceKind::Secret,
+        ResourceKind::Image,
+        ResourceKind::Volume,
+        ResourceKind::Network,
+        ResourceKind::Pod,
+        ResourceKind::Container,
+    ];
+    kinds.sort();
     assert_eq!(
-        discover_resources(&inventory, &first)?,
-        discover_resources(&inventory, &second)?
+        kinds,
+        [
+            ResourceKind::Container,
+            ResourceKind::Pod,
+            ResourceKind::Network,
+            ResourceKind::Volume,
+            ResourceKind::Image,
+            ResourceKind::Secret,
+        ]
+    );
+    assert_eq!(kinds.map(ResourceKind::canonical_rank), [0, 1, 2, 3, 4, 5],);
+}
+
+#[tokio::test]
+async fn group_order_uses_canonical_resource_kind_ranks_under_selector_permutations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let inventory = inventory().await?;
+    let selectors = [
+        (ResourceKind::Container, "a"),
+        (ResourceKind::Network, "internal"),
+        (ResourceKind::Volume, "standalone-data"),
+        (ResourceKind::Secret, "standalone-secret"),
+    ];
+    let mut forward = DiscoveryRequest::new();
+    let mut reverse = DiscoveryRequest::new();
+    for (kind, reference) in selectors {
+        forward.add_root(ResourceSelector::exact(kind, reference)?);
+    }
+    for (kind, reference) in selectors.into_iter().rev() {
+        reverse.add_root(ResourceSelector::exact(kind, reference)?);
+    }
+    let forward_graph = discover(&inventory, &forward)?;
+    let reverse_graph = discover(&inventory, &reverse)?;
+    assert_eq!(forward_graph, reverse_graph);
+    assert_eq!(
+        forward_graph
+            .groups()
+            .iter()
+            .map(|group| group.id().kind())
+            .collect::<Vec<_>>(),
+        [
+            ResourceKind::Container,
+            ResourceKind::Network,
+            ResourceKind::Volume,
+            ResourceKind::Secret,
+        ]
     );
     Ok(())
 }

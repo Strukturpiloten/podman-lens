@@ -64,7 +64,7 @@ impl AcquisitionOptions {
 }
 
 /// A Podman resource kind available from the Libpod inventory API.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ResourceKind {
     /// A container.
@@ -91,6 +91,22 @@ impl ResourceKind {
         Self::Secret,
     ];
 
+    /// Returns this kind's fixed canonical order in inventories, identities, and resource groups.
+    ///
+    /// The order is container, pod, network, volume, image, then secret. It is an explicit
+    /// public determinism contract rather than the incidental declaration order of this enum.
+    #[must_use]
+    pub const fn canonical_rank(self) -> u8 {
+        match self {
+            Self::Container => 0,
+            Self::Pod => 1,
+            Self::Network => 2,
+            Self::Volume => 3,
+            Self::Image => 4,
+            Self::Secret => 5,
+        }
+    }
+
     const fn collection(self) -> &'static str {
         match self {
             Self::Container => "containers",
@@ -103,7 +119,22 @@ impl ResourceKind {
     }
 }
 
+impl Ord for ResourceKind {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.canonical_rank().cmp(&other.canonical_rank())
+    }
+}
+
+impl PartialOrd for ResourceKind {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Stable native identity for one observed resource.
+///
+/// Its derived ordering uses [`ResourceKind::canonical_rank`], then the stable ID and observed
+/// name, so resource and group ordering never depends on enum declaration order.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResourceIdentity {
     kind: ResourceKind,

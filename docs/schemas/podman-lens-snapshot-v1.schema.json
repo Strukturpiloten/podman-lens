@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boxferry.dev/schemas/podman-lens-snapshot-v1.schema.json",
+  "title": "PodmanLens snapshot v1",
+  "description": "Serialization-only, always-redacted inventory or discovery graph snapshot.",
+  "oneOf": [{ "$ref": "#/$defs/inventory" }, { "$ref": "#/$defs/graph" }],
+  "$defs": {
+    "schema_version": { "const": 1 },
+    "resource_kind": { "enum": ["container", "pod", "network", "volume", "image", "secret"] },
+    "identity": {
+      "type": "object",
+      "required": ["kind", "id", "name"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/resource_kind" },
+        "id": { "type": "string" },
+        "name": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "resource_selector": {
+      "type": "object",
+      "required": ["kind", "reference"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/resource_kind" },
+        "reference": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "label_selector": {
+      "type": "object",
+      "required": ["name", "exact_value_requested"],
+      "properties": {
+        "name": { "type": "string" },
+        "exact_value_requested": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["engine", "api", "target_podman", "target_api"],
+      "properties": {
+        "engine": { "type": "string" },
+        "api": { "type": "string" },
+        "target_podman": { "type": "string" },
+        "target_api": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "engine_version",
+        "api_version",
+        "podman_minor_line",
+        "minimum_podman_version",
+        "maximum_exclusive_podman_version",
+        "minimum_libpod_api_version",
+        "observed_podman_version",
+        "observed_libpod_api_version",
+        "evidence_source",
+        "evidence_revision",
+        "evidence_release_tag"
+      ],
+      "properties": {
+        "engine_version": { "type": "string" },
+        "api_version": { "type": "string" },
+        "podman_minor_line": { "type": "string" },
+        "minimum_podman_version": { "type": "string" },
+        "maximum_exclusive_podman_version": { "type": "string" },
+        "minimum_libpod_api_version": { "type": "string" },
+        "observed_podman_version": { "type": "string" },
+        "observed_libpod_api_version": { "type": "string" },
+        "evidence_source": { "type": "string", "format": "uri" },
+        "evidence_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "evidence_release_tag": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "relationship": {
+      "type": "object",
+      "required": ["kind", "target_id", "field_path"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/resource_kind" },
+        "target_id": { "type": "string" },
+        "field_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "environment_entry": {
+      "type": "object",
+      "required": ["name", "value_state"],
+      "properties": {
+        "name": { "type": "string" },
+        "value_state": { "enum": ["redacted", "included_redacted"] }
+      },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "required": ["internal", "option_count", "subnets"],
+      "properties": {
+        "internal": { "type": ["boolean", "null"] },
+        "option_count": { "type": "integer", "minimum": 0 },
+        "subnets": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "unknown_native_field": {
+      "type": "object",
+      "required": ["path", "json_kind", "resource", "evidence"],
+      "properties": {
+        "path": { "type": "string" },
+        "json_kind": { "enum": ["null", "boolean", "number", "string", "array", "object"] },
+        "resource": { "$ref": "#/$defs/identity" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      },
+      "additionalProperties": false
+    },
+    "inventory_finding": {
+      "type": "object",
+      "required": ["code", "resource", "field_path", "occurrence"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^PLN[0-9]{4}$" },
+        "resource": { "anyOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "field_path": { "type": ["string", "null"] },
+        "occurrence": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "identity",
+        "observation_state",
+        "label_count",
+        "relationships",
+        "environment",
+        "image_aliases",
+        "network",
+        "memory_swappiness",
+        "is_infra",
+        "secret_driver",
+        "unknown_fields",
+        "findings",
+        "evidence"
+      ],
+      "properties": {
+        "identity": { "$ref": "#/$defs/identity" },
+        "observation_state": { "enum": ["complete", "partial"] },
+        "label_count": { "type": "integer", "minimum": 0 },
+        "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
+        "environment": { "type": "array", "items": { "$ref": "#/$defs/environment_entry" } },
+        "image_aliases": { "type": "array", "items": { "type": "string" } },
+        "network": { "anyOf": [{ "$ref": "#/$defs/network" }, { "type": "null" }] },
+        "memory_swappiness": { "type": ["integer", "null"], "minimum": 0 },
+        "is_infra": { "type": ["boolean", "null"] },
+        "secret_driver": { "type": ["string", "null"] },
+        "unknown_fields": { "type": "array", "items": { "$ref": "#/$defs/unknown_native_field" } },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/inventory_finding" } },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      },
+      "additionalProperties": false
+    },
+    "inventory_section": {
+      "type": "object",
+      "required": ["kind", "available", "findings", "records"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/resource_kind" },
+        "available": { "type": "boolean" },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/inventory_finding" } },
+        "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+      },
+      "additionalProperties": false
+    },
+    "inventory": {
+      "type": "object",
+      "required": ["schema_version", "service", "sections"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "service": { "$ref": "#/$defs/service" },
+        "sections": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "container" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "pod" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "network" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "volume" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "image" } } }
+              ]
+            },
+            {
+              "allOf": [
+                { "$ref": "#/$defs/inventory_section" },
+                { "properties": { "kind": { "const": "secret" } } }
+              ]
+            }
+          ],
+          "items": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_evidence": {
+      "type": "object",
+      "required": ["kind", "field_path"],
+      "properties": {
+        "kind": { "const": "native_relationship" },
+        "field_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "required": ["dependent", "prerequisite", "evidence"],
+      "properties": {
+        "dependent": { "$ref": "#/$defs/identity" },
+        "prerequisite": { "$ref": "#/$defs/identity" },
+        "evidence": { "$ref": "#/$defs/dependency_evidence" }
+      },
+      "additionalProperties": false
+    },
+    "grouping_edge": {
+      "type": "object",
+      "required": ["left", "right", "evidence", "field_paths"],
+      "properties": {
+        "left": { "$ref": "#/$defs/identity" },
+        "right": { "$ref": "#/$defs/identity" },
+        "evidence": { "enum": ["pod_membership", "container_dependency", "compose_ownership"] },
+        "field_paths": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "discovery_finding": {
+      "type": "object",
+      "required": ["code", "resource", "selector", "label_selector", "field_path"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^PLN[0-9]{4}$" },
+        "resource": { "anyOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "selector": { "anyOf": [{ "$ref": "#/$defs/resource_selector" }, { "type": "null" }] },
+        "label_selector": { "anyOf": [{ "$ref": "#/$defs/label_selector" }, { "type": "null" }] },
+        "field_path": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "root_origin": {
+      "type": "object",
+      "required": ["kind", "position"],
+      "properties": {
+        "kind": { "enum": ["resource_selector", "label_selector", "all"] },
+        "position": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "explanation": {
+      "type": "object",
+      "required": ["kind", "resource", "related", "position", "root_origin"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "root",
+            "included_member",
+            "prerequisite",
+            "stopped_shared_boundary",
+            "authorized_network_crossing",
+            "authorized_shared_crossing",
+            "strong_evidence_merge",
+            "group_ordering"
+          ]
+        },
+        "resource": { "$ref": "#/$defs/identity" },
+        "related": { "anyOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "position": { "type": ["integer", "null"], "minimum": 0 },
+        "root_origin": { "anyOf": [{ "$ref": "#/$defs/root_origin" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "required": ["id", "members", "prerequisites"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identity" },
+        "members": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "prerequisites": { "type": "array", "items": { "$ref": "#/$defs/identity" } }
+      },
+      "additionalProperties": false
+    },
+    "graph": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "requested_roots",
+        "requested_label_roots",
+        "all_requested",
+        "resolved_roots",
+        "groups",
+        "shared_prerequisites",
+        "dependencies",
+        "grouping_edges",
+        "findings",
+        "explanations"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "requested_roots": { "type": "array", "items": { "$ref": "#/$defs/resource_selector" } },
+        "requested_label_roots": { "type": "array", "items": { "$ref": "#/$defs/label_selector" } },
+        "all_requested": { "type": "boolean" },
+        "resolved_roots": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } },
+        "shared_prerequisites": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+        "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "grouping_edges": { "type": "array", "items": { "$ref": "#/$defs/grouping_edge" } },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/discovery_finding" } },
+        "explanations": { "type": "array", "items": { "$ref": "#/$defs/explanation" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

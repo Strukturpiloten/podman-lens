@@ -581,10 +581,7 @@ impl ResourceGraph {
 ///
 /// Returns `PLN0027` when neither explicit roots nor `select_all` are present in the request.
 #[allow(clippy::too_many_lines)] // The deterministic discovery phases intentionally remain adjacent.
-pub fn discover_resources(
-    inventory: &ResourceInventory,
-    request: &DiscoveryRequest,
-) -> Result<ResourceGraph, Diagnostic> {
+pub fn discover(inventory: &ResourceInventory, request: &DiscoveryRequest) -> Result<ResourceGraph, Diagnostic> {
     if !request.all && request.roots.is_empty() && request.label_selectors.is_empty() {
         return Err(Diagnostic::new(DiagnosticCode::InvalidDiscoveryRequest));
     }

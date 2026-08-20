@@ -1,12 +1,13 @@
-//! Compile-time public API contract for the M1 transport and compatibility boundary.
+//! Compile-time public API contract for the stable M4 native input boundary.
 
 #[cfg(unix)]
 use std::time::Duration;
 
 use podman_lens::{
-    AcquisitionOptions, ConnectionSpec, LibpodHeaders, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,
-    LibpodTransportFuture, OpaqueReference, ResourceKind, SshConnection, TransportError, UnixConnection,
-    acquire_inventory, probe_libpod_service,
+    AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
+    LibpodResponse, LibpodTransport, LibpodTransportFuture, OpaqueReference, ResourceInventory, ResourceKind,
+    ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, discover, probe_libpod_service,
+    snapshot::v1,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -19,6 +20,33 @@ impl LibpodTransport for FixtureTransport {
             LibpodResponse::new(200, LibpodHeaders::default(), Vec::new()).map_err(|_| TransportError::unavailable())
         })
     }
+}
+
+fn consume_inventory_snapshot(source: &ResourceInventory) {
+    let snapshot = v1::inventory(source);
+    assert_eq!(snapshot.schema_version(), v1::SCHEMA_VERSION);
+    drop(serde_json::to_string(&snapshot));
+}
+
+fn consume_graph_contract(
+    source: &ResourceInventory,
+    request: &DiscoveryRequest,
+) -> Result<(), podman_lens::Diagnostic> {
+    let graph = discover(source, request)?;
+    let _ = graph.requested_roots();
+    let _ = graph.requested_label_roots();
+    let _ = graph.all_requested();
+    let _ = graph.resolved_roots();
+    let _ = graph.groups();
+    let _ = graph.shared_prerequisites();
+    let _ = graph.dependencies();
+    let _ = graph.grouping_edges();
+    let _ = graph.findings();
+    let _ = graph.explanations();
+    let snapshot = v1::graph(&graph);
+    assert_eq!(snapshot.schema_version(), v1::SCHEMA_VERSION);
+    drop(serde_json::to_string(&snapshot));
+    Ok(())
 }
 
 #[test]
@@ -60,6 +88,33 @@ fn external_consumer_can_select_the_redacted_inventory_contract() {
         transport,
         AcquisitionOptions::include_environment_values(),
     ));
+}
+
+#[test]
+fn external_consumer_can_use_the_stable_input_and_snapshot_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let mut request = DiscoveryRequest::new();
+    for (kind, reference) in [
+        (ResourceKind::Container, "container"),
+        (ResourceKind::Pod, "pod"),
+        (ResourceKind::Network, "network"),
+        (ResourceKind::Volume, "volume"),
+        (ResourceKind::Image, "example.invalid/image:1"),
+        (ResourceKind::Secret, "secret"),
+    ] {
+        request.add_root(ResourceSelector::exact(kind, reference)?);
+    }
+    request.add_label_root(LabelSelector::presence("example.invalid/present")?);
+    request.add_label_root(LabelSelector::exact("example.invalid/exact", "redacted")?);
+    request.add_network_boundary_override("network")?;
+    request.select_all();
+    assert_eq!(request.roots().len(), 6);
+    assert_eq!(request.label_roots().len(), 2);
+    assert!(request.all());
+    assert_eq!(request.network_boundary_overrides().count(), 1);
+
+    let _ = consume_inventory_snapshot;
+    let _ = consume_graph_contract;
+    Ok(())
 }
 
 #[tokio::test]

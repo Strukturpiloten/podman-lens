@@ -14,6 +14,9 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/README.md",
         "/SECURITY.md",
         "/docs/**",
+        "/docs/schemas/podman-lens-snapshot-v1.schema.json",
+        "/fixtures/corpus/**",
+        "/fixtures/snapshots/**",
         "/src/**",
     ] {
         assert!(
@@ -56,6 +59,30 @@ fn required_governance_documents_exist() {
         "docs/development-environment.md",
         "docs/releasing.md",
         "docs/testing.md",
+    ] {
+        assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+#[test]
+fn snapshot_schema_and_exact_golden_fixtures_exist() {
+    for file in [
+        "docs/schemas/podman-lens-snapshot-v1.schema.json",
+        "fixtures/snapshots/inventory-v1.json",
+        "fixtures/snapshots/graph-v1.json",
+    ] {
+        assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+#[test]
+fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
+    for file in [
+        "fixtures/corpus/manifest.json",
+        "fixtures/corpus/rootless-5.4.responses.json",
+        "fixtures/corpus/rootful-6.1.responses.json",
+        "fixtures/corpus/malformed-6.1.responses.json",
+        "fixtures/corpus/graph-boundaries-6.1.responses.json",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }

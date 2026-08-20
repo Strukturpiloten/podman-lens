@@ -88,14 +88,24 @@ image as an application root.
 
 ## M4: Stable input contract
 
-- [ ] Expose the native inventory, graph, evidence, and diagnostics as a documented public API.
-- [ ] Keep protocol response types private to the versioned decoder layer.
-- [ ] Add fixed-seed malformed-response and graph-boundary corpus tests.
-- [ ] Add end-to-end fixtures representative of common rootless and rootful installations.
-- [ ] Reach first input-capable development-release readiness without requiring an intermediate
+- [x] Expose the native inventory, graph, evidence, and diagnostics as a documented public API.
+- [x] Keep protocol response types private to the versioned decoder layer.
+- [x] Add serialization-only, always-redacted `snapshot::v1` inventory and graph exports with a
+      strict Draft 2020-12 JSON Schema and exact goldens.
+- [x] Add fixed malformed-response and graph-boundary corpus tests without fuzzing.
+- [x] Add end-to-end sanitized fixtures representative of rootless 5.4 and rootful 6.1 installations.
+- [x] Prove deterministic snapshots under fixed list and selector permutations.
+- [x] Reach first input-capable development-release readiness without requiring an intermediate
       publication.
 
 Exit: BoxFerry can implement a Podman input adapter without parsing native JSON itself.
+
+M4 is complete. `acquire_inventory` and `discover` are the stable native input façade. Public
+inventory and graph types retain typed evidence and structured findings while private Libpod DTOs
+remain decoder details. `snapshot::v1` is an export-only support/reporting boundary: it never
+deserializes and always removes environment values, secret payloads, connection data, raw unknown
+JSON, label values, driver-option values, and Compose ownership values. Corpus artifacts are
+sanitized, provenance-bearing, hash-verified, offline, and fixed rather than fuzz-generated.
 
 ## M5: Ordered deployment planning
 

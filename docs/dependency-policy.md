@@ -8,6 +8,11 @@ single built-in HTTP/1.1 Unix transport. That transport is read-only and accepts
 opening its explicit socket. No SSH, TLS, process, redirect, decompression, retry, or plan-execution
 client is selected by this library.
 
+M4 adds `jsonschema` as a test-only Draft 2020-12 validator for the public snapshot schema and
+goldens. Version 0.49.9 supports the repository's Rust 1.85 MSRV. Default features are disabled so
+schema validation does not add file or network retrieval; tests validate only the committed local
+schema and fixtures. It does not shape runtime or public Rust types.
+
 Cargo dependencies are locked in `Cargo.lock`, audited by `cargo deny`, and updated through
 Renovate. Git dependencies and unknown registries are denied. Any dependency that shapes public
 types, wire decoding, serialization, async runtime choice, or security posture requires an ADR.

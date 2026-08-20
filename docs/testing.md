@@ -43,3 +43,13 @@ accepted, incomplete, conflicting, and config-hash Compose ownership evidence; r
 ambiguity; unrelated-evidence filtering; debug redaction; and complete explanation coverage.
 Fixtures also prove that `network.internal` never creates grouping evidence or authorizes reverse
 traversal.
+
+M4 snapshot tests compare exact inventory and graph goldens, validate both against the strict Draft
+2020-12 schema, reject missing/extra/wrong-type mutations, and inject distinctive environment,
+secret, label, Compose, and driver-option values to prove none serialize. The fixed corpus covers
+sanitized rootless 5.4 and rootful 6.1 inventories, all six resource list/inspect failure families,
+non-atomic races, malformed environments, unexpected secret payload fields, unknown-field bounds,
+ambiguous aliases, shared boundaries, exact name/ID crossings, ownership conflicts, `all` seeding,
+and dependency cycles. Manifest tests verify immutable source provenance and SHA-256 for every
+artifact. Fixed list and selector permutations must produce byte-identical snapshots. No corpus
+test discovers or contacts a live Podman service, and no fuzzing infrastructure is required.

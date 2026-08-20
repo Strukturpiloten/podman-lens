@@ -54,6 +54,40 @@ fn consume_typed_observation(source: &ResourceObservation) {
             .local_image_id()
             .observed()
             .map(|value| (value.value(), value.origin()));
+        let _ = container.command().observed().map(|value| value.value().arguments());
+        let _ = container.entrypoint().observed().map(|value| value.value().arguments());
+        let _ = container.user().observed().map(|value| value.value().value());
+        let _ = container
+            .working_directory()
+            .observed()
+            .map(|value| value.value().value());
+        let _ = container.hostname().observed().map(|value| value.value().value());
+        let _ = container
+            .pod_membership()
+            .observed()
+            .map(|value| (value.value().reference(), value.value().field_path()));
+        let _ = container
+            .native_dependencies()
+            .observed()
+            .map(|value| value.value().len());
+        let _ = container.mounts().observed().map(|value| value.value().len());
+        let _ = container.secret_grants().observed().map(|value| {
+            value
+                .value()
+                .iter()
+                .map(|grant| {
+                    (
+                        grant
+                            .reference()
+                            .observed()
+                            .map(|reference| (reference.value().id(), reference.value().name())),
+                        grant.uid().observed().map(|uid| (uid.value(), uid.origin())),
+                        grant.gid().observed().map(|gid| (gid.value(), gid.origin())),
+                        grant.mode().observed().map(|mode| (mode.value(), mode.origin())),
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
     }
 }
 

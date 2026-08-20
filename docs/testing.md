@@ -35,7 +35,7 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The coverage ledger is parsed as a strict public two-plane catalogue with 38 input-observation and
+The coverage ledger is parsed as a strict public two-plane catalogue with 56 input-observation and
 50 output-intent rows. Its unit tests reject schema,
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
@@ -44,7 +44,10 @@ overflow or an incomplete observation makes `ObservationHeader::unmodelled_compl
 incomplete. M7-A coverage exercises every `ObservationField` state through public acquisition,
 kind-safe detail access, malformed label localization for all resource kinds, typed section/resource
 availability, coalesced secret ID/name grants with dual graph evidence, configured-versus-local
-image conflicts, and protected-value redaction in debug and snapshots. Volume owner coverage
+image conflicts, and protected-value redaction in debug and snapshots.
+
+M7-B1 adds table-driven container core configuration, mount, and secret-grant decoding coverage,
+including absent, malformed-member, local-resolution, and snapshot-redaction boundaries. Volume owner coverage
 distinguishes omitted wire IDs from literal zero and rejects null, negative, non-numeric, and
 out-of-range IDs.
 

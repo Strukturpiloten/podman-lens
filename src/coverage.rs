@@ -136,10 +136,10 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "container",
         "$.Config.Secrets",
         "observation-only",
-        "inventory::decode_container_secrets",
+        "inventory::decode_container_secret_grants",
         "not_applicable",
         "not_applicable",
-        "ResourceGraph::dependencies",
+        "ContainerObservation::secret_grants",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -175,10 +175,10 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "container",
         "$.Pod",
         "observation-only",
-        "inventory::decode_container",
+        "inventory::decode_native_reference",
         "not_applicable",
         "not_applicable",
-        "ResourceGraph::dependencies",
+        "ContainerObservation::pod_membership",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -201,10 +201,10 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "container",
         "$.Mounts",
         "observation-only",
-        "inventory::decode_mounts",
+        "inventory::decode_container_mounts",
         "not_applicable",
         "not_applicable",
-        "ResourceGraph::dependencies",
+        "ContainerObservation::mounts",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -214,10 +214,10 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "container",
         "$.Dependencies",
         "observation-only",
-        "inventory::decode_dependencies",
+        "inventory::decode_native_dependencies",
         "not_applicable",
         "not_applicable",
-        "ResourceGraph::dependencies",
+        "ContainerObservation::native_dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -572,6 +572,240 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "PLN0021",
         "tests::inventory::unknown_fields_are_bounded_per_record_and_across_the_inventory",
         "tests::input_corpus::malformed_corpus_is_structured_and_bounded_never_panics"
+    ),
+    expected!(
+        "PLN-FLD-0039",
+        "container",
+        "$.Config.Cmd",
+        "observation-only",
+        "inventory::decode_container_configuration",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::command",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_enclosing_config_marks_every_modeled_child_malformed"
+    ),
+    expected!(
+        "PLN-FLD-0040",
+        "container",
+        "$.Config.Entrypoint",
+        "observation-only",
+        "inventory::decode_container_configuration",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::entrypoint",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_enclosing_config_marks_every_modeled_child_malformed"
+    ),
+    expected!(
+        "PLN-FLD-0041",
+        "container",
+        "$.Config.User",
+        "observation-only",
+        "inventory::decode_container_configuration",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::user",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_enclosing_config_marks_every_modeled_child_malformed"
+    ),
+    expected!(
+        "PLN-FLD-0042",
+        "container",
+        "$.Config.WorkingDir",
+        "observation-only",
+        "inventory::decode_container_configuration",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::working_directory",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_enclosing_config_marks_every_modeled_child_malformed"
+    ),
+    expected!(
+        "PLN-FLD-0043",
+        "container",
+        "$.Config.Hostname",
+        "observation-only",
+        "inventory::decode_container_configuration",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::hostname",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_enclosing_config_marks_every_modeled_child_malformed"
+    ),
+    expected!(
+        "PLN-FLD-0046",
+        "container",
+        "$.Mounts.Type",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::mounts",
+        "PLN0023",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_secret_aliases_and_unsupported_mounts_remain_non_deployable_evidence"
+    ),
+    expected!(
+        "PLN-FLD-0047",
+        "container",
+        "$.Mounts.Name",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::source",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+    ),
+    expected!(
+        "PLN-FLD-0048",
+        "container",
+        "$.Mounts.Source",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::source",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_mount_destination_or_local_backing_path_invalidates_the_complete_mount_family"
+    ),
+    expected!(
+        "PLN-FLD-0049",
+        "container",
+        "$.Mounts.Destination",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::destination",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_mount_destination_or_local_backing_path_invalidates_the_complete_mount_family"
+    ),
+    expected!(
+        "PLN-FLD-0050",
+        "container",
+        "$.Mounts.RW",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::writable",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+    ),
+    expected!(
+        "PLN-FLD-0051",
+        "container",
+        "$.Mounts.Options",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::options",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+    ),
+    expected!(
+        "PLN-FLD-0052",
+        "container",
+        "$.Mounts.Propagation",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::propagation",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+    ),
+    expected!(
+        "PLN-FLD-0053",
+        "container",
+        "$.Mounts.SubPath",
+        "observation-only",
+        "inventory::decode_container_mounts",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::subpath",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
+    ),
+    expected!(
+        "PLN-FLD-0054",
+        "container",
+        "$.Config.Secrets.ID",
+        "observation-only",
+        "inventory::decode_container_secret_grants",
+        "not_applicable",
+        "not_applicable",
+        "ContainerSecretGrantObservation::reference",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_secret_aliases_and_unsupported_mounts_remain_non_deployable_evidence"
+    ),
+    expected!(
+        "PLN-FLD-0055",
+        "container",
+        "$.Config.Secrets.Name",
+        "observation-only",
+        "inventory::decode_container_secret_grants",
+        "not_applicable",
+        "not_applicable",
+        "ContainerSecretGrantObservation::reference",
+        "PLN0017",
+        "tests::inventory::container_core_mount_and_secret_observations_are_typed_and_redacted",
+        "tests::inventory::malformed_secret_aliases_and_unsupported_mounts_remain_non_deployable_evidence"
+    ),
+    expected!(
+        "PLN-FLD-0056",
+        "container",
+        "$.Config.Secrets.UID",
+        "observation-only",
+        "inventory::decode_container_secret_grants",
+        "not_applicable",
+        "not_applicable",
+        "ContainerSecretGrantObservation::uid",
+        "PLN0017",
+        "tests::inventory::canonical_direct_secret_metadata_preserves_effective_zero_and_configured_aliases",
+        "tests::inventory::malformed_direct_secret_effective_metadata_invalidates_the_grant_family"
+    ),
+    expected!(
+        "PLN-FLD-0057",
+        "container",
+        "$.Config.Secrets.GID",
+        "observation-only",
+        "inventory::decode_container_secret_grants",
+        "not_applicable",
+        "not_applicable",
+        "ContainerSecretGrantObservation::gid",
+        "PLN0017",
+        "tests::inventory::canonical_direct_secret_metadata_preserves_effective_zero_and_configured_aliases",
+        "tests::inventory::malformed_direct_secret_effective_metadata_invalidates_the_grant_family"
+    ),
+    expected!(
+        "PLN-FLD-0058",
+        "container",
+        "$.Config.Secrets.Mode",
+        "observation-only",
+        "inventory::decode_container_secret_grants",
+        "not_applicable",
+        "not_applicable",
+        "ContainerSecretGrantObservation::mode",
+        "PLN0017",
+        "tests::inventory::canonical_direct_secret_metadata_preserves_effective_zero_and_configured_aliases",
+        "tests::inventory::malformed_direct_secret_effective_metadata_invalidates_the_grant_family"
     ),
 ];
 
@@ -1452,11 +1686,16 @@ mod tests {
     }
 
     #[test]
-    fn plausible_target_availability_swaps_are_rejected() -> Result<(), serde_json::Error> {
+    fn plausible_target_availability_swaps_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
         let mut catalogue: serde_json::Value = serde_json::from_str(COVERAGE_CATALOGUE_JSON)?;
-        let first_output = 38;
-        let journald = first_output + 14;
-        let unlimited_rlimit = first_output + 31;
+        let entry_index = |id| -> Result<usize, String> {
+            catalogue["entries"]
+                .as_array()
+                .and_then(|entries| entries.iter().position(|entry| entry["id"] == id))
+                .ok_or_else(|| format!("the embedded ledger must contain {id}"))
+        };
+        let journald = entry_index("PLN-OUT-0015")?;
+        let unlimited_rlimit = entry_index("PLN-OUT-0032")?;
         let journald_versions = catalogue["entries"][journald]["target_versions"].clone();
         catalogue["entries"][journald]["target_versions"] =
             catalogue["entries"][unlimited_rlimit]["target_versions"].clone();

@@ -132,6 +132,51 @@ async fn container_closure_keeps_dependencies_and_pods_together_but_not_shared_p
 }
 
 #[tokio::test]
+async fn malformed_mount_families_never_create_volume_dependencies_or_traversal()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            r#"[{"Type":"volume","Name":"data","Destination":false}]"#,
+            "$.Mounts[0].Destination",
+        ),
+        (
+            r#"[{"Type":"volume","Name":"data","Source":false,"Destination":"/data"}]"#,
+            "$.Mounts[0].Source",
+        ),
+        (
+            r#"[{"Type":"volume","Name":"data","Destination":"/data"},{"Type":"volume","Name":"data","Source":false,"Destination":"/other"}]"#,
+            "$.Mounts[1].Source",
+        ),
+    ];
+    for (mounts, malformed_path) in cases {
+        let mut fixture = responses()?;
+        fixture[8] = json(&format!(r#"{{"Id":"container-a","Name":"a","Mounts":{mounts}}}"#))?;
+        let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+        let container = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("container section must be present")?
+            .observations()[0];
+        assert!(container.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(malformed_path)
+        }));
+
+        let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+        assert!(!graph.dependencies().iter().any(|edge| {
+            edge.dependent().id() == "container-a"
+                && edge.prerequisite().kind() == ResourceKind::Volume
+                && edge.prerequisite().id() == "data"
+        }));
+        assert!(graph.groups().iter().all(|group| {
+            group
+                .prerequisites()
+                .iter()
+                .all(|prerequisite| prerequisite.kind() != ResourceKind::Volume || prerequisite.id() != "data")
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn shared_networks_never_merge_groups_but_explicit_and_named_crossings_add_consumers()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut request = root(ResourceKind::Container, "a")?;

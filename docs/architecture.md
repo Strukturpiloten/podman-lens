@@ -138,6 +138,13 @@ relationship only when both resolve to the same secret, retaining both evidence 
 contradiction is `PLN0020` and is never traversed. Malformed label maps are field-local `PLN0017`
 findings, preserving all unrelated typed observations.
 
+M7-B1 extends that input-only boundary with container core configuration, native topology,
+named-volume/bind mounts, and secret-grant metadata. A host path is local-resolution evidence, not
+portable desired state. Secret payload endpoints remain outside acquisition; a grant exposes only
+coalesced ID/name relationship evidence and effective direct UID/GID/mode values. Inspect does not
+expose a secret delivery form or target. Invalid aliases, malformed grant members, and unsupported
+mount kinds block that relationship family rather than creating a partial traversal edge.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

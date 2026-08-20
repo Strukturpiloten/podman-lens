@@ -13,7 +13,11 @@ such as `ResourceKind`, observation states, graph evidence, and diagnostics, are
 
 M7-A resets the unreleased input model directly to `ResourceObservation`, `ObservationHeader`,
 `ResourceDetails`, `ObservationField`, and `ObservedValue`. Its wire decoder and Libpod JSON types
-remain private. The inventory carries all six fixed sections, typed section availability,
+remain private. M7-B1 adds constructor-private public observation values for container command,
+entrypoint, user, working directory, hostname, topology references, typed mounts, and secret
+grants. They remain native observations only; no observation-to-deployment-intent conversion
+exists. Debug output and snapshots expose state, provenance, and counts rather than sensitive or
+host-specific values. The inventory carries all six fixed sections, typed section availability,
 resource-acquisition state, source/version evidence, bounded semantic unmodelled metadata, and
 structured findings. `ObservationField` prevents an unavailable, malformed, or inapplicable native
 fact from appearing as an empty configuration value; `ObservedValue` distinguishes configured,
@@ -26,7 +30,7 @@ where applicable, reviewed target versions, public access point, diagnostic, and
 exhaustive after `PLN0021` or an incomplete observation. The old generic record projection has no
 alias or deprecation period because this is a pre-release API.
 
-The packaged ledger currently contains 38 input-observation rows and 50 output-intent rows. M6-B4
+The packaged ledger currently contains 56 input-observation rows and 50 output-intent rows. M6-B4
 extends the latter beyond container runtime settings to container mounts and secret grants, volume
 ownership, image acquisition policy/source portability, and the explicitly blocked pod-infra mount
 surface. It remains a strict catalogue: each row fixes its resource kind, target applicability,

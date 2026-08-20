@@ -8,8 +8,11 @@ use std::{collections::BTreeMap, fmt};
 use serde_json::{Map, Value};
 
 use crate::observation::{
-    ContainerObservation, ImageObservation, Labels, NativeRelationship, NetworkObservation, NetworkOptionKeys,
-    ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
+    ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
+    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
+    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
+    NativeRelationship, NativeResourceReference, NetworkObservation, NetworkOptionKeys, ObservationField,
+    ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
     ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
     ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId, UnmodelledCompleteness, UnmodelledField,
     VolumeObservation, VolumeOwnerIdWireValue,
@@ -854,6 +857,15 @@ fn decode_observation(
         labels,
         relationships,
         environment,
+        command,
+        entrypoint,
+        user,
+        working_directory,
+        hostname,
+        pod_membership,
+        native_dependencies,
+        mounts,
+        secret_grants,
         image_aliases,
         network,
         memory_swappiness,
@@ -908,6 +920,15 @@ fn decode_observation(
                 labels,
                 relationships,
                 environment,
+                command,
+                entrypoint,
+                user,
+                working_directory,
+                hostname,
+                pod_membership,
+                native_dependencies,
+                mounts,
+                secret_grants,
                 image_aliases,
                 network,
                 memory_swappiness,
@@ -927,6 +948,15 @@ type Decoded = (
     ObservationField<Labels>,
     ObservationField<Vec<NativeRelationship>>,
     ObservationField<ProtectedEnvironment>,
+    Option<ObservationField<ConfiguredContainerCommand>>,
+    Option<ObservationField<ConfiguredContainerEntrypoint>>,
+    Option<ObservationField<ConfiguredContainerUser>>,
+    Option<ObservationField<ConfiguredContainerWorkdir>>,
+    Option<ObservationField<ConfiguredContainerHostname>>,
+    Option<ObservationField<NativeResourceReference>>,
+    Option<ObservationField<Vec<NativeResourceReference>>>,
+    Option<ObservationField<Vec<ContainerMountObservation>>>,
+    Option<ObservationField<Vec<ContainerSecretGrantObservation>>>,
     ObservationField<Vec<String>>,
     Option<NetworkDecoded>,
     Option<ObservationField<u64>>,
@@ -950,6 +980,15 @@ struct DecodedDetails {
     labels: ObservationField<Labels>,
     relationships: ObservationField<Vec<NativeRelationship>>,
     environment: ObservationField<ProtectedEnvironment>,
+    command: Option<ObservationField<ConfiguredContainerCommand>>,
+    entrypoint: Option<ObservationField<ConfiguredContainerEntrypoint>>,
+    user: Option<ObservationField<ConfiguredContainerUser>>,
+    working_directory: Option<ObservationField<ConfiguredContainerWorkdir>>,
+    hostname: Option<ObservationField<ConfiguredContainerHostname>>,
+    pod_membership: Option<ObservationField<NativeResourceReference>>,
+    native_dependencies: Option<ObservationField<Vec<NativeResourceReference>>>,
+    mounts: Option<ObservationField<Vec<ContainerMountObservation>>>,
+    secret_grants: Option<ObservationField<Vec<ContainerSecretGrantObservation>>>,
     image_aliases: ObservationField<Vec<String>>,
     network: Option<NetworkDecoded>,
     memory_swappiness: Option<ObservationField<u64>>,
@@ -966,6 +1005,15 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
         labels,
         relationships,
         environment,
+        command,
+        entrypoint,
+        user,
+        working_directory,
+        hostname,
+        pod_membership,
+        native_dependencies,
+        mounts,
+        secret_grants,
         image_aliases,
         network,
         memory_swappiness,
@@ -983,6 +1031,15 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
             local_image_id.unwrap_or(ObservationField::NotApplicable),
             relationships,
             environment,
+            command.unwrap_or(ObservationField::NotApplicable),
+            entrypoint.unwrap_or(ObservationField::NotApplicable),
+            user.unwrap_or(ObservationField::NotApplicable),
+            working_directory.unwrap_or(ObservationField::NotApplicable),
+            hostname.unwrap_or(ObservationField::NotApplicable),
+            pod_membership.unwrap_or(ObservationField::Absent),
+            native_dependencies.unwrap_or(ObservationField::Absent),
+            mounts.unwrap_or(ObservationField::Absent),
+            secret_grants.unwrap_or(ObservationField::Absent),
             memory_swappiness.unwrap_or(ObservationField::NotApplicable),
             is_infra.unwrap_or(ObservationField::Absent),
         )),
@@ -1033,7 +1090,9 @@ fn decode_container(
 ) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Id"], &["Name"])?;
     let mut findings = Vec::new();
-    let (labels, environment) = decode_container_configuration(object, options, &identity, &mut findings);
+    let configuration = decode_container_configuration(object, options, &identity, &mut findings);
+    let labels = configuration.labels;
+    let environment = configuration.environment;
     let mut relationships = Vec::new();
     let local_image_id = optional_string_field(
         object.get("Image"),
@@ -1051,14 +1110,11 @@ fn decode_container(
     );
     append_configured_image_relationship(&configured_image, &mut relationships);
     let mut relationship_decoding = RelationshipDecoding::from_field(&configured_image);
-    relationship_decoding.merge(append_optional_relationship(
-        object,
-        "Pod",
+    let pod_membership = decode_native_reference(object.get("Pod"), "$.Pod", &identity, &mut findings);
+    relationship_decoding.merge(append_native_reference_relationship(
+        &pod_membership,
         ResourceKind::Pod,
-        "$.Pod",
-        &identity,
         &mut relationships,
-        &mut findings,
     ));
     relationship_decoding.merge(decode_container_networks(
         object,
@@ -1066,19 +1122,16 @@ fn decode_container(
         &mut relationships,
         &mut findings,
     ));
-    relationship_decoding.merge(decode_mounts(object, &identity, &mut relationships, &mut findings));
-    relationship_decoding.merge(decode_dependencies(
-        object,
-        &identity,
+    let mounts = decode_container_mounts(object, &identity, &mut relationships, &mut findings);
+    relationship_decoding.merge(mounts.relationships);
+    let native_dependencies = decode_native_dependencies(object.get("Dependencies"), &identity, &mut findings);
+    relationship_decoding.merge(append_native_dependency_relationships(
+        &native_dependencies,
         &mut relationships,
-        &mut findings,
     ));
-    relationship_decoding.merge(decode_container_secrets(
-        object,
-        &identity,
-        &mut relationships,
-        &mut findings,
-    ));
+    let secret_grants =
+        decode_container_secret_grants(object.get("Config"), &identity, &mut relationships, &mut findings);
+    relationship_decoding.merge(secret_grants.relationships);
     let memory_swappiness = decode_memory_swappiness(object, evidence, &identity, &mut findings);
     let is_infra = decode_is_infra(object, &identity, &mut findings);
     Ok((
@@ -1086,6 +1139,15 @@ fn decode_container(
         labels,
         relationship_field(relationships, relationship_decoding),
         environment,
+        Some(configuration.command),
+        Some(configuration.entrypoint),
+        Some(configuration.user),
+        Some(configuration.working_directory),
+        Some(configuration.hostname),
+        Some(pod_membership),
+        Some(native_dependencies),
+        Some(mounts.field),
+        Some(secret_grants.field),
         ObservationField::NotApplicable,
         None,
         Some(memory_swappiness),
@@ -1129,6 +1191,15 @@ fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanL
         labels,
         relationship_field(relationships, relationship_decoding),
         ObservationField::NotApplicable,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         ObservationField::NotApplicable,
         None,
         None,
@@ -1143,14 +1214,34 @@ fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanL
     ))
 }
 
+struct ContainerConfigurationDecoded {
+    labels: ObservationField<Labels>,
+    environment: ObservationField<ProtectedEnvironment>,
+    command: ObservationField<ConfiguredContainerCommand>,
+    entrypoint: ObservationField<ConfiguredContainerEntrypoint>,
+    user: ObservationField<ConfiguredContainerUser>,
+    working_directory: ObservationField<ConfiguredContainerWorkdir>,
+    hostname: ObservationField<ConfiguredContainerHostname>,
+}
+
 fn decode_container_configuration(
     object: &Map<String, Value>,
     options: AcquisitionOptions,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
-) -> (ObservationField<Labels>, ObservationField<ProtectedEnvironment>) {
+) -> ContainerConfigurationDecoded {
     let config = match object.get("Config") {
-        None | Some(Value::Null) => return (ObservationField::Absent, ObservationField::Absent),
+        None | Some(Value::Null) => {
+            return ContainerConfigurationDecoded {
+                labels: ObservationField::Absent,
+                environment: ObservationField::Absent,
+                command: ObservationField::Absent,
+                entrypoint: ObservationField::Absent,
+                user: ObservationField::Absent,
+                working_directory: ObservationField::Absent,
+                hostname: ObservationField::Absent,
+            };
+        }
         Some(Value::Object(config)) => config,
         Some(_) => {
             findings.push(InventoryFinding::field(
@@ -1158,14 +1249,122 @@ fn decode_container_configuration(
                 identity.clone(),
                 "$.Config",
             ));
-            return (ObservationField::Malformed, ObservationField::Malformed);
+            return ContainerConfigurationDecoded {
+                labels: ObservationField::Malformed,
+                environment: ObservationField::Malformed,
+                command: ObservationField::Malformed,
+                entrypoint: ObservationField::Malformed,
+                user: ObservationField::Malformed,
+                working_directory: ObservationField::Malformed,
+                hostname: ObservationField::Malformed,
+            };
         }
     };
     let labels = labels(config.get("Labels"), "$.Config.Labels", identity, findings);
     let (environment, environment_findings) =
         decode_environment(config.get("Env"), options.environment_values, identity, "$.Config.Env");
     findings.extend(environment_findings);
-    (labels, environment)
+    ContainerConfigurationDecoded {
+        labels,
+        environment,
+        command: decode_configured_arguments(
+            config.get("Cmd"),
+            "$.Config.Cmd",
+            identity,
+            findings,
+            ConfiguredContainerCommand::new,
+        ),
+        entrypoint: decode_configured_arguments(
+            config.get("Entrypoint"),
+            "$.Config.Entrypoint",
+            identity,
+            findings,
+            ConfiguredContainerEntrypoint::new,
+        ),
+        user: decode_configured_text(
+            config.get("User"),
+            "$.Config.User",
+            identity,
+            findings,
+            ConfiguredContainerUser::new,
+        ),
+        working_directory: decode_configured_text(
+            config.get("WorkingDir"),
+            "$.Config.WorkingDir",
+            identity,
+            findings,
+            ConfiguredContainerWorkdir::new,
+        ),
+        hostname: decode_configured_text(
+            config.get("Hostname"),
+            "$.Config.Hostname",
+            identity,
+            findings,
+            ConfiguredContainerHostname::new,
+        ),
+    }
+}
+
+#[allow(clippy::single_match_else)] // keeps malformed-array handling adjacent to the reviewed wire shape.
+fn decode_configured_arguments<T>(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    constructor: impl FnOnce(Vec<String>) -> T,
+) -> ObservationField<T> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Array(values)) => {
+            let arguments = values.iter().map(Value::as_str).collect::<Option<Vec<_>>>();
+            match arguments {
+                Some(arguments) => ObservationField::Observed(ObservedValue::new(
+                    constructor(arguments.into_iter().map(ToOwned::to_owned).collect()),
+                    ObservationOrigin::Configured,
+                )),
+                None => {
+                    findings.push(InventoryFinding::field(
+                        DiagnosticCode::ResourceMalformed,
+                        identity.clone(),
+                        path,
+                    ));
+                    ObservationField::Malformed
+                }
+            }
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
+}
+
+fn decode_configured_text<T>(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    constructor: impl FnOnce(String) -> T,
+) -> ObservationField<T> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) => ObservationField::Observed(ObservedValue::new(
+            constructor(value.clone()),
+            ObservationOrigin::Configured,
+        )),
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
 }
 
 fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
@@ -1177,6 +1376,15 @@ fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> Pod
         labels,
         ObservationField::NotApplicable,
         ObservationField::NotApplicable,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         ObservationField::NotApplicable,
         Some(network),
         None,
@@ -1275,6 +1483,15 @@ fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         labels,
         ObservationField::NotApplicable,
         ObservationField::NotApplicable,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         ObservationField::NotApplicable,
         None,
         None,
@@ -1371,6 +1588,15 @@ fn decode_image(
         labels,
         ObservationField::NotApplicable,
         environment,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         aliases,
         None,
         None,
@@ -1418,6 +1644,15 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         labels,
         ObservationField::NotApplicable,
         ObservationField::NotApplicable,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         ObservationField::NotApplicable,
         None,
         None,
@@ -1490,30 +1725,57 @@ fn append_configured_image_relationship(
     }
 }
 
-fn append_optional_relationship(
-    object: &Map<String, Value>,
-    key: &str,
+fn append_native_reference_relationship(
+    field: &ObservationField<NativeResourceReference>,
     kind: ResourceKind,
-    path: &str,
-    identity: &ResourceIdentity,
     relationships: &mut Vec<NativeRelationship>,
-    findings: &mut Vec<InventoryFinding>,
 ) -> RelationshipDecoding {
-    match object.get(key) {
-        None | Some(Value::Null) => RelationshipDecoding::default(),
-        Some(Value::String(value)) if !value.is_empty() => {
-            relationships.push(NativeRelationship::new(kind, value, path));
+    match field {
+        ObservationField::Observed(reference) => {
+            relationships.push(NativeRelationship::new(
+                kind,
+                reference.value().reference(),
+                reference.value().field_path(),
+            ));
             RelationshipDecoding {
                 supplied: true,
                 malformed: false,
             }
         }
-        Some(_) => {
-            findings.push(InventoryFinding::field(
-                DiagnosticCode::ResourceMalformed,
-                identity.clone(),
-                path,
-            ));
+        ObservationField::Malformed => RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        },
+        ObservationField::Absent | ObservationField::NotApplicable => RelationshipDecoding::default(),
+        ObservationField::Unavailable | ObservationField::VersionInapplicable | ObservationField::Unmodelled(_) => {
+            RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            }
+        }
+    }
+}
+
+fn append_native_dependency_relationships(
+    field: &ObservationField<Vec<NativeResourceReference>>,
+    relationships: &mut Vec<NativeRelationship>,
+) -> RelationshipDecoding {
+    match field {
+        ObservationField::Observed(references) => {
+            relationships.extend(references.value().iter().map(|reference| {
+                NativeRelationship::new(ResourceKind::Container, reference.reference(), reference.field_path())
+            }));
+            RelationshipDecoding {
+                supplied: true,
+                malformed: false,
+            }
+        }
+        ObservationField::Malformed => RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        },
+        ObservationField::Absent | ObservationField::NotApplicable => RelationshipDecoding::default(),
+        ObservationField::Unavailable | ObservationField::VersionInapplicable | ObservationField::Unmodelled(_) => {
             RelationshipDecoding {
                 supplied: true,
                 malformed: true,
@@ -1608,152 +1870,232 @@ fn decode_container_networks(
     }
 }
 
-fn decode_mounts(
+struct ContainerMountDecoded {
+    field: ObservationField<Vec<ContainerMountObservation>>,
+    relationships: RelationshipDecoding,
+}
+
+#[allow(clippy::too_many_lines, clippy::single_match_else)] // one bounded native object is decoded atomically.
+fn decode_container_mounts(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
     relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) -> RelationshipDecoding {
-    let Some(mounts) = object.get("Mounts") else {
-        return RelationshipDecoding::default();
+) -> ContainerMountDecoded {
+    let Some(value) = object.get("Mounts") else {
+        return ContainerMountDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     };
-    if mounts.is_null() {
-        return RelationshipDecoding::default();
+    if value.is_null() {
+        return ContainerMountDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     }
-    let Some(mounts) = mounts.as_array() else {
+    let Some(mounts) = value.as_array() else {
         findings.push(InventoryFinding::field(
             DiagnosticCode::ResourceMalformed,
             identity.clone(),
             "$.Mounts",
         ));
-        return RelationshipDecoding {
-            supplied: true,
-            malformed: true,
+        return ContainerMountDecoded {
+            field: ObservationField::Malformed,
+            relationships: RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            },
         };
     };
+
+    let mut decoded = Vec::with_capacity(mounts.len());
     let mut malformed = false;
     for (index, mount) in mounts.iter().enumerate() {
+        let path = format!("$.Mounts[{index}]");
         let Some(mount) = mount.as_object() else {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Mounts",
                 index,
             ));
-            malformed = true;
             continue;
         };
-        match mount.get("Type") {
-            Some(Value::String(kind)) if kind == "volume" => {
-                if let Ok(name) = required_string(mount, "Name") {
-                    relationships.push(NativeRelationship::new(
-                        ResourceKind::Volume,
-                        name,
-                        format!("$.Mounts[{index}].Name"),
-                    ));
-                } else {
-                    malformed = true;
-                    findings.push(InventoryFinding::at_occurrence(
-                        DiagnosticCode::ResourceMalformed,
-                        identity.clone(),
-                        "$.Mounts",
-                        index,
-                    ));
-                }
-            }
-            Some(Value::String(_)) => {}
-            _ => {
-                malformed = true;
-                findings.push(InventoryFinding::at_occurrence(
-                    DiagnosticCode::ResourceMalformed,
-                    identity.clone(),
-                    "$.Mounts",
-                    index,
-                ));
-            }
-        }
-    }
-    RelationshipDecoding {
-        supplied: true,
-        malformed,
-    }
-}
-
-fn decode_dependencies(
-    object: &Map<String, Value>,
-    identity: &ResourceIdentity,
-    relationships: &mut Vec<NativeRelationship>,
-    findings: &mut Vec<InventoryFinding>,
-) -> RelationshipDecoding {
-    let Some(dependencies) = object.get("Dependencies") else {
-        return RelationshipDecoding::default();
-    };
-    if dependencies.is_null() {
-        return RelationshipDecoding::default();
-    }
-    let Some(dependencies) = dependencies.as_array() else {
-        findings.push(InventoryFinding::field(
-            DiagnosticCode::ResourceMalformed,
-            identity.clone(),
-            "$.Dependencies",
-        ));
-        return RelationshipDecoding {
-            supplied: true,
-            malformed: true,
-        };
-    };
-    let mut malformed = false;
-    for (index, dependency) in dependencies.iter().enumerate() {
-        if let Some(value) = dependency.as_str().filter(|value| !value.is_empty()) {
-            relationships.push(NativeRelationship::new(
-                ResourceKind::Container,
-                value,
-                format!("$.Dependencies[{index}]"),
-            ));
-        } else {
+        let Some(Value::String(kind)) = mount.get("Type") else {
             malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
-                "$.Dependencies",
+                "$.Mounts",
                 index,
             ));
+            continue;
+        };
+        let kind = match kind.as_str() {
+            "volume" => ContainerMountKind::NamedVolume,
+            "bind" => ContainerMountKind::Bind,
+            _ => {
+                malformed = true;
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::NativeFieldUnsupported,
+                    identity.clone(),
+                    format!("{path}.Type"),
+                ));
+                continue;
+            }
+        };
+        let destination = optional_observed_string(
+            mount.get("Destination"),
+            &format!("{path}.Destination"),
+            identity,
+            findings,
+            ObservationOrigin::Configured,
+        );
+        let (source, local_backing_path) = match kind {
+            ContainerMountKind::NamedVolume => {
+                let source =
+                    match required_observed_string(mount.get("Name"), &format!("{path}.Name"), identity, findings) {
+                        Ok(value) => ContainerMountSource::NamedVolume(value),
+                        Err(()) => {
+                            malformed = true;
+                            continue;
+                        }
+                    };
+                let local = optional_observed_string(
+                    mount.get("Source"),
+                    &format!("{path}.Source"),
+                    identity,
+                    findings,
+                    ObservationOrigin::LocalResolution,
+                );
+                (source, local)
+            }
+            ContainerMountKind::Bind => {
+                let source = match required_observed_string(
+                    mount.get("Source"),
+                    &format!("{path}.Source"),
+                    identity,
+                    findings,
+                ) {
+                    Ok(value) => ContainerMountSource::LocalBindPath(value),
+                    Err(()) => {
+                        malformed = true;
+                        continue;
+                    }
+                };
+                (source, ObservationField::Absent)
+            }
+        };
+        let writable = optional_observed_bool(mount.get("RW"), &format!("{path}.RW"), identity, findings);
+        let options =
+            optional_observed_string_array(mount.get("Options"), &format!("{path}.Options"), identity, findings);
+        let propagation = optional_observed_string(
+            mount.get("Propagation"),
+            &format!("{path}.Propagation"),
+            identity,
+            findings,
+            ObservationOrigin::Effective,
+        );
+        let subpath = optional_observed_string(
+            mount.get("SubPath"),
+            &format!("{path}.SubPath"),
+            identity,
+            findings,
+            ObservationOrigin::Configured,
+        );
+        let member_malformed = destination.is_malformed()
+            || local_backing_path.is_malformed()
+            || writable.is_malformed()
+            || options.is_malformed()
+            || propagation.is_malformed()
+            || subpath.is_malformed();
+        if member_malformed {
+            malformed = true;
+            continue;
         }
+        if let (ContainerMountKind::NamedVolume, ContainerMountSource::NamedVolume(name)) = (kind, &source) {
+            relationships.push(NativeRelationship::new(
+                ResourceKind::Volume,
+                name,
+                format!("{path}.Name"),
+            ));
+        }
+        decoded.push(ContainerMountObservation::new(
+            kind,
+            ObservationField::Observed(ObservedValue::new(
+                source,
+                match kind {
+                    ContainerMountKind::NamedVolume => ObservationOrigin::Configured,
+                    ContainerMountKind::Bind => ObservationOrigin::LocalResolution,
+                },
+            )),
+            local_backing_path,
+            destination,
+            writable,
+            options,
+            propagation,
+            subpath,
+        ));
     }
-    RelationshipDecoding {
-        supplied: true,
-        malformed,
+    ContainerMountDecoded {
+        field: if malformed {
+            ObservationField::Malformed
+        } else {
+            ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
+        },
+        relationships: RelationshipDecoding {
+            supplied: true,
+            malformed,
+        },
     }
 }
 
-fn decode_container_secrets(
-    object: &Map<String, Value>,
+struct ContainerSecretGrantsDecoded {
+    field: ObservationField<Vec<ContainerSecretGrantObservation>>,
+    relationships: RelationshipDecoding,
+}
+
+#[allow(clippy::too_many_lines)] // relationship safety requires all grant members be reviewed together.
+fn decode_container_secret_grants(
+    config: Option<&Value>,
     identity: &ResourceIdentity,
     relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) -> RelationshipDecoding {
-    let Some(config) = object.get("Config") else {
-        return RelationshipDecoding::default();
+) -> ContainerSecretGrantsDecoded {
+    let Some(config) = config else {
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     };
     if config.is_null() {
-        return RelationshipDecoding::default();
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     }
     let Some(config) = config.as_object() else {
-        findings.push(InventoryFinding::field(
-            DiagnosticCode::ResourceMalformed,
-            identity.clone(),
-            "$.Config",
-        ));
-        return RelationshipDecoding {
-            supplied: true,
-            malformed: true,
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Malformed,
+            relationships: RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            },
         };
     };
     let Some(secrets) = config.get("Secrets") else {
-        return RelationshipDecoding::default();
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     };
     if secrets.is_null() {
-        return RelationshipDecoding::default();
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Absent,
+            relationships: RelationshipDecoding::default(),
+        };
     }
     let Some(secrets) = secrets.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1761,60 +2103,280 @@ fn decode_container_secrets(
             identity.clone(),
             "$.Config.Secrets",
         ));
-        return RelationshipDecoding {
-            supplied: true,
-            malformed: true,
+        return ContainerSecretGrantsDecoded {
+            field: ObservationField::Malformed,
+            relationships: RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            },
         };
     };
+    let mut decoded = Vec::with_capacity(secrets.len());
     let mut malformed = false;
     for (index, secret) in secrets.iter().enumerate() {
+        let path = format!("$.Config.Secrets[{index}]");
         let Some(secret) = secret.as_object() else {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Config.Secrets",
                 index,
             ));
-            malformed = true;
             continue;
         };
-        let mut references = Vec::new();
-        let mut member_malformed = false;
-        for key in ["ID", "Name"] {
-            match secret.get(key) {
-                None | Some(Value::Null) => {}
-                Some(Value::String(value)) if !value.is_empty() => {
-                    references.push((value.to_owned(), format!("$.Config.Secrets[{index}].{key}")));
-                }
-                Some(_) => {
-                    member_malformed = true;
-                    findings.push(InventoryFinding::at_occurrence(
-                        DiagnosticCode::ResourceMalformed,
-                        identity.clone(),
-                        "$.Config.Secrets",
-                        index,
-                    ));
-                }
+        let id = optional_native_reference(secret.get("ID"), &format!("{path}.ID"), identity, findings);
+        let name = optional_native_reference(secret.get("Name"), &format!("{path}.Name"), identity, findings);
+        let reference = match (id, name) {
+            (Ok(Some(id)), Ok(Some(name))) => ObservationField::Observed(ObservedValue::new(
+                ContainerSecretReference::new(Some(id), Some(name)),
+                ObservationOrigin::Configured,
+            )),
+            (Ok(Some(id)), Ok(None)) => ObservationField::Observed(ObservedValue::new(
+                ContainerSecretReference::new(Some(id), None),
+                ObservationOrigin::Configured,
+            )),
+            (Ok(None), Ok(Some(name))) => ObservationField::Observed(ObservedValue::new(
+                ContainerSecretReference::new(None, Some(name)),
+                ObservationOrigin::Configured,
+            )),
+            (Ok(None), Ok(None)) | (Err(()), _) | (_, Err(())) => {
+                malformed = true;
+                findings.push(InventoryFinding::at_occurrence(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    "$.Config.Secrets",
+                    index,
+                ));
+                ObservationField::Malformed
+            }
+        };
+        let uid = optional_observed_u32(secret.get("UID"), &format!("{path}.UID"), identity, findings);
+        let gid = optional_observed_u32(secret.get("GID"), &format!("{path}.GID"), identity, findings);
+        let mode = optional_observed_u32(secret.get("Mode"), &format!("{path}.Mode"), identity, findings);
+        if reference.is_malformed() || uid.is_malformed() || gid.is_malformed() || mode.is_malformed() {
+            malformed = true;
+            continue;
+        }
+        if let ObservationField::Observed(reference) = &reference {
+            let references = reference
+                .value()
+                .id()
+                .into_iter()
+                .chain(reference.value().name())
+                .map(|item| (item.reference().to_owned(), item.field_path().to_owned()));
+            if let Some(relationship) = NativeRelationship::coalesced(ResourceKind::Secret, references) {
+                relationships.push(relationship);
             }
         }
-        if let Some(relationship) = (!member_malformed)
-            .then(|| NativeRelationship::coalesced(ResourceKind::Secret, references))
-            .flatten()
-        {
-            relationships.push(relationship);
+        decoded.push(ContainerSecretGrantObservation::new(reference, uid, gid, mode));
+    }
+    ContainerSecretGrantsDecoded {
+        field: if malformed {
+            ObservationField::Malformed
         } else {
-            malformed = true;
-            findings.push(InventoryFinding::at_occurrence(
+            ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
+        },
+        relationships: RelationshipDecoding {
+            supplied: true,
+            malformed,
+        },
+    }
+}
+
+fn decode_native_reference(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeResourceReference> {
+    match optional_native_reference(value, path, identity, findings) {
+        Ok(Some(value)) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Configured)),
+        Ok(None) => ObservationField::Absent,
+        Err(()) => ObservationField::Malformed,
+    }
+}
+
+fn optional_native_reference(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> Result<Option<NativeResourceReference>, ()> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) if !value.is_empty() => {
+            Ok(Some(NativeResourceReference::new(value.clone(), path.to_owned())))
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
-                "$.Config.Secrets",
-                index,
+                path,
             ));
+            Err(())
         }
     }
-    RelationshipDecoding {
-        supplied: true,
-        malformed,
+}
+
+fn decode_native_dependencies(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativeResourceReference>> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Array(values)) => {
+            let mut references = Vec::with_capacity(values.len());
+            for (index, value) in values.iter().enumerate() {
+                let path = format!("$.Dependencies[{index}]");
+                let Ok(Some(reference)) = optional_native_reference(Some(value), &path, identity, findings) else {
+                    findings.push(InventoryFinding::field(
+                        DiagnosticCode::ResourceMalformed,
+                        identity.clone(),
+                        "$.Dependencies",
+                    ));
+                    return ObservationField::Malformed;
+                };
+                references.push(reference);
+            }
+            ObservationField::Observed(ObservedValue::new(references, ObservationOrigin::Configured))
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.Dependencies",
+            ));
+            ObservationField::Malformed
+        }
+    }
+}
+
+fn required_observed_string(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> Result<String, ()> {
+    match value {
+        Some(Value::String(value)) if !value.is_empty() => Ok(value.clone()),
+        _ => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            Err(())
+        }
+    }
+}
+
+fn optional_observed_string(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    origin: ObservationOrigin,
+) -> ObservationField<String> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) => ObservationField::Observed(ObservedValue::new(value.clone(), origin)),
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
+}
+
+fn optional_observed_bool(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<bool> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Bool(value)) => {
+            ObservationField::Observed(ObservedValue::new(*value, ObservationOrigin::Effective))
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
+}
+
+#[allow(clippy::single_match_else)] // preserves the malformed array boundary beside its decoder.
+fn optional_observed_string_array(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<String>> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Array(values)) => match values.iter().map(Value::as_str).collect::<Option<Vec<_>>>() {
+            Some(values) => ObservationField::Observed(ObservedValue::new(
+                values.into_iter().map(ToOwned::to_owned).collect(),
+                ObservationOrigin::Effective,
+            )),
+            None => {
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    path,
+                ));
+                ObservationField::Malformed
+            }
+        },
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
+}
+
+#[allow(clippy::single_match_else)] // preserves numeric-range validation beside the decoder.
+fn optional_observed_u32(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<u32> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Number(value)) => match value.as_u64().and_then(|value| u32::try_from(value).ok()) {
+            Some(value) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective)),
+            None => {
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    path,
+                ));
+                ObservationField::Malformed
+            }
+        },
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
     }
 }
 
@@ -2204,7 +2766,21 @@ fn unknown_top_level(object: &Map<String, Value>, known: &[&str], fields: &mut U
 fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields: &mut UnknownFieldCollector<'_>) {
     match kind {
         ResourceKind::Container => {
-            unknown_object_members(object.get("Config"), "$.Config", &["Labels", "Env", "Secrets"], fields);
+            unknown_object_members(
+                object.get("Config"),
+                "$.Config",
+                &[
+                    "Labels",
+                    "Env",
+                    "Secrets",
+                    "Cmd",
+                    "Entrypoint",
+                    "User",
+                    "WorkingDir",
+                    "Hostname",
+                ],
+                fields,
+            );
             unknown_object_members(
                 object.get("NetworkSettings"),
                 "$.NetworkSettings",
@@ -2229,14 +2805,29 @@ fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields
                     }
                 }
             }
-            unknown_array_object_members(object.get("Mounts"), "$.Mounts", &["Type", "Name"], fields);
+            unknown_array_object_members(
+                object.get("Mounts"),
+                "$.Mounts",
+                &[
+                    "Type",
+                    "Name",
+                    "Source",
+                    "Destination",
+                    "RW",
+                    "Options",
+                    "Propagation",
+                    "SubPath",
+                ],
+                fields,
+            );
+            unknown_unsupported_mounts(object.get("Mounts"), fields);
             unknown_array_object_members(
                 object
                     .get("Config")
                     .and_then(Value::as_object)
                     .and_then(|config| config.get("Secrets")),
                 "$.Config.Secrets",
-                &["ID", "Name"],
+                &["ID", "Name", "UID", "GID", "Mode"],
                 fields,
             );
             // `MemorySwappiness` is the only currently typed HostConfig member. Every other
@@ -2282,6 +2873,22 @@ fn unknown_array_object_members(
     for (index, value) in values.iter().enumerate() {
         unknown_object_members(Some(value), &format!("{path}[{index}]"), known, fields);
         if fields.overflowed {
+            break;
+        }
+    }
+}
+
+fn unknown_unsupported_mounts(value: Option<&Value>, fields: &mut UnknownFieldCollector<'_>) {
+    let Some(mounts) = value.and_then(Value::as_array) else {
+        return;
+    };
+    for (index, mount) in mounts.iter().enumerate() {
+        let unsupported = mount
+            .as_object()
+            .and_then(|mount| mount.get("Type"))
+            .and_then(Value::as_str)
+            .is_some_and(|kind| !matches!(kind, "volume" | "bind"));
+        if unsupported && !fields.push(|| format!("$.Mounts[{index}]"), mount) {
             break;
         }
     }
@@ -2367,6 +2974,15 @@ mod typed_observation_constructor_tests {
     fn kind_safe_resource_observation_constructor_accepts_every_matching_detail_and_rejects_mismatches() {
         let details = [
             ResourceDetails::Container(ContainerObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,

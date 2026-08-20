@@ -208,6 +208,14 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     });
     assert!(!validator.is_valid(&irrelevant_typed_payload));
 
+    let mut container_field_on_pod = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    container_field_on_pod["sections"][1]["observations"][0]["details"]["command"] = json!({
+        "state": "observed",
+        "origin": "configured",
+        "count": 1
+    });
+    assert!(!validator.is_valid(&container_field_on_pod));
+
     let mut missing_required_container_payload = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
     missing_required_container_payload["sections"][0]["observations"][0]["details"]["environment"] = json!(null);
     assert!(!validator.is_valid(&missing_required_container_payload));
@@ -223,6 +231,10 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     let mut absent_with_nonzero_count = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
     absent_with_nonzero_count["sections"][0]["observations"][1]["details"]["labels"]["count"] = json!(1);
     assert!(!validator.is_valid(&absent_with_nonzero_count));
+
+    let mut absent_new_collection_with_count = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    absent_new_collection_with_count["sections"][0]["observations"][1]["details"]["mounts"]["count"] = json!(1);
+    assert!(!validator.is_valid(&absent_new_collection_with_count));
 
     let mut absent_with_environment_entries = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
     absent_with_environment_entries["sections"][0]["observations"][0]["details"]["environment"]["state"] =
@@ -248,6 +260,26 @@ async fn snapshots_never_leak_sensitive_or_redacted_values() -> Result<(), Box<d
         ),
         (b"fixture-option".as_slice(), b"DISTINCTIVE_DRIVER_OPTION_VALUE".as_slice()),
         (b"discarded".as_slice(), b"DISTINCTIVE_SECRET_PAYLOAD".as_slice()),
+        (
+            b"\"ImageName\":\"sha256:abc\"".as_slice(),
+            b"\"ImageName\":\"DISTINCTIVE_IMAGE\",\"Pod\":\"DISTINCTIVE_POD\"".as_slice(),
+        ),
+        (
+            b"\"Dependencies\":[\"container-z\"]".as_slice(),
+            b"\"Dependencies\":[\"container-z\",\"DISTINCTIVE_DEPENDENCY\"]".as_slice(),
+        ),
+        (
+            b"\"Labels\":{\"project\":\"fixture-label\"}".as_slice(),
+            b"\"Cmd\":[\"DISTINCTIVE_CMD\"],\"Entrypoint\":[\"DISTINCTIVE_ENTRYPOINT\"],\"User\":\"DISTINCTIVE_USER\",\"WorkingDir\":\"DISTINCTIVE_WORKDIR\",\"Hostname\":\"DISTINCTIVE_HOSTNAME\",\"Labels\":{\"project\":\"fixture-label\"}".as_slice(),
+        ),
+        (
+            b"\"Mounts\":[{\"Type\":\"volume\",\"Name\":\"database-data\"}]".as_slice(),
+            b"\"Mounts\":[{\"Type\":\"volume\",\"Name\":\"DISTINCTIVE_MOUNT_NAME\",\"Source\":\"DISTINCTIVE_BACKING_PATH\",\"Destination\":\"DISTINCTIVE_DESTINATION\",\"RW\":true,\"Options\":[\"DISTINCTIVE_OPTION\"],\"Propagation\":\"DISTINCTIVE_PROPAGATION\",\"SubPath\":\"DISTINCTIVE_SUBPATH\"},{\"Type\":\"bind\",\"Source\":\"DISTINCTIVE_BIND_PATH\",\"Destination\":\"DISTINCTIVE_BIND_DESTINATION\"}]".as_slice(),
+        ),
+        (
+            b"\"Secrets\":[{\"ID\":\"secret-1\",\"Name\":\"db-password\"}]".as_slice(),
+            b"\"Secrets\":[{\"ID\":\"DISTINCTIVE_SECRET_ID\",\"Name\":\"DISTINCTIVE_SECRET_NAME\",\"UID\":1000,\"GID\":1001,\"Mode\":288}]".as_slice(),
+        ),
     ];
     for response in &mut responses {
         let mut body = String::from_utf8(response.body().to_vec())?;
@@ -276,6 +308,24 @@ async fn snapshots_never_leak_sensitive_or_redacted_values() -> Result<(), Box<d
             "DISTINCTIVE_LABEL_VALUE",
             "DISTINCTIVE_COMPOSE_PROJECT",
             "DISTINCTIVE_DRIVER_OPTION_VALUE",
+            "DISTINCTIVE_IMAGE",
+            "DISTINCTIVE_POD",
+            "DISTINCTIVE_DEPENDENCY",
+            "DISTINCTIVE_CMD",
+            "DISTINCTIVE_ENTRYPOINT",
+            "DISTINCTIVE_USER",
+            "DISTINCTIVE_WORKDIR",
+            "DISTINCTIVE_HOSTNAME",
+            "DISTINCTIVE_MOUNT_NAME",
+            "DISTINCTIVE_BACKING_PATH",
+            "DISTINCTIVE_DESTINATION",
+            "DISTINCTIVE_OPTION",
+            "DISTINCTIVE_PROPAGATION",
+            "DISTINCTIVE_SUBPATH",
+            "DISTINCTIVE_BIND_PATH",
+            "DISTINCTIVE_BIND_DESTINATION",
+            "DISTINCTIVE_SECRET_ID",
+            "DISTINCTIVE_SECRET_NAME",
             "com.docker.compose.project",
             "io.podman.compose.project",
         ] {

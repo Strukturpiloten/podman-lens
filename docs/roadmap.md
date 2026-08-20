@@ -204,6 +204,9 @@ without silent loss; all other native output remains explicitly outside that con
 - [x] M7-A: Reset the unreleased inventory contract to typed native observations with explicit
       field state, provenance, protected environment handling, bounded semantic unmodelled
       metadata, and redacted snapshot support.
+- [x] M7-B1: Add bounded container core configuration, topology, typed named-volume/bind mount,
+      and secret-grant observations. Host paths remain local-resolution-only and secret payloads
+      remain unavailable.
 - [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.

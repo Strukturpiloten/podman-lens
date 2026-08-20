@@ -1363,6 +1363,473 @@ fn pinned_inventory_fixture_manifest_covers_reviewed_5_4_and_6_1_boundaries() ->
     Ok(())
 }
 
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // Ledger-positive fixture deliberately proves each public M7-B1 field together.
+async fn container_core_mount_and_secret_observations_are_typed_and_redacted() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a","Pod":"pod-1","Dependencies":["container-z"],
+          "Config":{
+            "Cmd":["serve","--safe"],"Entrypoint":["/usr/bin/example"],"User":"1000:1000",
+            "WorkingDir":"/workspace","Hostname":"application",
+            "Secrets":[
+              {"ID":"secret-1","Name":"db-password","UID":1000,"GID":1001,"Mode":288}
+            ]
+          },
+          "Mounts":[
+            {"Type":"volume","Name":"database-data","Source":"/var/lib/containers/volumes/database-data/_data","Destination":"/var/lib/data","RW":false,"Options":["nodev"],"SubPath":"current"},
+            {"Type":"bind","Source":"/srv/application","Destination":"/workspace","RW":true,"Propagation":"rprivate"}
+          ]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0]
+        .details()
+    else {
+        return Err("container observation expected".into());
+    };
+    assert_eq!(
+        container.command().observed().map(|value| value.value().arguments()),
+        Some(["serve".to_owned(), "--safe".to_owned()].as_slice())
+    );
+    assert_eq!(
+        container.command().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container.entrypoint().observed().map(|value| value.value().arguments()),
+        Some(["/usr/bin/example".to_owned()].as_slice())
+    );
+    assert_eq!(
+        container
+            .entrypoint()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container.user().observed().map(|value| value.value().value()),
+        Some("1000:1000")
+    );
+    assert_eq!(
+        container.user().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container
+            .working_directory()
+            .observed()
+            .map(|value| value.value().value()),
+        Some("/workspace")
+    );
+    assert_eq!(
+        container
+            .working_directory()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container.hostname().observed().map(|value| value.value().value()),
+        Some("application")
+    );
+    assert_eq!(
+        container.hostname().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container
+            .pod_membership()
+            .observed()
+            .map(|value| value.value().field_path()),
+        Some("$.Pod")
+    );
+    assert_eq!(
+        container
+            .pod_membership()
+            .observed()
+            .map(|value| value.value().reference()),
+        Some("pod-1")
+    );
+    assert_eq!(
+        container
+            .pod_membership()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        container
+            .native_dependencies()
+            .observed()
+            .map(|value| value.value().len()),
+        Some(1)
+    );
+    assert_eq!(
+        container
+            .native_dependencies()
+            .observed()
+            .map(|value| value.value()[0].reference()),
+        Some("container-z")
+    );
+    assert_eq!(
+        container
+            .native_dependencies()
+            .observed()
+            .map(|value| value.value()[0].field_path()),
+        Some("$.Dependencies[0]")
+    );
+    assert_eq!(
+        container
+            .native_dependencies()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    let mounts = container.mounts().observed().ok_or("mounts must be observed")?.value();
+    assert_eq!(mounts.len(), 2);
+    assert_eq!(mounts[0].kind(), podman_lens::ContainerMountKind::NamedVolume);
+    assert_eq!(
+        mounts[0].source().observed().map(|value| value.value().value()),
+        Some("database-data")
+    );
+    assert_eq!(
+        mounts[0].source().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        mounts[0]
+            .local_backing_path()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::LocalResolution)
+    );
+    assert_eq!(
+        mounts[0]
+            .local_backing_path()
+            .observed()
+            .map(|value| value.value().as_str()),
+        Some("/var/lib/containers/volumes/database-data/_data")
+    );
+    assert_eq!(
+        mounts[0].destination().observed().map(|value| value.value().as_str()),
+        Some("/var/lib/data")
+    );
+    assert_eq!(
+        mounts[0]
+            .destination()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(mounts[0].writable().observed().map(|value| *value.value()), Some(false));
+    assert_eq!(
+        mounts[0].writable().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        mounts[0].options().observed().map(|value| value.value().as_slice()),
+        Some(["nodev".to_owned()].as_slice())
+    );
+    assert_eq!(
+        mounts[0].options().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        mounts[0].subpath().observed().map(|value| value.value().as_str()),
+        Some("current")
+    );
+    assert_eq!(
+        mounts[0].subpath().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(mounts[1].kind(), podman_lens::ContainerMountKind::Bind);
+    assert_eq!(
+        mounts[1].source().observed().map(|value| value.value().value()),
+        Some("/srv/application")
+    );
+    assert_eq!(
+        mounts[1].source().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::LocalResolution)
+    );
+    assert_eq!(
+        mounts[1].source().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::LocalResolution)
+    );
+    assert_eq!(
+        mounts[1].destination().observed().map(|value| value.value().as_str()),
+        Some("/workspace")
+    );
+    assert_eq!(
+        mounts[1]
+            .destination()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(mounts[1].writable().observed().map(|value| *value.value()), Some(true));
+    assert_eq!(
+        mounts[1].writable().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        mounts[1].propagation().observed().map(|value| value.value().as_str()),
+        Some("rprivate")
+    );
+    assert_eq!(
+        mounts[1]
+            .propagation()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    let grants = container
+        .secret_grants()
+        .observed()
+        .ok_or("grants must be observed")?
+        .value();
+    assert_eq!(grants.len(), 1);
+    let grant = grants.first().ok_or("canonical secret grant expected")?;
+    let reference = grant.reference().observed().ok_or("secret reference expected")?.value();
+    assert_eq!(
+        reference.id().map(podman_lens::NativeResourceReference::reference),
+        Some("secret-1")
+    );
+    assert_eq!(
+        reference.name().map(podman_lens::NativeResourceReference::reference),
+        Some("db-password")
+    );
+    assert_eq!(grant.uid().observed().map(|value| *value.value()), Some(1000));
+    assert_eq!(grant.gid().observed().map(|value| *value.value()), Some(1001));
+    assert_eq!(grant.mode().observed().map(|value| *value.value()), Some(288));
+    assert_eq!(
+        grant.reference().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        grant.uid().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        grant.gid().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        grant.mode().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert!(!format!("{container:?}").contains("db-password"));
+    assert!(!format!("{container:?}").contains("/srv/application"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_secret_aliases_and_unsupported_mounts_remain_non_deployable_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "Config":{"Secrets":[{"ID":false,"Name":"db-password","Env":"DATABASE_PASSWORD"}]},
+          "Mounts":[{"Type":"tmpfs","Destination":"/run/cache"}]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section must be present")?
+        .observations()[0];
+    let ResourceDetails::Container(details) = container.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    assert!(matches!(details.secret_grants(), ObservationField::Malformed));
+    assert!(matches!(details.mounts(), ObservationField::Malformed));
+    assert!(
+        container
+            .findings()
+            .iter()
+            .any(|finding| finding.field_path() == Some("$.Config.Secrets[0].ID"))
+    );
+    assert!(
+        container
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::NativeFieldUnsupported
+                && finding.field_path() == Some("$.Mounts[0].Type"))
+    );
+    assert!(
+        container
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path() == "$.Mounts[0]")
+    );
+    assert!(!format!("{container:?}").contains("DATABASE_PASSWORD"));
+    assert!(!format!("{container:?}").contains("db-password"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn canonical_direct_secret_metadata_preserves_effective_zero_and_configured_aliases()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "Config":{"Secrets":[{"ID":"secret-1","Name":"db-password","UID":0,"GID":1001,"Mode":288}]}
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section must be present")?
+        .observations()[0];
+    let ResourceDetails::Container(details) = container.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    let grants = details
+        .secret_grants()
+        .observed()
+        .ok_or("canonical direct secret grant must be observed")?;
+    assert_eq!(grants.origin(), ObservationOrigin::Effective);
+    let grant = grants.value().first().ok_or("one grant expected")?;
+    assert_eq!(
+        grant
+            .reference()
+            .observed()
+            .and_then(|value| value.value().id())
+            .map(podman_lens::NativeResourceReference::reference),
+        Some("secret-1")
+    );
+    assert_eq!(
+        grant
+            .reference()
+            .observed()
+            .and_then(|value| value.value().name())
+            .map(podman_lens::NativeResourceReference::reference),
+        Some("db-password")
+    );
+    assert_eq!(grant.uid().observed().map(|value| *value.value()), Some(0));
+    assert_eq!(grant.gid().observed().map(|value| *value.value()), Some(1001));
+    assert_eq!(grant.mode().observed().map(|value| *value.value()), Some(288));
+    assert_eq!(
+        grant.uid().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_direct_secret_effective_metadata_invalidates_the_grant_family()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (r#"{"ID":"secret-1","UID":false}"#, "$.Config.Secrets[0].UID"),
+        (r#"{"ID":"secret-1","GID":false}"#, "$.Config.Secrets[0].GID"),
+        (r#"{"ID":"secret-1","Mode":false}"#, "$.Config.Secrets[0].Mode"),
+    ];
+    for (secret, malformed_path) in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(format!(
+            r#"{{"Id":"container-a","Name":"a","Config":{{"Secrets":[{secret}]}}}}"#
+        ))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let container = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("container section must be present")?
+            .observations()[0];
+        let ResourceDetails::Container(details) = container.details() else {
+            return Err("fixture must remain a container observation".into());
+        };
+        assert!(matches!(details.secret_grants(), ObservationField::Malformed));
+        assert!(container.findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(malformed_path)
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn noncanonical_secret_delivery_members_are_bounded_unmodelled_metadata() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "Config":{"Secrets":[{"ID":"secret-1","Name":"db-password","File":{"Name":"DISTINCTIVE_FILE_TARGET"},"Env":"DISTINCTIVE_ENV_TARGET"}]}
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section must be present")?
+        .observations()[0];
+    assert!(
+        container
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path() == "$.Config.Secrets[0].File")
+    );
+    assert!(
+        container
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path() == "$.Config.Secrets[0].Env")
+    );
+    assert!(
+        container
+            .findings()
+            .iter()
+            .filter(|finding| finding.code() == DiagnosticCode::NativeFieldUnsupported)
+            .any(|finding| finding.field_path() == Some("$.Config.Secrets[0].File"))
+    );
+    assert!(!format!("{container:?}").contains("DISTINCTIVE_FILE_TARGET"));
+    assert!(!format!("{container:?}").contains("DISTINCTIVE_ENV_TARGET"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_mount_destination_or_local_backing_path_invalidates_the_complete_mount_family()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            r#"[{"Type":"volume","Name":"database-data","Source":false,"Destination":"/var/lib/data"}]"#,
+            "$.Mounts[0].Source",
+        ),
+        (
+            r#"[{"Type":"volume","Name":"database-data","Destination":false}]"#,
+            "$.Mounts[0].Destination",
+        ),
+        (
+            r#"[{"Type":"volume","Name":"database-data","Destination":"/var/lib/data"},{"Type":"volume","Name":"database-data","Source":false,"Destination":"/var/lib/other"}]"#,
+            "$.Mounts[1].Source",
+        ),
+    ];
+    for (mounts, malformed_path) in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(format!(r#"{{"Id":"container-a","Name":"a","Mounts":{mounts}}}"#))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let container = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("container section must be present")?
+            .observations()[0];
+        let ResourceDetails::Container(details) = container.details() else {
+            return Err("fixture must remain a container observation".into());
+        };
+        assert!(matches!(details.mounts(), ObservationField::Malformed));
+        assert!(
+            container
+                .findings()
+                .iter()
+                .any(|finding| finding.field_path() == Some(malformed_path))
+        );
+    }
+    Ok(())
+}
+
 fn hex_digest(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut output = String::with_capacity(bytes.len() * 2);

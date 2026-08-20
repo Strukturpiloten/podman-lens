@@ -151,7 +151,48 @@
             },
             "secret_driver": null,
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "entrypoint": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "user": {
+              "state": "absent",
+              "origin": null
+            },
+            "working_directory": {
+              "state": "absent",
+              "origin": null
+            },
+            "hostname": {
+              "state": "absent",
+              "origin": null
+            },
+            "pod_membership": {
+              "state": "observed",
+              "origin": "configured"
+            },
+            "native_dependencies": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "mounts": {
+              "state": "observed",
+              "origin": "effective",
+              "count": 1
+            },
+            "secret_grants": {
+              "state": "observed",
+              "origin": "effective",
+              "count": 1
+            }
           }
         },
         {
@@ -216,7 +257,48 @@
             },
             "secret_driver": null,
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "entrypoint": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "user": {
+              "state": "absent",
+              "origin": null
+            },
+            "working_directory": {
+              "state": "absent",
+              "origin": null
+            },
+            "hostname": {
+              "state": "absent",
+              "origin": null
+            },
+            "pod_membership": {
+              "state": "absent",
+              "origin": null
+            },
+            "native_dependencies": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "mounts": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "secret_grants": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            }
           }
         }
       ]
@@ -272,7 +354,16 @@
             "infra": null,
             "secret_driver": null,
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": null,
+            "entrypoint": null,
+            "user": null,
+            "working_directory": null,
+            "hostname": null,
+            "pod_membership": null,
+            "native_dependencies": null,
+            "mounts": null,
+            "secret_grants": null
           }
         }
       ]
@@ -339,7 +430,16 @@
             "infra": null,
             "secret_driver": null,
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": null,
+            "entrypoint": null,
+            "user": null,
+            "working_directory": null,
+            "hostname": null,
+            "pod_membership": null,
+            "native_dependencies": null,
+            "mounts": null,
+            "secret_grants": null
           }
         }
       ]
@@ -420,7 +520,16 @@
               "state": "observed",
               "origin": "effective",
               "wire_value": "wire_absent_may_mean_zero"
-            }
+            },
+            "command": null,
+            "entrypoint": null,
+            "user": null,
+            "working_directory": null,
+            "hostname": null,
+            "pod_membership": null,
+            "native_dependencies": null,
+            "mounts": null,
+            "secret_grants": null
           }
         }
       ]
@@ -485,7 +594,16 @@
             "infra": null,
             "secret_driver": null,
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": null,
+            "entrypoint": null,
+            "user": null,
+            "working_directory": null,
+            "hostname": null,
+            "pod_membership": null,
+            "native_dependencies": null,
+            "mounts": null,
+            "secret_grants": null
           }
         }
       ]
@@ -551,7 +669,16 @@
               "origin": "configured"
             },
             "volume_uid": null,
-            "volume_gid": null
+            "volume_gid": null,
+            "command": null,
+            "entrypoint": null,
+            "user": null,
+            "working_directory": null,
+            "hostname": null,
+            "pod_membership": null,
+            "native_dependencies": null,
+            "mounts": null,
+            "secret_grants": null
           }
         }
       ]

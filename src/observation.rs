@@ -71,6 +71,12 @@ impl<T> ObservationField<T> {
     pub const fn is_observed(&self) -> bool {
         matches!(self, Self::Observed(_))
     }
+
+    /// Returns whether the native field was present but did not match its reviewed shape.
+    #[must_use]
+    pub const fn is_malformed(&self) -> bool {
+        matches!(self, Self::Malformed)
+    }
 }
 
 /// Provenance that prevents observed runtime facts from becoming desired intent accidentally.
@@ -197,6 +203,7 @@ pub struct UnmodelledField {
 }
 
 impl UnmodelledField {
+    #[allow(clippy::too_many_arguments)] // private typed decoder construction keeps every field explicit.
     pub(crate) fn new(
         path: String,
         json_kind: JsonValueKind,
@@ -471,6 +478,359 @@ pub enum ProtectedEnvironmentValue {
 /// A bounded configured label collection.
 pub type Labels = BTreeMap<String, String>;
 
+/// A configured container command observed from `Config.Cmd`.
+///
+/// This is native input evidence, not a deployment argument type. Its constructor stays private
+/// so callers cannot accidentally manufacture an observation with invented provenance.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ConfiguredContainerCommand(Vec<String>);
+
+impl ConfiguredContainerCommand {
+    pub(crate) const fn new(arguments: Vec<String>) -> Self {
+        Self(arguments)
+    }
+
+    /// Returns the declared command arguments in their native order.
+    #[must_use]
+    pub fn arguments(&self) -> &[String] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for ConfiguredContainerCommand {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConfiguredContainerCommand")
+            .field("argument_count", &self.0.len())
+            .finish()
+    }
+}
+
+/// A configured container entrypoint observed from `Config.Entrypoint`.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ConfiguredContainerEntrypoint(Vec<String>);
+
+impl ConfiguredContainerEntrypoint {
+    pub(crate) const fn new(arguments: Vec<String>) -> Self {
+        Self(arguments)
+    }
+
+    /// Returns the declared entrypoint arguments in their native order.
+    #[must_use]
+    pub fn arguments(&self) -> &[String] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for ConfiguredContainerEntrypoint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConfiguredContainerEntrypoint")
+            .field("argument_count", &self.0.len())
+            .finish()
+    }
+}
+
+macro_rules! configured_container_text {
+    ($type:ident, $doc:literal) => {
+        #[doc = $doc]
+        #[derive(Clone, Eq, PartialEq)]
+        pub struct $type(String);
+
+        impl $type {
+            pub(crate) fn new(value: String) -> Self {
+                Self(value)
+            }
+
+            /// Returns the native configured spelling.
+            #[must_use]
+            pub fn value(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $type {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(concat!(stringify!($type), "([redacted])"))
+            }
+        }
+    };
+}
+
+configured_container_text!(
+    ConfiguredContainerUser,
+    "A configured container user from `Config.User`."
+);
+configured_container_text!(
+    ConfiguredContainerWorkdir,
+    "A configured container working directory from `Config.WorkingDir`."
+);
+configured_container_text!(
+    ConfiguredContainerHostname,
+    "A configured container hostname from `Config.Hostname`."
+);
+
+/// One native relationship reference with its exact source location.
+#[derive(Clone, Eq, PartialEq)]
+pub struct NativeResourceReference {
+    reference: String,
+    field_path: String,
+}
+
+impl NativeResourceReference {
+    pub(crate) fn new(reference: String, field_path: String) -> Self {
+        Self { reference, field_path }
+    }
+
+    /// Returns the native identifier or name that requires explicit resolution.
+    #[must_use]
+    pub fn reference(&self) -> &str {
+        &self.reference
+    }
+
+    /// Returns the reviewed native field that supplied this reference.
+    #[must_use]
+    pub fn field_path(&self) -> &str {
+        &self.field_path
+    }
+}
+
+impl fmt::Debug for NativeResourceReference {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("NativeResourceReference")
+            .field("field_path", &self.field_path)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A typed declared container mount kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ContainerMountKind {
+    /// A named Podman volume.
+    NamedVolume,
+    /// A host bind mount. Its source path stays local-resolution evidence.
+    Bind,
+}
+
+/// The source of a typed native mount.
+#[derive(Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ContainerMountSource {
+    /// A configured named-volume reference.
+    NamedVolume(String),
+    /// A host-specific path observed from the local Podman service.
+    LocalBindPath(String),
+}
+
+impl ContainerMountSource {
+    /// Returns the native source spelling. A bind path is local-resolution evidence and must not
+    /// be promoted automatically into portable intent.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        match self {
+            Self::NamedVolume(value) | Self::LocalBindPath(value) => value,
+        }
+    }
+}
+
+impl fmt::Debug for ContainerMountSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match self {
+            Self::NamedVolume(_) => "named_volume",
+            Self::LocalBindPath(_) => "local_bind_path",
+        };
+        formatter.debug_tuple("ContainerMountSource").field(&kind).finish()
+    }
+}
+
+/// One typed native mount. Every nested field keeps its independent native observation state.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ContainerMountObservation {
+    kind: ContainerMountKind,
+    source: ObservationField<ContainerMountSource>,
+    local_backing_path: ObservationField<String>,
+    destination: ObservationField<String>,
+    writable: ObservationField<bool>,
+    options: ObservationField<Vec<String>>,
+    propagation: ObservationField<String>,
+    subpath: ObservationField<String>,
+}
+
+impl ContainerMountObservation {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) const fn new(
+        kind: ContainerMountKind,
+        source: ObservationField<ContainerMountSource>,
+        local_backing_path: ObservationField<String>,
+        destination: ObservationField<String>,
+        writable: ObservationField<bool>,
+        options: ObservationField<Vec<String>>,
+        propagation: ObservationField<String>,
+        subpath: ObservationField<String>,
+    ) -> Self {
+        Self {
+            kind,
+            source,
+            local_backing_path,
+            destination,
+            writable,
+            options,
+            propagation,
+            subpath,
+        }
+    }
+
+    /// Returns the accepted native mount kind.
+    #[must_use]
+    pub const fn kind(&self) -> ContainerMountKind {
+        self.kind
+    }
+    /// Returns source evidence; bind paths are always local-resolution evidence.
+    #[must_use]
+    pub fn source(&self) -> &ObservationField<ContainerMountSource> {
+        &self.source
+    }
+    /// Returns the host-specific backing path when Podman supplied one. This is always local
+    /// resolution evidence and cannot be promoted automatically.
+    #[must_use]
+    pub fn local_backing_path(&self) -> &ObservationField<String> {
+        &self.local_backing_path
+    }
+    /// Returns the configured container destination.
+    #[must_use]
+    pub fn destination(&self) -> &ObservationField<String> {
+        &self.destination
+    }
+    /// Returns the observed writable setting.
+    #[must_use]
+    pub fn writable(&self) -> &ObservationField<bool> {
+        &self.writable
+    }
+    /// Returns mount options when the native response supplied them.
+    #[must_use]
+    pub fn options(&self) -> &ObservationField<Vec<String>> {
+        &self.options
+    }
+    /// Returns mount propagation when the native response supplied it.
+    #[must_use]
+    pub fn propagation(&self) -> &ObservationField<String> {
+        &self.propagation
+    }
+    /// Returns named-volume subpath evidence when the native response supplied it.
+    #[must_use]
+    pub fn subpath(&self) -> &ObservationField<String> {
+        &self.subpath
+    }
+}
+
+impl fmt::Debug for ContainerMountObservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ContainerMountObservation")
+            .field("kind", &self.kind)
+            .field("source", &self.source)
+            .field("local_backing_path", &self.local_backing_path)
+            .field("destination", &self.destination)
+            .field("writable", &self.writable)
+            .field("options", &self.options)
+            .field("propagation", &self.propagation)
+            .field("subpath", &self.subpath)
+            .finish()
+    }
+}
+
+/// Coalesced secret ID/name evidence. Both spellings must resolve to one secret before traversal.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ContainerSecretReference {
+    id: Option<NativeResourceReference>,
+    name: Option<NativeResourceReference>,
+}
+
+impl ContainerSecretReference {
+    pub(crate) const fn new(id: Option<NativeResourceReference>, name: Option<NativeResourceReference>) -> Self {
+        Self { id, name }
+    }
+    /// Returns the optional native secret-ID source evidence.
+    #[must_use]
+    pub fn id(&self) -> Option<&NativeResourceReference> {
+        self.id.as_ref()
+    }
+    /// Returns the optional native secret-name source evidence.
+    #[must_use]
+    pub fn name(&self) -> Option<&NativeResourceReference> {
+        self.name.as_ref()
+    }
+}
+
+impl fmt::Debug for ContainerSecretReference {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ContainerSecretReference")
+            .field("has_id", &self.id.is_some())
+            .field("has_name", &self.name.is_some())
+            .finish()
+    }
+}
+
+/// One typed native secret grant. It never carries secret payload bytes.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ContainerSecretGrantObservation {
+    reference: ObservationField<ContainerSecretReference>,
+    uid: ObservationField<u32>,
+    gid: ObservationField<u32>,
+    mode: ObservationField<u32>,
+}
+
+impl ContainerSecretGrantObservation {
+    pub(crate) const fn new(
+        reference: ObservationField<ContainerSecretReference>,
+        uid: ObservationField<u32>,
+        gid: ObservationField<u32>,
+        mode: ObservationField<u32>,
+    ) -> Self {
+        Self {
+            reference,
+            uid,
+            gid,
+            mode,
+        }
+    }
+    /// Returns coalesced ID/name source evidence.
+    #[must_use]
+    pub fn reference(&self) -> &ObservationField<ContainerSecretReference> {
+        &self.reference
+    }
+    /// Returns effective UID metadata. Podman inspect does not preserve whether zero was explicit.
+    #[must_use]
+    pub fn uid(&self) -> &ObservationField<u32> {
+        &self.uid
+    }
+    /// Returns effective GID metadata. Podman inspect does not preserve whether zero was explicit.
+    #[must_use]
+    pub fn gid(&self) -> &ObservationField<u32> {
+        &self.gid
+    }
+    /// Returns effective file-mode metadata. Podman inspect does not preserve whether zero was explicit.
+    #[must_use]
+    pub fn mode(&self) -> &ObservationField<u32> {
+        &self.mode
+    }
+}
+
+impl fmt::Debug for ContainerSecretGrantObservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ContainerSecretGrantObservation")
+            .field("reference", &self.reference)
+            .field("uid", &self.uid)
+            .field("gid", &self.gid)
+            .field("mode", &self.mode)
+            .finish()
+    }
+}
+
 /// Container-specific native observations.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ContainerObservation {
@@ -479,6 +839,15 @@ pub struct ContainerObservation {
     local_image_id: ObservationField<String>,
     relationships: ObservationField<Vec<NativeRelationship>>,
     environment: ObservationField<ProtectedEnvironment>,
+    command: ObservationField<ConfiguredContainerCommand>,
+    entrypoint: ObservationField<ConfiguredContainerEntrypoint>,
+    user: ObservationField<ConfiguredContainerUser>,
+    working_directory: ObservationField<ConfiguredContainerWorkdir>,
+    hostname: ObservationField<ConfiguredContainerHostname>,
+    pod_membership: ObservationField<NativeResourceReference>,
+    native_dependencies: ObservationField<Vec<NativeResourceReference>>,
+    mounts: ObservationField<Vec<ContainerMountObservation>>,
+    secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
     memory_swappiness: ObservationField<u64>,
     infra: ObservationField<bool>,
 }
@@ -502,17 +871,36 @@ observation_debug!(
     local_image_id,
     relationships,
     environment,
+    command,
+    entrypoint,
+    user,
+    working_directory,
+    hostname,
+    pod_membership,
+    native_dependencies,
+    mounts,
+    secret_grants,
     memory_swappiness,
     infra
 );
 
 impl ContainerObservation {
+    #[allow(clippy::too_many_arguments)] // private typed decoder construction keeps every field explicit.
     pub(crate) fn new(
         labels: ObservationField<Labels>,
         configured_image: ObservationField<String>,
         local_image_id: ObservationField<String>,
         relationships: ObservationField<Vec<NativeRelationship>>,
         environment: ObservationField<ProtectedEnvironment>,
+        command: ObservationField<ConfiguredContainerCommand>,
+        entrypoint: ObservationField<ConfiguredContainerEntrypoint>,
+        user: ObservationField<ConfiguredContainerUser>,
+        working_directory: ObservationField<ConfiguredContainerWorkdir>,
+        hostname: ObservationField<ConfiguredContainerHostname>,
+        pod_membership: ObservationField<NativeResourceReference>,
+        native_dependencies: ObservationField<Vec<NativeResourceReference>>,
+        mounts: ObservationField<Vec<ContainerMountObservation>>,
+        secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
         memory_swappiness: ObservationField<u64>,
         infra: ObservationField<bool>,
     ) -> Self {
@@ -522,6 +910,15 @@ impl ContainerObservation {
             local_image_id,
             relationships,
             environment,
+            command,
+            entrypoint,
+            user,
+            working_directory,
+            hostname,
+            pod_membership,
+            native_dependencies,
+            mounts,
+            secret_grants,
             memory_swappiness,
             infra,
         }
@@ -550,6 +947,51 @@ impl ContainerObservation {
     #[must_use]
     pub fn environment(&self) -> &ObservationField<ProtectedEnvironment> {
         &self.environment
+    }
+    /// Returns the configured command or its observation state.
+    #[must_use]
+    pub fn command(&self) -> &ObservationField<ConfiguredContainerCommand> {
+        &self.command
+    }
+    /// Returns the configured entrypoint or its observation state.
+    #[must_use]
+    pub fn entrypoint(&self) -> &ObservationField<ConfiguredContainerEntrypoint> {
+        &self.entrypoint
+    }
+    /// Returns the configured user or its observation state.
+    #[must_use]
+    pub fn user(&self) -> &ObservationField<ConfiguredContainerUser> {
+        &self.user
+    }
+    /// Returns the configured working directory or its observation state.
+    #[must_use]
+    pub fn working_directory(&self) -> &ObservationField<ConfiguredContainerWorkdir> {
+        &self.working_directory
+    }
+    /// Returns the configured hostname or its observation state.
+    #[must_use]
+    pub fn hostname(&self) -> &ObservationField<ConfiguredContainerHostname> {
+        &self.hostname
+    }
+    /// Returns the container's configured pod-membership evidence or its state.
+    #[must_use]
+    pub fn pod_membership(&self) -> &ObservationField<NativeResourceReference> {
+        &self.pod_membership
+    }
+    /// Returns declared native container dependencies or their observation state.
+    #[must_use]
+    pub fn native_dependencies(&self) -> &ObservationField<Vec<NativeResourceReference>> {
+        &self.native_dependencies
+    }
+    /// Returns accepted named-volume and bind mount observations or their state.
+    #[must_use]
+    pub fn mounts(&self) -> &ObservationField<Vec<ContainerMountObservation>> {
+        &self.mounts
+    }
+    /// Returns typed secret grants without secret payload material or their state.
+    #[must_use]
+    pub fn secret_grants(&self) -> &ObservationField<Vec<ContainerSecretGrantObservation>> {
+        &self.secret_grants
     }
     /// Returns the configured memory-swappiness value or its observation state.
     #[must_use]
@@ -798,6 +1240,7 @@ impl SecretObservation {
 /// Resource-kind-specific observation payload.
 #[derive(Clone, Eq, PartialEq)]
 #[non_exhaustive]
+#[allow(clippy::large_enum_variant)] // kind-safe public enum avoids heap allocation at every observation access.
 pub enum ResourceDetails {
     /// Container-only fields.
     Container(ContainerObservation),
@@ -917,6 +1360,15 @@ fn incomplete_field<T>(state: ResourceObservationState) -> ObservationField<T> {
 fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> ResourceDetails {
     match kind {
         ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),

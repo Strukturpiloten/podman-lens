@@ -46,6 +46,16 @@ local `Image` resolver result. Discovery derives an image dependency only from t
 spelling. Environment observations provide names plus redacted or authorized-opaque value states;
 they never expose a deployment value.
 
+M7-B1 adds observation-only core configuration, topology, mount, and secret-grant accessors.
+`command`, `entrypoint`, `user`, `working_directory`, and `hostname` retain configured evidence.
+`pod_membership` and `native_dependencies` retain native references without deciding a target pod
+layout. `mounts` accepts only named-volume and bind forms: backing and bind paths are always
+local-resolution evidence. `secret_grants` retains coalesced ID/name references plus effective
+direct UID, GID, and mode metadata. Podman inspect does not expose a delivery form or target, so
+mounted-versus-environment output semantics cannot be reconstructed. It neither requests nor
+represents secret payload material. A malformed or contradictory member
+marks the complete field malformed and cannot create a discovery edge.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

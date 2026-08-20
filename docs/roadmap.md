@@ -56,15 +56,35 @@ public API; M4 will stabilize it with the resource graph and broader corpus.
 
 ## M3: Resource discovery
 
-- [ ] Support container, pod, network, volume, image, secret, and label-selector roots.
-- [ ] Make complete evidenced dependency closure the default.
-- [ ] Merge overlapping closures and retain disjoint resource groups.
-- [ ] Detect shared prerequisites and network boundaries.
-- [ ] Support exact authorized boundary crossings without a grouping file.
-- [ ] Discover and order all groups for an `all` request.
-- [ ] Explain every included resource, stopped boundary, merge, and ordering edge.
+- [x] Support exact container, pod, network, volume, image, and secret roots.
+- [x] Support exact label-presence and label-value roots without exposing label values in debug output.
+- [x] Retain every requested selector, the `all` choice, each resolved root, and redacted root-origin
+      provenance in the result.
+- [x] Make evidenced dependent-to-prerequisite closure the default.
+- [x] Merge closures only through pod membership, native container dependencies, or validated
+      Compose ownership evidence.
+- [x] Keep shared prerequisites and network boundaries from merging groups.
+- [x] Support exact network name-or-ID crossings without a grouping file.
+- [x] Discover deterministic eligible roots for an `all` request.
+- [x] Expose dependency edges separately from grouping evidence and structured findings.
+- [x] Explain every included resource, stopped boundary, authorized crossing, strong-evidence merge,
+      and ordering decision.
 
-Exit: selectors return deterministic groups and shared prerequisites in a validated dependency order.
+Exit: selectors return deterministic groups, shared prerequisites, directed dependency evidence,
+and a complete explanation trace.
+
+M3 is complete. Group IDs use the smallest member `(kind, id)`; dependency edges always point
+dependent to prerequisite; and `network.internal` is connectivity-only evidence. Pod membership is
+kept as grouping evidence without creating a pod-to-container dependency cycle. Compose labels are
+advisory only when both Docker and Podman project/service pairs agree and are non-empty; matching
+non-empty config hashes are validated when present. Explicit shared-resource roots and exact
+network name-or-ID crossings may add consumers; ordinary container roots do not reverse-traverse
+shared prerequisites. The returned explanation trace accounts for every selected resource and
+group-ordering decision.
+
+`all` seeds pods, unpodded non-infra containers, standalone networks, volumes, and secrets, plus
+images carrying complete validated Compose ownership evidence. It does not treat every cached
+image as an application root.
 
 ## M4: Stable input contract
 

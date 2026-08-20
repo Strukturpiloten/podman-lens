@@ -472,6 +472,7 @@ pub struct ResourceRecord {
     image_aliases: Vec<String>,
     network: Option<NetworkDetails>,
     memory_swappiness: Option<u64>,
+    is_infra: Option<bool>,
     secret_driver: Option<String>,
     unknown_fields: Vec<UnknownNativeField>,
     findings: Vec<InventoryFinding>,
@@ -489,6 +490,7 @@ impl ResourceRecord {
             image_aliases: Vec::new(),
             network: None,
             memory_swappiness: None,
+            is_infra: None,
             secret_driver: None,
             unknown_fields: Vec::new(),
             findings: vec![InventoryFinding::for_resource(finding, identity)],
@@ -544,6 +546,12 @@ impl ResourceRecord {
         self.memory_swappiness
     }
 
+    /// Returns whether this is Podman's infrastructure container, when reported by inspection.
+    #[must_use]
+    pub const fn is_infra(&self) -> Option<bool> {
+        self.is_infra
+    }
+
     /// Returns the native secret driver metadata for a secret record when reported.
     #[must_use]
     pub fn secret_driver(&self) -> Option<&str> {
@@ -581,6 +589,7 @@ impl fmt::Debug for ResourceRecord {
             .field("image_alias_count", &self.image_aliases.len())
             .field("network", &self.network)
             .field("memory_swappiness", &self.memory_swappiness)
+            .field("is_infra", &self.is_infra)
             .field("has_secret_driver", &self.secret_driver.is_some())
             .field("unknown_fields", &self.unknown_fields)
             .field("findings", &self.findings)
@@ -994,6 +1003,11 @@ fn decode_record(
         ResourceKind::Image => decode_image(listed_identity, object, options)?,
         ResourceKind::Secret => decode_secret(listed_identity, object)?,
     };
+    let is_infra = if listed_identity.kind == ResourceKind::Container {
+        decode_is_infra(object, &identity, &mut findings)
+    } else {
+        None
+    };
     let mut unknown_fields = UnknownFieldCollector::new(&identity, &evidence, unknown_field_limit);
     unknown_top_level(object, known, &mut unknown_fields);
     unknown_nested_fields(listed_identity.kind, object, &mut unknown_fields);
@@ -1019,6 +1033,7 @@ fn decode_record(
         image_aliases,
         network,
         memory_swappiness,
+        is_infra,
         secret_driver,
         unknown_fields,
         findings,
@@ -1116,6 +1131,7 @@ fn decode_container(
             "Dependencies",
             "Config",
             "HostConfig",
+            "IsInfra",
         ],
     ))
 }
@@ -1696,6 +1712,25 @@ fn decode_memory_swappiness(
             "$.HostConfig.MemorySwappiness",
         ));
         None
+    }
+}
+
+fn decode_is_infra(
+    object: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> Option<bool> {
+    match object.get("IsInfra") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(value)) => Some(*value),
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.IsInfra",
+            ));
+            None
+        }
     }
 }
 

@@ -76,13 +76,20 @@ M1 makes this small foundation public:
   `GET /v4.0.0/libpod/version`, validates bounded protocol evidence, and returns independent
   observed engine/API versions with their reviewed target profile.
 
-The following names remain conceptual until their milestones:
+M2 and M3 add these provisional public input contracts:
 
-- `DiscoveryRequest` contains explicit roots, label selectors, closure policy, and authorized
-  boundary crossings.
-- `ResourceInventory` retains typed Podman resources, identifiers, relationships, and native
-  evidence.
-- `ResourceGraph` contains discovered groups, shared prerequisites, boundaries, and their evidence.
+- `ResourceInventory` retains typed Podman resources, identifiers, relationships, findings, and
+  native evidence from `acquire_inventory`.
+- `ResourceSelector` selects one exact resource name, ID, or image alias.
+- `LabelSelector` selects exact label-key presence or exact label-key/value equality.
+- `DiscoveryRequest` contains resource and label roots, `all` selection, and exact network
+  name-or-ID boundary authorizations.
+- `ResourceGraph` retains requested selectors, the `all` choice, resolved roots with redacted
+  origin positions, deterministic groups, shared prerequisites, directed dependencies,
+  non-directed grouping evidence, findings, and explanations.
+
+The following output names remain conceptual until their milestones:
+
 - `DeploymentIntent` contains fully resolved Podman-native resources supplied by a caller.
 - `DeploymentPlan` contains an ordered list of semantic operations.
 - `Operation` contains identity, dependencies, resource action, and all exact supported transport
@@ -171,15 +178,27 @@ output-directory safety, diagnostic presentation, and loss-policy authorization.
 
 ## Discovery and resource groups
 
-Every resource selector is a root. Default discovery follows the complete, evidenced dependency
-closure. Overlapping closures form one resource group; disjoint closures remain separate groups.
-`all` discovery finds every group using the same rules.
+Every exact resource selector and label selector is a root. `ResourceGraph` records requested
+selectors separately from resolved identities. Default discovery follows the complete evidenced
+dependent-to-prerequisite closure. Dependency edges retain their direction for later planning;
+grouping edges are non-directed evidence and cannot be interpreted as deployment order.
 
-Pod membership and reviewed ownership labels are strong evidence. A resource used only inside the
-current closure may also remain in that group. Shared or source-declared external resources are
-prerequisites and boundaries, not automatic bridges to unrelated consumers.
+Pod membership, native container dependencies, and complete matching Docker/Podman Compose
+ownership aliases are strong grouping evidence. Closures merge only through strong evidence.
+Shared network, volume, image, and secret prerequisites remain boundaries and do not bridge
+otherwise disjoint groups. Explicitly selecting a shared resource crosses to its direct consumers;
+an exact network name-or-ID authorization crosses only that resolved network boundary.
 
-Podman's `internal` network property controls connectivity, not ownership. It cannot by itself
+Group IDs are the smallest member `(kind, id)`, and groups are ordered by that identity. The
+explanation trace accounts for every root, included member, prerequisite, stopped boundary,
+authorized crossing, strong-evidence merge, and group-order position. Unresolved or ambiguous
+selectors, relationships, and boundary authorizations remain structured findings.
+
+`all` applies the same rules to eligible roots: pods, unpodded non-infra containers, standalone
+networks, volumes, and secrets, plus images with validated Compose ownership. Cached images are not
+roots merely because they exist.
+
+Podman's `network.internal` property controls connectivity, not ownership. It cannot by itself
 decide whether traversal should cross a network. Exact user-authorized boundary crossings handle
 exceptions; no separate grouping file is required.
 

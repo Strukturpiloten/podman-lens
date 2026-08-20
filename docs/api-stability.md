@@ -12,8 +12,16 @@ records for non-atomic races, labels, relationships, source/version evidence, fi
 kind metadata for unsupported fields, and structured findings. `SensitiveEnvironmentValue` may be
 used only through its callback accessor; it does not serialize or print its plaintext value.
 
-These public contracts intentionally do not promise SSH or TLS transport implementations, resource
-discovery graphs, or deployment plans. M4 will explicitly stabilize the native input contract after
+M3 additionally publishes provisional `ResourceSelector`, `LabelSelector`, `DiscoveryRequest`,
+`discover_resources`, and deterministic `ResourceGraph` contracts. The graph exposes requested
+selectors, the `all` choice, resolved roots with redacted origin positions, directed dependencies,
+separate grouping evidence, `PLN0027`–`PLN0033` findings, and an explanation trace. Exact resource and network
+boundary references accept a name or ID; they never accept patterns. Label selectors represent
+exact key presence or an exact key-value pair, while their `Debug` forms redact values. Graph
+explanations account for every included resource, stopped boundary, authorized crossing,
+strong-evidence merge, and ordering decision. Public fields remain private and extension enums are
+non-exhaustive. These provisional contracts intentionally do not promise SSH or TLS transport
+implementations or deployment plans. M4 will explicitly stabilize the native input contract after
 its corpus and graph boundaries are complete.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible

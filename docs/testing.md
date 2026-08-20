@@ -34,3 +34,12 @@ boundaries; probe-before-list ordering; canonical list sorting; exact list queri
 inspect paths; partial races; malformed and duplicate list records; secret-metadata-only requests;
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
+
+M3 discovery tests use fixture transports only. They cover all six exact resource-root kinds;
+label-presence, label-value, empty-value, and rejected selectors; dependent-to-prerequisite closure;
+cycle-free pod membership; shared prerequisites; explicit shared roots; exact network name-or-ID
+crossings; unused and ambiguous overrides; deterministic `all` seeds and selector permutations;
+accepted, incomplete, conflicting, and config-hash Compose ownership evidence; relationship
+ambiguity; unrelated-evidence filtering; debug redaction; and complete explanation coverage.
+Fixtures also prove that `network.internal` never creates grouping evidence or authorizes reverse
+traversal.

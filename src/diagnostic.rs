@@ -58,6 +58,20 @@ pub enum DiagnosticCode {
     PodMembershipConflict,
     /// The observed version lacks matching immutable capability evidence.
     InventoryEvidenceUnavailable,
+    /// A resource-discovery selector or boundary override is invalid.
+    InvalidDiscoveryRequest,
+    /// A requested discovery selector did not match an available native resource.
+    SelectorUnresolved,
+    /// A requested discovery selector matched more than one native resource.
+    SelectorAmbiguous,
+    /// Compose ownership labels are incomplete or empty and cannot group resources.
+    AdvisoryLabelIncomplete,
+    /// Docker and Podman Compose ownership labels disagree and cannot group resources.
+    AdvisoryLabelConflict,
+    /// A native relationship reference matched more than one resource.
+    RelationshipAmbiguous,
+    /// A valid network-boundary override did not cross any selected dependency boundary.
+    BoundaryOverrideUnused,
 }
 
 impl DiagnosticCode {
@@ -91,6 +105,13 @@ impl DiagnosticCode {
             Self::UnresolvedRelationship => "PLN0024",
             Self::PodMembershipConflict => "PLN0025",
             Self::InventoryEvidenceUnavailable => "PLN0026",
+            Self::InvalidDiscoveryRequest => "PLN0027",
+            Self::SelectorUnresolved => "PLN0028",
+            Self::SelectorAmbiguous => "PLN0029",
+            Self::AdvisoryLabelIncomplete => "PLN0030",
+            Self::AdvisoryLabelConflict => "PLN0031",
+            Self::RelationshipAmbiguous => "PLN0032",
+            Self::BoundaryOverrideUnused => "PLN0033",
         }
     }
 }
@@ -159,6 +180,21 @@ impl Diagnostic {
                 DiagnosticCode::PodMembershipConflict => "Podman pod and container membership evidence disagrees",
                 DiagnosticCode::InventoryEvidenceUnavailable => {
                     "the observed Podman version has no matching immutable inventory evidence"
+                }
+                DiagnosticCode::InvalidDiscoveryRequest => "the resource-discovery request is invalid",
+                DiagnosticCode::SelectorUnresolved => "a requested resource selector did not match inventory",
+                DiagnosticCode::SelectorAmbiguous => "a requested resource selector matched multiple inventory records",
+                DiagnosticCode::AdvisoryLabelIncomplete => {
+                    "Compose ownership labels are incomplete or empty and cannot group resources"
+                }
+                DiagnosticCode::AdvisoryLabelConflict => {
+                    "Docker and Podman Compose ownership labels disagree and cannot group resources"
+                }
+                DiagnosticCode::RelationshipAmbiguous => {
+                    "a Podman native relationship reference matched more than one resource"
+                }
+                DiagnosticCode::BoundaryOverrideUnused => {
+                    "a network-boundary override did not cross a selected dependency boundary"
                 }
             },
         }

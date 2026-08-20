@@ -10,6 +10,7 @@
 
 pub mod connection;
 pub mod diagnostic;
+pub mod discovery;
 pub mod evidence;
 pub mod inventory;
 pub mod probe;
@@ -23,6 +24,11 @@ pub use connection::{
     UnixConnection,
 };
 pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
+pub use discovery::{
+    DependencyEvidence, DiscoveryExplanation, DiscoveryExplanationKind, DiscoveryFinding, DiscoveryRequest,
+    DiscoveryRootOrigin, GroupingEdge, GroupingEvidence, LabelSelector, ResourceDependency, ResourceGraph,
+    ResourceGroup, ResourceSelector, discover_resources,
+};
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
 pub use inventory::{
     AcquisitionOptions, EnvironmentEntry, EnvironmentValue, EnvironmentValuePolicy, InventoryFinding, InventorySection,

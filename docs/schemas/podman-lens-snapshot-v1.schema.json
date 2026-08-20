@@ -151,11 +151,12 @@
     },
     "network": {
       "type": "object",
-      "required": ["internal", "options", "subnets"],
+      "required": ["internal", "options", "subnets", "routes"],
       "properties": {
         "internal": { "$ref": "#/$defs/field_state" },
         "options": { "$ref": "#/$defs/field_count" },
-        "subnets": { "$ref": "#/$defs/field_count" }
+        "subnets": { "$ref": "#/$defs/field_count" },
+        "routes": { "$ref": "#/$defs/field_count" }
       },
       "additionalProperties": false
     },

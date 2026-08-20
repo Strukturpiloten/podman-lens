@@ -207,6 +207,15 @@ without silent loss; all other native output remains explicitly outside that con
 - [x] M7-B1: Add bounded container core configuration, topology, typed named-volume/bind mount,
       and secret-grant observations. Host paths remain local-resolution-only and secret payloads
       remain unavailable.
+- [x] M7-B2a: Add observation-only native network IPAM subnet, independently optional lease-range
+      endpoints, gateway, and static-route evidence. Network inspect values remain effective
+      evidence; reviewed host-bit spellings are retained only for network-subnet CIDRs, with
+      normalized containment checks. Generic CIDR parsing preserves raw syntax defensively but
+      does not claim host-bit route destinations are valid. Route type is explicitly
+      version-inapplicable before Podman 6.0 and defaults to effective `unicast` from 6.0 when
+      omitted; this batch adds no output mapping.
+- [ ] M7-B2: Continue bounded native network input coverage without inferring container runtime
+      addresses, pod infra configuration, arbitrary drivers/options, or output behavior.
 - [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.

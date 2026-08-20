@@ -6,8 +6,9 @@ use std::{collections::VecDeque, fmt::Write as _, fs, path::PathBuf, sync::Mutex
 
 use podman_lens::{
     AcquisitionOptions, DiagnosticCode, DiscoveryRequest, LibpodHeader, LibpodHeaders, LibpodRequest, LibpodResponse,
-    LibpodTransport, LibpodTransportFuture, ResourceKind, ResourceObservation, ResourceSelector, TransportError,
-    acquire_inventory, discover, snapshot::v1,
+    LibpodTransport, LibpodTransportFuture, NativeNetworkRouteType, ObservationField, ObservationOrigin,
+    ResourceDetails, ResourceKind, ResourceObservation, ResourceSelector, TransportError, acquire_inventory, discover,
+    snapshot::v1,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -160,7 +161,7 @@ fn corpus_manifest_verifies_fixed_provenance_and_hashes() -> Result<(), Box<dyn 
     assert_eq!(manifest.schema_version, 1);
     assert_eq!(manifest.evidence_kind, "source-derived-synthetic-sanitized");
     assert!(manifest.sanitization.contains("no real"));
-    assert_eq!(manifest.artifacts.len(), 4);
+    assert_eq!(manifest.artifacts.len(), 5);
     for artifact in manifest.artifacts {
         assert!(artifact.synthetic, "{} must explicitly be synthetic", artifact.name);
         assert!(artifact.engine_version.starts_with("5.") || artifact.engine_version.starts_with("6."));
@@ -231,6 +232,50 @@ async fn rootless_and_rootful_corpus_cases_acquire_then_discover() -> Result<(),
             .prerequisites()
             .iter()
             .any(|member| member.id() == "rootful-bridge")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn pinned_podman_six_network_ipam_and_route_corpus_preserves_typed_effective_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let inventory = inventory("network-ipam-routes-6.0.responses.json").await?;
+    assert_eq!(inventory.service().engine_version().original(), "6.0.0");
+    let ResourceDetails::Network(network) = inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()
+        .first()
+        .ok_or("network observation must be present")?
+        .details()
+    else {
+        return Err("corpus must contain a network observation".into());
+    };
+    let subnets = network.subnets().observed().ok_or("subnets must be observed")?;
+    assert_eq!(subnets.origin(), ObservationOrigin::Effective);
+    assert_eq!(subnets.value().len(), 2);
+    assert_eq!(
+        subnets.value()[1]
+            .gateway()
+            .observed()
+            .map(|value| value.value().to_string()),
+        Some("2001:db8:1::1".to_owned())
+    );
+    let routes = network.routes().observed().ok_or("routes must be observed")?;
+    assert_eq!(routes.origin(), ObservationOrigin::Effective);
+    assert_eq!(routes.value().len(), 5);
+    assert!(matches!(routes.value()[0].metric(), ObservationField::Absent));
+    assert_eq!(
+        routes.value()[1].metric().observed().map(|value| *value.value()),
+        Some(0)
+    );
+    assert_eq!(
+        routes.value()[0].route_type().observed().map(|value| *value.value()),
+        Some(NativeNetworkRouteType::Unicast)
+    );
+    assert_eq!(
+        routes.value()[4].route_type().observed().map(|value| *value.value()),
+        Some(NativeNetworkRouteType::Prohibit)
     );
     Ok(())
 }

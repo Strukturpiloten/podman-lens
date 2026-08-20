@@ -89,6 +89,39 @@ fn consume_typed_observation(source: &ResourceObservation) {
                 .collect::<Vec<_>>()
         });
     }
+    if let ResourceDetails::Network(network) = source.details() {
+        let _ = network.subnets().observed().map(|subnets| {
+            subnets.value().iter().map(|subnet| {
+                (
+                    subnet.cidr().observed().map(|cidr| cidr.value().as_str()),
+                    subnet.gateway().observed().map(podman_lens::ObservedValue::value),
+                    subnet.lease_range().observed().map(|range| {
+                        (
+                            range
+                                .value()
+                                .start_ip()
+                                .observed()
+                                .map(podman_lens::ObservedValue::value),
+                            range.value().end_ip().observed().map(podman_lens::ObservedValue::value),
+                        )
+                    }),
+                )
+            })
+        });
+        let _ = network.routes().observed().map(|routes| {
+            routes.value().iter().map(|route| {
+                (
+                    route
+                        .destination()
+                        .observed()
+                        .map(|destination| destination.value().as_str()),
+                    route.gateway().observed().map(podman_lens::ObservedValue::value),
+                    route.metric().observed().map(podman_lens::ObservedValue::value),
+                    route.route_type().observed().map(podman_lens::ObservedValue::value),
+                )
+            })
+        });
+    }
 }
 
 fn consume_graph_contract(

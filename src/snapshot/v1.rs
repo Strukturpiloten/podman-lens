@@ -285,6 +285,7 @@ struct NetworkSnapshot {
     internal: FieldStateSnapshot,
     options: FieldCountSnapshot,
     subnets: FieldCountSnapshot,
+    routes: FieldCountSnapshot,
 }
 
 #[derive(Debug, Serialize)]
@@ -485,6 +486,7 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
                 internal: field_summary(value.internal()),
                 options: collection_summary(value.options(), crate::NetworkOptionKeys::len),
                 subnets: collection_summary(value.subnets(), Vec::len),
+                routes: collection_summary(value.routes(), Vec::len),
             }),
             memory_swappiness: None,
             infra: None,

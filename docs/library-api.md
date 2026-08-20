@@ -56,6 +56,21 @@ mounted-versus-environment output semantics cannot be reconstructed. It neither 
 represents secret payload material. A malformed or contradictory member
 marks the complete field malformed and cannot create a discovery edge.
 
+M7-B2a adds observation-only `NetworkObservation::subnets` and `routes`. These are native
+`NativeNetwork*` observation types, deliberately separate from output `NetworkIntent` types.
+Subnet CIDRs, optional gateways, and lease ranges retain effective evidence. A present lease-range
+object has independently optional `start_ip` and `end_ip` fields; each preserves its own
+observation state. PodmanLens defensively rejects an endpoint outside its subnet and a complete
+reversed range, even though ordering is not claimed as a native Podman validation rule.
+Network-subnet CIDR spelling is retained exactly, including a reviewed host-bit spelling, while
+containment normalizes network bits. Exact upstream response normalization across the reviewed
+Podman versions is not yet claimed. Generic CIDR parsing preserves valid wire syntax defensively;
+it does not claim that host-bit route destinations are native-valid, because pinned Podman 5.4
+evidence rejects them. Routes retain destination, optional metric (including explicit zero),
+gateway, and route type. A unicast route requires a gateway; blackhole, unreachable, and prohibit
+routes must not carry one. Route type is version-inapplicable before Podman 6.0; from 6.0 an
+omitted member is effective `unicast`. Snapshots retain only state, origin, and counts.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

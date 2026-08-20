@@ -46,7 +46,8 @@ mistake the retained slice for complete native configuration in either case.
   complete resource artifact with `PLN0046` on every reviewed target.
 - M6-B4 adds 16 output rows: named-volume copy, subpath-copy, and no-copy mounts; bind and tmpfs
   mounts; mount and environment secret grants; 5.6+ UID/GID and all four explicit pull policies;
-  plus manual source-portability, no-copy-subpath, and pod-infra-mount boundaries. The ledger has
-  56 input-observation rows and 50 output-intent rows (106 total). Every reviewed line records
+  plus manual source-portability, no-copy-subpath, and pod-infra-mount boundaries. M7-B2a adds ten
+  input-only native network IPAM and route rows. The ledger has 66 input-observation rows and 50
+  output-intent rows (116 total). Every reviewed line records
   immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

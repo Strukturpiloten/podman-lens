@@ -807,6 +807,136 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "tests::inventory::canonical_direct_secret_metadata_preserves_effective_zero_and_configured_aliases",
         "tests::inventory::malformed_direct_secret_effective_metadata_invalidates_the_grant_family"
     ),
+    expected!(
+        "PLN-FLD-0059",
+        "network",
+        "$.subnets[].subnet",
+        "observation-only",
+        "inventory::decode_native_network_subnets",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkSubnetObservation::cidr",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0060",
+        "network",
+        "$.subnets[].gateway",
+        "observation-only",
+        "inventory::decode_native_network_subnets",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkSubnetObservation::gateway",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0061",
+        "network",
+        "$.subnets[].lease_range",
+        "observation-only",
+        "inventory::decode_native_network_subnets",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkSubnetObservation::lease_range",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0062",
+        "network",
+        "$.subnets[].lease_range.start_ip",
+        "observation-only",
+        "inventory::decode_native_network_subnets",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkLeaseRange::start_ip",
+        "PLN0017",
+        "tests::inventory::native_network_lease_endpoints_are_independently_optional_effective_evidence",
+        "tests::inventory::malformed_native_network_lease_members_poison_the_complete_subnet_family"
+    ),
+    expected!(
+        "PLN-FLD-0063",
+        "network",
+        "$.subnets[].lease_range.end_ip",
+        "observation-only",
+        "inventory::decode_native_network_subnets",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkLeaseRange::end_ip",
+        "PLN0017",
+        "tests::inventory::native_network_lease_endpoints_are_independently_optional_effective_evidence",
+        "tests::inventory::malformed_native_network_lease_members_poison_the_complete_subnet_family"
+    ),
+    expected!(
+        "PLN-FLD-0064",
+        "network",
+        "$.routes",
+        "observation-only",
+        "inventory::decode_native_network_routes",
+        "not_applicable",
+        "not_applicable",
+        "NetworkObservation::routes",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0065",
+        "network",
+        "$.routes[].destination",
+        "observation-only",
+        "inventory::decode_native_network_routes",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkRouteObservation::destination",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0066",
+        "network",
+        "$.routes[].gateway",
+        "observation-only",
+        "inventory::decode_native_network_routes",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkRouteObservation::gateway",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0067",
+        "network",
+        "$.routes[].metric",
+        "observation-only",
+        "inventory::decode_native_network_routes",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkRouteObservation::metric",
+        "PLN0017",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
+    expected!(
+        "PLN-FLD-0068",
+        "network",
+        "$.routes[].route_type",
+        "observation-only",
+        "inventory::decode_native_network_routes",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkRouteObservation::route_type",
+        "PLN0022",
+        "tests::inventory::native_network_ipam_and_routes_are_typed_effective_observations",
+        "tests::inventory::native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode"
+    ),
 ];
 
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];
@@ -1611,9 +1741,9 @@ fn valid_semantic_links(entry: &NativeFieldCoverageEntry) -> bool {
 fn valid_field_path(value: &str, required_prefix: &str) -> bool {
     value.starts_with(required_prefix)
         && value.len() <= 160
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'$' | b'.' | b'_' | b'<' | b'>' | b'*'))
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'$' | b'.' | b'_' | b'<' | b'>' | b'*' | b'[' | b']')
+        })
 }
 
 fn valid_reference(value: &str, required_prefix: &str) -> bool {

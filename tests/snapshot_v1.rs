@@ -132,6 +132,7 @@ async fn graph_snapshot_matches_the_versioned_golden_json() -> Result<(), Box<dy
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // One strict schema mutation table keeps every versioned shape boundary visible.
 fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() -> Result<(), Box<dyn std::error::Error>>
 {
     let schema = snapshot_schema()?;
@@ -236,6 +237,13 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     absent_new_collection_with_count["sections"][0]["observations"][1]["details"]["mounts"]["count"] = json!(1);
     assert!(!validator.is_valid(&absent_new_collection_with_count));
 
+    let mut missing_network_routes = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    missing_network_routes["sections"][2]["observations"][0]["details"]["network"]
+        .as_object_mut()
+        .ok_or("network snapshot must be an object")?
+        .remove("routes");
+    assert!(!validator.is_valid(&missing_network_routes));
+
     let mut absent_with_environment_entries = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
     absent_with_environment_entries["sections"][0]["observations"][0]["details"]["environment"]["state"] =
         json!("absent");
@@ -279,6 +287,10 @@ async fn snapshots_never_leak_sensitive_or_redacted_values() -> Result<(), Box<d
         (
             b"\"Secrets\":[{\"ID\":\"secret-1\",\"Name\":\"db-password\"}]".as_slice(),
             b"\"Secrets\":[{\"ID\":\"DISTINCTIVE_SECRET_ID\",\"Name\":\"DISTINCTIVE_SECRET_NAME\",\"UID\":1000,\"GID\":1001,\"Mode\":288}]".as_slice(),
+        ),
+        (
+            b"\"subnets\":[{\"subnet\":\"10.88.0.0/16\"}]".as_slice(),
+            b"\"subnets\":[{\"subnet\":\"198.18.0.0/24\",\"gateway\":\"198.18.0.1\",\"lease_range\":{\"start_ip\":\"198.18.0.10\",\"end_ip\":\"198.18.0.20\"}}],\"routes\":[{\"destination\":\"198.19.0.0/24\",\"gateway\":\"198.18.0.1\",\"metric\":0,\"route_type\":\"unicast\"}]".as_slice(),
         ),
     ];
     for response in &mut responses {
@@ -326,6 +338,10 @@ async fn snapshots_never_leak_sensitive_or_redacted_values() -> Result<(), Box<d
             "DISTINCTIVE_BIND_DESTINATION",
             "DISTINCTIVE_SECRET_ID",
             "DISTINCTIVE_SECRET_NAME",
+            "198.18.0.1",
+            "198.18.0.10",
+            "198.18.0.20",
+            "198.19.0.0/24",
             "com.docker.compose.project",
             "io.podman.compose.project",
         ] {

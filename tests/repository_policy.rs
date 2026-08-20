@@ -123,6 +123,7 @@ fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
         "fixtures/corpus/rootful-6.1.responses.json",
         "fixtures/corpus/malformed-6.1.responses.json",
         "fixtures/corpus/graph-boundaries-6.1.responses.json",
+        "fixtures/corpus/network-ipam-routes-6.0.responses.json",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }

@@ -35,8 +35,8 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The coverage ledger is parsed as a strict public two-plane catalogue with 56 input-observation and
-50 output-intent rows. Its unit tests reject schema,
+The coverage ledger is parsed as a strict public two-plane catalogue with 66 input-observation and
+50 output-intent rows (116 total). Its unit tests reject schema,
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
 become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
@@ -50,6 +50,18 @@ M7-B1 adds table-driven container core configuration, mount, and secret-grant de
 including absent, malformed-member, local-resolution, and snapshot-redaction boundaries. Volume owner coverage
 distinguishes omitted wire IDs from literal zero and rejects null, negative, non-numeric, and
 out-of-range IDs.
+
+M7-B2a covers typed effective network IPAM subnet, gateway, lease-range, route, metric, and
+route-type observations across the reviewed version boundary. Lease-range endpoints are
+independently optional; tests cover start-only, end-only, empty, outside-CIDR, malformed, and
+complete reversed ranges. Network-subnet CIDR tests retain reviewed host-bit spelling while
+validating containment against normalized network bits. Generic decoding preserves CIDR wire syntax
+defensively, but does not assert host-bit route validity: pinned Podman 5.4 evidence rejects such
+route destinations. The pinned Podman 6.0 corpus covers IPv4 and IPv6 values, route-type defaults
+and every 6.0 route type. Podman 5.x route-type evidence is version-inapplicable but static
+unicast routes still require a gateway; unknown 6.x route types remain bounded unmodelled metadata.
+Malformed members make only their complete subnet or route family malformed. Snapshot tests prove
+topology values remain redacted.
 
 M6-B3a tests cover public and redacted shell/direct health-command forms, timing and startup-health
 dependency, logging driver/label rules, explicit security false values and conflicts, bounded CPU,

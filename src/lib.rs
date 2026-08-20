@@ -63,11 +63,12 @@ pub use observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
     ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
     ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
-    NativeResourceReference, NetworkObservation, NetworkOptionKeys, ObservationField, ObservationHeader,
-    ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment, ProtectedEnvironmentEntry,
-    ProtectedEnvironmentValue, ResourceDetails, ResourceObservation, ResourceObservationState, SecretObservation,
-    UnixId as ObservedUnixId, UnmodelledCompleteness, UnmodelledField, UnmodelledFieldId, VolumeObservation,
-    VolumeOwnerIdWireValue,
+    NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
+    NativeNetworkSubnetObservation, NativeResourceReference, NetworkObservation, NetworkOptionKeys, ObservationField,
+    ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
+    ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
+    ResourceObservationState, SecretObservation, UnixId as ObservedUnixId, UnmodelledCompleteness, UnmodelledField,
+    UnmodelledFieldId, VolumeObservation, VolumeOwnerIdWireValue,
 };
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]

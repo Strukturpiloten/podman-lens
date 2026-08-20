@@ -3,7 +3,7 @@
 //! Wire JSON stays private to this module. The public inventory deliberately retains only typed
 //! identity, relationship, labels, bounded unknown-field metadata, evidence, and findings.
 
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, net::IpAddr};
 
 use serde_json::{Map, Value};
 
@@ -11,8 +11,9 @@ use crate::observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
     ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
     ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
-    NativeRelationship, NativeResourceReference, NetworkObservation, NetworkOptionKeys, ObservationField,
-    ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
+    NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
+    NativeNetworkSubnetObservation, NativeRelationship, NativeResourceReference, NetworkObservation, NetworkOptionKeys,
+    ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
     ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
     ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId, UnmodelledCompleteness, UnmodelledField,
     VolumeObservation, VolumeOwnerIdWireValue,
@@ -880,14 +881,14 @@ fn decode_observation(
     ) = match listed_identity.kind {
         ResourceKind::Container => decode_container(listed_identity, object, options, &evidence)?,
         ResourceKind::Pod => decode_pod(listed_identity, object)?,
-        ResourceKind::Network => decode_network(listed_identity, object)?,
+        ResourceKind::Network => decode_network(listed_identity, object, &evidence)?,
         ResourceKind::Volume => decode_volume(listed_identity, object)?,
         ResourceKind::Image => decode_image(listed_identity, object, options)?,
         ResourceKind::Secret => decode_secret(listed_identity, object)?,
     };
     let mut unknown_fields = UnknownFieldCollector::new(&identity, &evidence, unknown_field_limit);
     unknown_top_level(object, known, &mut unknown_fields);
-    unknown_nested_fields(listed_identity.kind, object, &mut unknown_fields);
+    unknown_nested_fields(listed_identity.kind, object, &evidence, &mut unknown_fields);
     let (unknown_fields, unknown_field_overflow) = unknown_fields.finish();
     if unknown_field_overflow {
         findings.push(InventoryFinding::field(
@@ -973,7 +974,8 @@ type Decoded = (
 type NetworkDecoded = (
     ObservationField<bool>,
     ObservationField<NetworkOptionKeys>,
-    ObservationField<Vec<String>>,
+    ObservationField<Vec<NativeNetworkSubnetObservation>>,
+    ObservationField<Vec<NativeNetworkRouteObservation>>,
 );
 
 struct DecodedDetails {
@@ -1045,12 +1047,13 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
         )),
         ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(labels, relationships)),
         ResourceKind::Network => {
-            let (internal, options, subnets) = network.unwrap_or((
+            let (internal, options, subnets, routes) = network.unwrap_or((
+                ObservationField::NotApplicable,
                 ObservationField::NotApplicable,
                 ObservationField::NotApplicable,
                 ObservationField::NotApplicable,
             ));
-            ResourceDetails::Network(NetworkObservation::new(labels, internal, options, subnets))
+            ResourceDetails::Network(NetworkObservation::new(labels, internal, options, subnets, routes))
         }
         ResourceKind::Volume => ResourceDetails::Volume(VolumeObservation::new(
             labels,
@@ -1367,9 +1370,13 @@ fn decode_configured_text<T>(
     }
 }
 
-fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
+fn decode_network(
+    listed: &ResourceIdentity,
+    object: &Map<String, Value>,
+    evidence: &ResourceEvidence,
+) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["id"], &["name"])?;
-    let (network, mut findings) = decode_network_details(object, &identity);
+    let (network, mut findings) = decode_network_details(object, &identity, evidence);
     let labels = labels(object.get("labels"), "$.labels", &identity, &mut findings);
     Ok((
         identity,
@@ -1395,13 +1402,14 @@ fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> Pod
         None,
         None,
         findings,
-        &["id", "name", "labels", "internal", "options", "subnets"],
+        &["id", "name", "labels", "internal", "options", "subnets", "routes"],
     ))
 }
 
 fn decode_network_details(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
+    evidence: &ResourceEvidence,
 ) -> (NetworkDecoded, Vec<InventoryFinding>) {
     let mut findings = Vec::new();
     let internal = match object.get("internal") {
@@ -1433,43 +1441,331 @@ fn decode_network_details(
             ObservationField::Malformed
         }
     };
-    let subnets = match object.get("subnets") {
-        None | Some(Value::Null) => ObservationField::Absent,
-        Some(Value::Array(subnets)) => {
-            let mut decoded = Vec::new();
-            let mut malformed = false;
-            for (index, subnet) in subnets.iter().enumerate() {
-                let value = subnet
-                    .as_object()
-                    .and_then(|subnet| required_string(subnet, "subnet").ok());
-                if let Some(value) = value {
-                    decoded.push(value.to_owned());
-                } else {
-                    malformed = true;
-                    findings.push(InventoryFinding::at_occurrence(
-                        DiagnosticCode::ResourceMalformed,
-                        identity.clone(),
-                        "$.subnets",
-                        index,
-                    ));
-                }
-            }
-            if malformed {
-                ObservationField::Malformed
-            } else {
-                ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
-            }
-        }
-        Some(_) => {
-            findings.push(InventoryFinding::field(
+    let subnets = decode_native_network_subnets(object.get("subnets"), identity, &mut findings);
+    let routes = decode_native_network_routes(object.get("routes"), identity, evidence, &mut findings);
+    ((internal, options, subnets, routes), findings)
+}
+
+fn decode_native_network_subnets(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativeNetworkSubnetObservation>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            "$.subnets",
+        ));
+        return ObservationField::Malformed;
+    };
+    let mut decoded = Vec::with_capacity(values.len());
+    let mut malformed = false;
+    for (index, value) in values.iter().enumerate() {
+        let path = format!("$.subnets[{index}]");
+        let Some(object) = value.as_object() else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.subnets",
+                index,
             ));
-            ObservationField::Malformed
+            continue;
+        };
+        let cidr = native_cidr_field(
+            object.get("subnet"),
+            &format!("{path}.subnet"),
+            identity,
+            findings,
+            true,
+        );
+        let gateway = native_ip_field(object.get("gateway"), &format!("{path}.gateway"), identity, findings);
+        let lease_range = native_lease_range_field(
+            object.get("lease_range"),
+            cidr.observed().map(ObservedValue::value),
+            &format!("{path}.lease_range"),
+            identity,
+            findings,
+        );
+        let member_malformed = cidr.is_malformed() || gateway.is_malformed() || lease_range.is_malformed();
+        let gateway_outside = matches!(
+            (&cidr, &gateway),
+            (ObservationField::Observed(cidr), ObservationField::Observed(gateway))
+                if !cidr.value().contains(*gateway.value())
+        );
+        if gateway_outside {
+            malformed = true;
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                format!("{path}.gateway"),
+            ));
         }
+        if member_malformed || gateway_outside {
+            malformed = true;
+            continue;
+        }
+        decoded.push(NativeNetworkSubnetObservation::new(cidr, gateway, lease_range));
+    }
+    if malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
+    }
+}
+
+fn decode_native_network_routes(
+    value: Option<&Value>,
+    identity: &ResourceIdentity,
+    evidence: &ResourceEvidence,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativeNetworkRouteObservation>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
     };
-    ((internal, options, subnets), findings)
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            "$.routes",
+        ));
+        return ObservationField::Malformed;
+    };
+    let mut decoded = Vec::with_capacity(values.len());
+    let mut malformed = false;
+    for (index, value) in values.iter().enumerate() {
+        let path = format!("$.routes[{index}]");
+        let Some(object) = value.as_object() else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.routes",
+                index,
+            ));
+            continue;
+        };
+        let destination = native_cidr_field(
+            object.get("destination"),
+            &format!("{path}.destination"),
+            identity,
+            findings,
+            true,
+        );
+        let gateway = native_ip_field(object.get("gateway"), &format!("{path}.gateway"), identity, findings);
+        let metric = native_u32_field(object.get("metric"), &format!("{path}.metric"), identity, findings);
+        let route_type = native_route_type_field(
+            object.get("route_type"),
+            &format!("{path}.route_type"),
+            identity,
+            evidence,
+            findings,
+        );
+        let member_malformed =
+            destination.is_malformed() || gateway.is_malformed() || metric.is_malformed() || route_type.is_malformed();
+        let gateway_wrong_family = matches!(
+            (&destination, &gateway),
+            (ObservationField::Observed(destination), ObservationField::Observed(gateway))
+                if !destination.value().has_address_family(*gateway.value())
+        );
+        let invalid_gateway_semantics = match (&route_type, &gateway) {
+            (ObservationField::Observed(route_type), gateway) => match route_type.value() {
+                NativeNetworkRouteType::Unicast => !gateway.is_observed(),
+                NativeNetworkRouteType::Blackhole
+                | NativeNetworkRouteType::Unreachable
+                | NativeNetworkRouteType::Prohibit => gateway.is_observed(),
+            },
+            // Podman 5.x does not expose route type. Its static routes still have the native
+            // unicast gateway requirement, so an inapplicable nested member must not disable
+            // validation of the independently observed gateway.
+            (ObservationField::VersionInapplicable, gateway) => !gateway.is_observed(),
+            _ => false,
+        };
+        if gateway_wrong_family || invalid_gateway_semantics {
+            malformed = true;
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                format!("{path}.gateway"),
+            ));
+        }
+        if member_malformed || gateway_wrong_family || invalid_gateway_semantics {
+            malformed = true;
+            continue;
+        }
+        decoded.push(NativeNetworkRouteObservation::new(
+            destination,
+            gateway,
+            metric,
+            route_type,
+        ));
+    }
+    if malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
+    }
+}
+
+fn native_cidr_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+    required: bool,
+) -> ObservationField<NativeNetworkCidr> {
+    match value {
+        None | Some(Value::Null) if !required => ObservationField::Absent,
+        Some(Value::String(value)) => match NativeNetworkCidr::parse(value.clone()) {
+            Some(value) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective)),
+            None => native_malformed_field(path, identity, findings),
+        },
+        _ => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_ip_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<IpAddr> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) => match value.parse() {
+            Ok(value) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective)),
+            Err(_) => native_malformed_field(path, identity, findings),
+        },
+        _ => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_u32_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<u32> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Number(value)) => match value.as_u64().and_then(|value| value.try_into().ok()) {
+            Some(value) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective)),
+            None => native_malformed_field(path, identity, findings),
+        },
+        _ => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_lease_range_field(
+    value: Option<&Value>,
+    cidr: Option<&NativeNetworkCidr>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeNetworkLeaseRange> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Object(value)) => {
+            let start = native_ip_field(value.get("start_ip"), &format!("{path}.start_ip"), identity, findings);
+            let end = native_ip_field(value.get("end_ip"), &format!("{path}.end_ip"), identity, findings);
+            if start.is_malformed() || end.is_malformed() {
+                return ObservationField::Malformed;
+            }
+            let outside_cidr = cidr.is_some_and(|cidr| {
+                [start.observed(), end.observed()]
+                    .into_iter()
+                    .flatten()
+                    .any(|endpoint| !cidr.contains(*endpoint.value()))
+            });
+            let reversed = matches!(
+                (&start, &end),
+                (ObservationField::Observed(start), ObservationField::Observed(end))
+                    if !native_address_precedes_or_equals(*start.value(), *end.value())
+            );
+            if outside_cidr || reversed {
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    path,
+                ));
+                return ObservationField::Malformed;
+            }
+            ObservationField::Observed(ObservedValue::new(
+                NativeNetworkLeaseRange::new(start, end),
+                ObservationOrigin::Effective,
+            ))
+        }
+        _ => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_route_type_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    evidence: &ResourceEvidence,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeNetworkRouteType> {
+    if !native_network_route_types_are_available(evidence) {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::VersionInapplicableField,
+            identity.clone(),
+            path,
+        ));
+        return ObservationField::VersionInapplicable;
+    }
+    match value {
+        None | Some(Value::Null) => ObservationField::Observed(ObservedValue::new(
+            NativeNetworkRouteType::Unicast,
+            ObservationOrigin::Effective,
+        )),
+        Some(Value::String(value)) => {
+            let value = match value.as_str() {
+                "unicast" => NativeNetworkRouteType::Unicast,
+                "blackhole" => NativeNetworkRouteType::Blackhole,
+                "unreachable" => NativeNetworkRouteType::Unreachable,
+                "prohibit" => NativeNetworkRouteType::Prohibit,
+                _ => return ObservationField::Unmodelled(crate::UnmodelledFieldId::NetworkRoute),
+            };
+            ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective))
+        }
+        _ => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_network_route_types_are_available(evidence: &ResourceEvidence) -> bool {
+    semver::Version::parse(evidence.engine_version()).is_ok_and(|version| version >= semver::Version::new(6, 0, 0))
+}
+
+fn native_malformed_field<T>(
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<T> {
+    findings.push(InventoryFinding::field(
+        DiagnosticCode::ResourceMalformed,
+        identity.clone(),
+        path,
+    ));
+    ObservationField::Malformed
+}
+
+fn native_address_precedes_or_equals(start: IpAddr, end: IpAddr) -> bool {
+    match (start, end) {
+        (IpAddr::V4(start), IpAddr::V4(end)) => u32::from(start) <= u32::from(end),
+        (IpAddr::V6(start), IpAddr::V6(end)) => u128::from(start) <= u128::from(end),
+        _ => false,
+    }
 }
 
 fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
@@ -2763,7 +3059,12 @@ fn unknown_top_level(object: &Map<String, Value>, known: &[&str], fields: &mut U
     }
 }
 
-fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields: &mut UnknownFieldCollector<'_>) {
+fn unknown_nested_fields(
+    kind: ResourceKind,
+    object: &Map<String, Value>,
+    evidence: &ResourceEvidence,
+    fields: &mut UnknownFieldCollector<'_>,
+) {
     match kind {
         ResourceKind::Container => {
             unknown_object_members(
@@ -2836,7 +3137,7 @@ fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields
             unknown_object_members(object.get("HostConfig"), "$.HostConfig", &["MemorySwappiness"], fields);
         }
         ResourceKind::Pod => unknown_array_object_members(object.get("Containers"), "$.Containers", &["Id"], fields),
-        ResourceKind::Network => unknown_array_object_members(object.get("subnets"), "$.subnets", &["subnet"], fields),
+        ResourceKind::Network => unknown_network_nested_fields(object, evidence, fields),
         ResourceKind::Image => unknown_object_members(object.get("Config"), "$.Config", &["Env"], fields),
         ResourceKind::Secret => {
             unknown_object_members(
@@ -2848,6 +3149,36 @@ fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields
         }
         ResourceKind::Volume => {}
     }
+}
+
+fn unknown_network_nested_fields(
+    object: &Map<String, Value>,
+    evidence: &ResourceEvidence,
+    fields: &mut UnknownFieldCollector<'_>,
+) {
+    unknown_array_object_members(
+        object.get("subnets"),
+        "$.subnets",
+        &["subnet", "gateway", "lease_range"],
+        fields,
+    );
+    if let Some(subnets) = object.get("subnets").and_then(Value::as_array) {
+        for (index, subnet) in subnets.iter().enumerate() {
+            unknown_object_members(
+                subnet.as_object().and_then(|subnet| subnet.get("lease_range")),
+                &format!("$.subnets[{index}].lease_range"),
+                &["start_ip", "end_ip"],
+                fields,
+            );
+        }
+    }
+    unknown_array_object_members(
+        object.get("routes"),
+        "$.routes",
+        &["destination", "gateway", "metric", "route_type"],
+        fields,
+    );
+    unknown_network_route_type_members(object.get("routes"), evidence, fields);
 }
 
 fn unknown_object_members(value: Option<&Value>, path: &str, known: &[&str], fields: &mut UnknownFieldCollector<'_>) {
@@ -2889,6 +3220,31 @@ fn unknown_unsupported_mounts(value: Option<&Value>, fields: &mut UnknownFieldCo
             .and_then(Value::as_str)
             .is_some_and(|kind| !matches!(kind, "volume" | "bind"));
         if unsupported && !fields.push(|| format!("$.Mounts[{index}]"), mount) {
+            break;
+        }
+    }
+}
+
+fn unknown_network_route_type_members(
+    value: Option<&Value>,
+    evidence: &ResourceEvidence,
+    fields: &mut UnknownFieldCollector<'_>,
+) {
+    let Some(routes) = value.and_then(Value::as_array) else {
+        return;
+    };
+    for (index, route) in routes.iter().enumerate() {
+        let Some(route) = route.as_object() else {
+            continue;
+        };
+        let Some(route_type) = route.get("route_type") else {
+            continue;
+        };
+        let unsupported = !native_network_route_types_are_available(evidence)
+            || !route_type
+                .as_str()
+                .is_some_and(|value| matches!(value, "unicast" | "blackhole" | "unreachable" | "prohibit"));
+        if unsupported && !fields.push(|| format!("$.routes[{index}].route_type"), route_type) {
             break;
         }
     }
@@ -2993,6 +3349,7 @@ mod typed_observation_constructor_tests {
             )),
             ResourceDetails::Pod(PodObservation::new(ObservationField::Absent, ObservationField::Absent)),
             ResourceDetails::Network(NetworkObservation::new(
+                ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,

@@ -118,7 +118,13 @@ impl ObservationTestAccess for ResourceObservation {
             subnets: value
                 .subnets()
                 .observed()
-                .map(|value| value.value().clone())
+                .map(|value| {
+                    value
+                        .value()
+                        .iter()
+                        .filter_map(|subnet| subnet.cidr().observed().map(|cidr| cidr.value().as_str().to_owned()))
+                        .collect()
+                })
                 .unwrap_or_default(),
         })
     }
@@ -408,6 +414,390 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
                 .network()
         )
         .contains("fixture-option")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_network_ipam_and_routes_are_typed_effective_observations() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[11] = json(
+        r#"{
+          "id":"network-1","name":"app",
+          "subnets":[
+            {"subnet":"192.0.2.0/24","gateway":"192.0.2.1","lease_range":{"start_ip":"192.0.2.10","end_ip":"192.0.2.20"}},
+            {"subnet":"2001:db8:1::/64","gateway":"2001:db8:1::1","lease_range":{"start_ip":"2001:db8:1::10","end_ip":"2001:db8:1::20"}}
+          ],
+          "routes":[
+            {"destination":"198.51.100.0/24","gateway":"192.0.2.1"},
+            {"destination":"203.0.113.0/24","gateway":"192.0.2.1","metric":0,"route_type":"unicast"},
+            {"destination":"2001:db8:2::/64","route_type":"blackhole"},
+            {"destination":"2001:db8:3::/64","route_type":"unreachable"},
+            {"destination":"2001:db8:4::/64","route_type":"prohibit"}
+          ]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Network(network) = inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a network".into());
+    };
+    let subnets = network.subnets().observed().ok_or("subnets must be observed")?;
+    assert_eq!(subnets.origin(), ObservationOrigin::Effective);
+    assert_eq!(subnets.value().len(), 2);
+    let ipv4 = &subnets.value()[0];
+    assert_eq!(
+        ipv4.cidr().observed().map(|value| value.value().as_str()),
+        Some("192.0.2.0/24")
+    );
+    assert_eq!(
+        ipv4.gateway().observed().map(|value| value.value().to_string()),
+        Some("192.0.2.1".to_owned())
+    );
+    assert_eq!(
+        ipv4.lease_range().observed().map(|value| {
+            (
+                value
+                    .value()
+                    .start_ip()
+                    .observed()
+                    .map(|start| start.value().to_string()),
+                value.value().end_ip().observed().map(|end| end.value().to_string()),
+            )
+        }),
+        Some((Some("192.0.2.10".to_owned()), Some("192.0.2.20".to_owned())))
+    );
+    assert_eq!(
+        ipv4.cidr().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        ipv4.gateway().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        ipv4.lease_range().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert_eq!(
+        subnets.value()[1].cidr().observed().map(|value| value.value().as_str()),
+        Some("2001:db8:1::/64")
+    );
+
+    let routes = network.routes().observed().ok_or("routes must be observed")?;
+    assert_eq!(routes.origin(), ObservationOrigin::Effective);
+    assert_eq!(routes.value().len(), 5);
+    assert_eq!(
+        routes.value()[0].route_type().observed().map(|value| *value.value()),
+        Some(podman_lens::NativeNetworkRouteType::Unicast)
+    );
+    assert_eq!(
+        routes.value()[0]
+            .route_type()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert!(matches!(routes.value()[0].metric(), ObservationField::Absent));
+    assert_eq!(
+        routes.value()[1].metric().observed().map(|value| *value.value()),
+        Some(0)
+    );
+    assert_eq!(
+        routes.value()[2].route_type().observed().map(|value| *value.value()),
+        Some(podman_lens::NativeNetworkRouteType::Blackhole)
+    );
+    assert_eq!(
+        routes.value()[3].route_type().observed().map(|value| *value.value()),
+        Some(podman_lens::NativeNetworkRouteType::Unreachable)
+    );
+    assert_eq!(
+        routes.value()[4].route_type().observed().map(|value| *value.value()),
+        Some(podman_lens::NativeNetworkRouteType::Prohibit)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_network_lease_endpoints_are_independently_optional_effective_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[11] = json(
+        r#"{
+          "id":"network-1","name":"app",
+          "subnets":[
+            {"subnet":"192.0.2.0/24","lease_range":{"start_ip":"192.0.2.10"}},
+            {"subnet":"198.51.100.0/24","lease_range":{"end_ip":"198.51.100.20"}},
+            {"subnet":"203.0.113.0/24","lease_range":{}}
+          ]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Network(network) = inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a network".into());
+    };
+    let subnets = network.subnets().observed().ok_or("subnets must be observed")?;
+    let ranges = subnets
+        .value()
+        .iter()
+        .map(|subnet| subnet.lease_range().observed().ok_or("lease range must be observed"))
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(ranges.len(), 3);
+    assert_eq!(ranges[0].origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        ranges[0]
+            .value()
+            .start_ip()
+            .observed()
+            .map(|value| value.value().to_string()),
+        Some("192.0.2.10".to_owned())
+    );
+    assert!(matches!(ranges[0].value().end_ip(), ObservationField::Absent));
+    assert!(matches!(ranges[1].value().start_ip(), ObservationField::Absent));
+    assert_eq!(
+        ranges[1]
+            .value()
+            .end_ip()
+            .observed()
+            .map(|value| value.value().to_string()),
+        Some("198.51.100.20".to_owned())
+    );
+    assert!(matches!(ranges[2].value().start_ip(), ObservationField::Absent));
+    assert!(matches!(ranges[2].value().end_ip(), ObservationField::Absent));
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_native_network_lease_members_poison_the_complete_subnet_family()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            r#"{"id":"network-1","name":"app","subnets":[{"subnet":"192.0.2.0/24","lease_range":{"start_ip":"192.0.3.10"}}]}"#,
+            "$.subnets[0].lease_range",
+        ),
+        (
+            r#"{"id":"network-1","name":"app","subnets":[{"subnet":"192.0.2.0/24","lease_range":{"start_ip":false}}]}"#,
+            "$.subnets[0].lease_range.start_ip",
+        ),
+        (
+            r#"{"id":"network-1","name":"app","subnets":[{"subnet":"192.0.2.0/24","lease_range":{"start_ip":"192.0.2.20","end_ip":"192.0.2.10"}}]}"#,
+            "$.subnets[0].lease_range",
+        ),
+    ];
+    for (body, path) in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[11] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Network)
+            .ok_or("network section must be present")?
+            .observations()[0];
+        let ResourceDetails::Network(network) = observation.details() else {
+            return Err("fixture must decode as a network".into());
+        };
+        assert!(matches!(network.subnets(), ObservationField::Malformed));
+        assert!(
+            observation
+                .header()
+                .findings()
+                .iter()
+                .any(|finding| finding.field_path() == Some(path))
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_network_cidr_preserves_host_bits_and_normalizes_only_for_containment()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[11] = json(
+        r#"{
+          "id":"network-1","name":"app",
+          "subnets":[{
+            "subnet":"192.0.2.99/24",
+            "gateway":"192.0.2.1",
+            "lease_range":{"start_ip":"192.0.2.10","end_ip":"192.0.2.20"}
+          }]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Network(network) = inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a network".into());
+    };
+    let subnet = &network.subnets().observed().ok_or("subnets must be observed")?.value()[0];
+    assert_eq!(
+        subnet.cidr().observed().map(|value| value.value().as_str()),
+        Some("192.0.2.99/24")
+    );
+    assert!(subnet.lease_range().observed().is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            "5.4.0",
+            11,
+            r#"{"id":"network-1","name":"app","routes":[{"destination":"198.51.100.0/24","gateway":"192.0.2.1","route_type":"blackhole"}]}"#,
+            true,
+        ),
+        (
+            "6.1.0",
+            11,
+            r#"{"id":"network-1","name":"app","routes":[{"destination":"198.51.100.0/24","gateway":"192.0.2.1"}]}"#,
+            false,
+        ),
+    ];
+    for (version, response_index, body, version_inapplicable) in cases {
+        let mut responses = fixture_responses(version)?;
+        responses[response_index] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Network)
+            .ok_or("network section must be present")?
+            .observations()[0];
+        let ResourceDetails::Network(network) = observation.details() else {
+            return Err("fixture must decode as a network".into());
+        };
+        let route = &network
+            .routes()
+            .observed()
+            .ok_or("route collection must remain observed")?
+            .value()[0];
+        if version_inapplicable {
+            assert!(matches!(route.route_type(), ObservationField::VersionInapplicable));
+            assert!(observation.header().findings().iter().any(|finding| {
+                finding.code() == DiagnosticCode::VersionInapplicableField
+                    && finding.field_path() == Some("$.routes[0].route_type")
+            }));
+            assert!(
+                observation
+                    .header()
+                    .unmodelled_fields()
+                    .iter()
+                    .any(|field| { field.path() == "$.routes[0].route_type" })
+            );
+        } else {
+            assert_eq!(
+                route.route_type().observed().map(|value| *value.value()),
+                Some(podman_lens::NativeNetworkRouteType::Unicast)
+            );
+        }
+    }
+
+    let malformed_cases = [
+        (
+            r#"{"id":"network-1","name":"app","subnets":[{"subnet":"192.0.2.0/24","gateway":"2001:db8::1"}]}"#,
+            "$.subnets[0].gateway",
+        ),
+        (
+            r#"{"id":"network-1","name":"app","subnets":[{"subnet":"192.0.2.0/24","lease_range":{"start_ip":"192.0.2.20","end_ip":"192.0.2.10"}}]}"#,
+            "$.subnets[0].lease_range",
+        ),
+        (
+            r#"{"id":"network-1","name":"app","routes":[{"destination":"192.0.2.0/24","gateway":"192.0.2.1","route_type":"blackhole"}]}"#,
+            "$.routes[0].gateway",
+        ),
+        (
+            r#"{"id":"network-1","name":"app","routes":[{"destination":"192.0.2.0/24","gateway":false}]}"#,
+            "$.routes[0].gateway",
+        ),
+    ];
+    for (body, path) in malformed_cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[11] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Network)
+            .ok_or("network section must be present")?
+            .observations()[0];
+        assert!(
+            observation
+                .header()
+                .findings()
+                .iter()
+                .any(|finding| finding.field_path() == Some(path))
+        );
+        let ResourceDetails::Network(network) = observation.details() else {
+            return Err("fixture must decode as a network".into());
+        };
+        if path.starts_with("$.subnets") {
+            assert!(matches!(network.subnets(), ObservationField::Malformed));
+        } else {
+            assert!(matches!(network.routes(), ObservationField::Malformed));
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn podman_five_route_without_gateway_poisons_the_complete_route_family() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Route type was not a 5.x inspect field, but a missing gateway must still poison the
+    // complete static-route family because the effective native route is unicast.
+    let mut responses = fixture_responses("5.4.0")?;
+    responses[11] = json(r#"{"id":"network-1","name":"app","routes":[{"destination":"198.51.100.0/24"}]}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()[0];
+    let ResourceDetails::Network(network) = observation.details() else {
+        return Err("fixture must decode as a network".into());
+    };
+    assert!(matches!(network.routes(), ObservationField::Malformed));
+    assert!(observation.header().findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some("$.routes[0].gateway")
+    }));
+    Ok(())
+}
+
+#[tokio::test]
+async fn unknown_podman_six_route_type_remains_bounded_unmodelled_metadata() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[11] = json(
+        r#"{"id":"network-1","name":"app","routes":[{"destination":"198.51.100.0/24","gateway":"192.0.2.1","route_type":"future-route"}]}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section must be present")?
+        .observations()[0];
+    let ResourceDetails::Network(network) = observation.details() else {
+        return Err("fixture must decode as a network".into());
+    };
+    let route = &network
+        .routes()
+        .observed()
+        .ok_or("route collection must remain observed")?
+        .value()[0];
+    assert!(matches!(
+        route.route_type(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::NetworkRoute)
+    ));
+    assert!(
+        observation
+            .header()
+            .unmodelled_fields()
+            .iter()
+            .any(|field| field.path() == "$.routes[0].route_type")
     );
     Ok(())
 }

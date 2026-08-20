@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "sanitized-network-ipam-routes-inventory",
+  "engine_version": "6.0.0",
+  "api_version": "6.0.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "6.0.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "6.0.0" }] }
+    },
+    { "status": 200, "headers": [], "body": [] },
+    { "status": 200, "headers": [], "body": [] },
+    { "status": 200, "headers": [], "body": [{ "id": "network-ipam", "name": "ipam-routes" }] },
+    { "status": 200, "headers": [], "body": { "Volumes": [] } },
+    { "status": 200, "headers": [], "body": [] },
+    { "status": 200, "headers": [], "body": [] },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "id": "network-ipam",
+        "name": "ipam-routes",
+        "subnets": [
+          {
+            "subnet": "192.0.2.0/24",
+            "gateway": "192.0.2.1",
+            "lease_range": { "start_ip": "192.0.2.10", "end_ip": "192.0.2.20" }
+          },
+          {
+            "subnet": "2001:db8:1::/64",
+            "gateway": "2001:db8:1::1",
+            "lease_range": { "start_ip": "2001:db8:1::10", "end_ip": "2001:db8:1::20" }
+          }
+        ],
+        "routes": [
+          { "destination": "198.51.100.0/24", "gateway": "192.0.2.1" },
+          {
+            "destination": "203.0.113.0/24",
+            "gateway": "192.0.2.1",
+            "metric": 0,
+            "route_type": "unicast"
+          },
+          { "destination": "2001:db8:2::/64", "route_type": "blackhole" },
+          { "destination": "2001:db8:3::/64", "route_type": "unreachable" },
+          { "destination": "2001:db8:4::/64", "route_type": "prohibit" }
+        ]
+      }
+    }
+  ]
+}

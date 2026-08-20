@@ -145,6 +145,17 @@ coalesced ID/name relationship evidence and effective direct UID/GID/mode values
 expose a secret delivery form or target. Invalid aliases, malformed grant members, and unsupported
 mount kinds block that relationship family rather than creating a partial traversal edge.
 
+M7-B2a adds typed, observation-only network-resource IPAM subnets and static routes. Native CIDR,
+gateway, independently optional lease-range endpoints, destination, metric, and route-type values
+are effective inspect evidence, not deployment intent. Network-subnet CIDR spellings remain exact
+observations, including reviewed host-bit spellings; containment normalizes network bits because
+cross-version upstream normalization is not yet claimed. Generic CIDR parsing preserves valid wire
+syntax defensively, but does not claim host-bit static-route destinations are valid: pinned Podman
+5.4 evidence rejects them. Route type is version-inapplicable before Podman 6.0 and becomes an
+effective default of `unicast` when absent from a reviewed 6.0+ response. Reversed complete lease
+ranges are rejected as a PodmanLens defensive consistency policy; that is not a claim about
+Podman's own validation.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

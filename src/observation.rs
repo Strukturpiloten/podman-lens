@@ -8,6 +8,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
+    net::IpAddr,
 };
 
 use crate::{
@@ -154,6 +155,8 @@ pub enum UnmodelledFieldId {
     PodTopLevel,
     /// Network subnet data outside the bounded typed subset.
     NetworkSubnet,
+    /// Network route data outside the bounded typed subset.
+    NetworkRoute,
     /// Other network inspect data outside the bounded typed subset.
     NetworkTopLevel,
     /// Volume inspect data outside the bounded typed subset.
@@ -182,6 +185,7 @@ impl UnmodelledFieldId {
             Self::PodMember => "podman.native.pod.member",
             Self::PodTopLevel => "podman.native.pod.top-level",
             Self::NetworkSubnet => "podman.native.network.subnet",
+            Self::NetworkRoute => "podman.native.network.route",
             Self::NetworkTopLevel => "podman.native.network.top-level",
             Self::VolumeTopLevel => "podman.native.volume.top-level",
             Self::ImageConfig => "podman.native.image.config",
@@ -263,6 +267,7 @@ fn semantic_unmodelled_id(kind: ResourceKind, path: &str) -> UnmodelledFieldId {
         (ResourceKind::Container, value) if value.starts_with("$.Mounts") => UnmodelledFieldId::ContainerMount,
         (ResourceKind::Pod, value) if value.starts_with("$.Containers") => UnmodelledFieldId::PodMember,
         (ResourceKind::Network, value) if value.starts_with("$.subnets") => UnmodelledFieldId::NetworkSubnet,
+        (ResourceKind::Network, value) if value.starts_with("$.routes") => UnmodelledFieldId::NetworkRoute,
         (ResourceKind::Image, value) if value.starts_with("$.Config") => UnmodelledFieldId::ImageConfig,
         (ResourceKind::Secret, value) if value.starts_with("$.Spec") => UnmodelledFieldId::SecretSpec,
         (ResourceKind::Container, _) => UnmodelledFieldId::ContainerTopLevel,
@@ -1039,7 +1044,8 @@ pub struct NetworkObservation {
     labels: ObservationField<Labels>,
     internal: ObservationField<bool>,
     options: ObservationField<NetworkOptionKeys>,
-    subnets: ObservationField<Vec<String>>,
+    subnets: ObservationField<Vec<NativeNetworkSubnetObservation>>,
+    routes: ObservationField<Vec<NativeNetworkRouteObservation>>,
 }
 
 impl NetworkObservation {
@@ -1047,13 +1053,15 @@ impl NetworkObservation {
         labels: ObservationField<Labels>,
         internal: ObservationField<bool>,
         options: ObservationField<NetworkOptionKeys>,
-        subnets: ObservationField<Vec<String>>,
+        subnets: ObservationField<Vec<NativeNetworkSubnetObservation>>,
+        routes: ObservationField<Vec<NativeNetworkRouteObservation>>,
     ) -> Self {
         Self {
             labels,
             internal,
             options,
             subnets,
+            routes,
         }
     }
     /// Returns the configured network labels or their observation state.
@@ -1072,13 +1080,193 @@ impl NetworkObservation {
     pub fn options(&self) -> &ObservationField<NetworkOptionKeys> {
         &self.options
     }
-    /// Returns configured subnet spellings or their observation state.
+    /// Returns typed effective native IPAM subnet observations or their observation state.
     #[must_use]
-    pub fn subnets(&self) -> &ObservationField<Vec<String>> {
+    pub fn subnets(&self) -> &ObservationField<Vec<NativeNetworkSubnetObservation>> {
         &self.subnets
     }
+    /// Returns typed effective native static-route observations or their observation state.
+    #[must_use]
+    pub fn routes(&self) -> &ObservationField<Vec<NativeNetworkRouteObservation>> {
+        &self.routes
+    }
 }
-observation_debug!(NetworkObservation, labels, internal, options, subnets);
+observation_debug!(NetworkObservation, labels, internal, options, subnets, routes);
+
+/// A syntax-validated native CIDR wire spelling observed from network inspection.
+///
+/// This is defensive raw-wire preservation, not [`crate::NetworkCidr`] deployment intent or a
+/// claim that every accepted spelling is valid for every native field and Podman version.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkCidr {
+    spelling: String,
+    network: IpAddr,
+    prefix: u8,
+}
+
+impl NativeNetworkCidr {
+    pub(crate) fn parse(spelling: String) -> Option<Self> {
+        let (network, prefix) = spelling.split_once('/')?;
+        let network = network.parse::<IpAddr>().ok()?;
+        let prefix = prefix.parse::<u8>().ok()?;
+        (prefix <= if network.is_ipv4() { 32 } else { 128 }).then_some(Self {
+            spelling,
+            network,
+            prefix,
+        })
+    }
+
+    /// Returns the exact syntax-validated native CIDR wire spelling.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.spelling
+    }
+
+    /// Returns whether an address of the same family lies within this CIDR.
+    #[must_use]
+    pub(crate) fn contains(&self, address: IpAddr) -> bool {
+        self.network.is_ipv4() == address.is_ipv4()
+            && native_masked_address(self.network, self.prefix) == native_masked_address(address, self.prefix)
+    }
+
+    /// Returns whether an address has the same family as this CIDR.
+    #[must_use]
+    pub(crate) const fn has_address_family(&self, address: IpAddr) -> bool {
+        self.network.is_ipv4() == address.is_ipv4()
+    }
+}
+
+/// An effective native network lease range with independently optional endpoint evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkLeaseRange {
+    start_ip: ObservationField<IpAddr>,
+    end_ip: ObservationField<IpAddr>,
+}
+
+impl NativeNetworkLeaseRange {
+    pub(crate) const fn new(start_ip: ObservationField<IpAddr>, end_ip: ObservationField<IpAddr>) -> Self {
+        Self { start_ip, end_ip }
+    }
+    /// Returns the optional inclusive lease-range start address or its observation state.
+    #[must_use]
+    pub const fn start_ip(&self) -> &ObservationField<IpAddr> {
+        &self.start_ip
+    }
+    /// Returns the optional inclusive lease-range end address or its observation state.
+    #[must_use]
+    pub const fn end_ip(&self) -> &ObservationField<IpAddr> {
+        &self.end_ip
+    }
+}
+
+/// One typed native IPAM subnet observation. Every nested member keeps its own observation state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkSubnetObservation {
+    cidr: ObservationField<NativeNetworkCidr>,
+    gateway: ObservationField<IpAddr>,
+    lease_range: ObservationField<NativeNetworkLeaseRange>,
+}
+
+impl NativeNetworkSubnetObservation {
+    pub(crate) const fn new(
+        cidr: ObservationField<NativeNetworkCidr>,
+        gateway: ObservationField<IpAddr>,
+        lease_range: ObservationField<NativeNetworkLeaseRange>,
+    ) -> Self {
+        Self {
+            cidr,
+            gateway,
+            lease_range,
+        }
+    }
+    /// Returns the native subnet CIDR evidence.
+    #[must_use]
+    pub fn cidr(&self) -> &ObservationField<NativeNetworkCidr> {
+        &self.cidr
+    }
+    /// Returns the optional effective native gateway.
+    #[must_use]
+    pub fn gateway(&self) -> &ObservationField<IpAddr> {
+        &self.gateway
+    }
+    /// Returns the optional effective native lease range.
+    #[must_use]
+    pub fn lease_range(&self) -> &ObservationField<NativeNetworkLeaseRange> {
+        &self.lease_range
+    }
+}
+
+/// A route kind observed from the native network inspect response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeNetworkRouteType {
+    /// A forwarding route that requires a gateway.
+    Unicast,
+    /// A route that drops matching traffic.
+    Blackhole,
+    /// A route that reports the destination as unreachable.
+    Unreachable,
+    /// A route that reports the destination as administratively prohibited.
+    Prohibit,
+}
+
+/// One typed native static-route observation. Every nested member keeps its own observation state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkRouteObservation {
+    destination: ObservationField<NativeNetworkCidr>,
+    gateway: ObservationField<IpAddr>,
+    metric: ObservationField<u32>,
+    route_type: ObservationField<NativeNetworkRouteType>,
+}
+
+impl NativeNetworkRouteObservation {
+    pub(crate) const fn new(
+        destination: ObservationField<NativeNetworkCidr>,
+        gateway: ObservationField<IpAddr>,
+        metric: ObservationField<u32>,
+        route_type: ObservationField<NativeNetworkRouteType>,
+    ) -> Self {
+        Self {
+            destination,
+            gateway,
+            metric,
+            route_type,
+        }
+    }
+    /// Returns the native destination CIDR evidence.
+    #[must_use]
+    pub fn destination(&self) -> &ObservationField<NativeNetworkCidr> {
+        &self.destination
+    }
+    /// Returns the optional effective native route gateway.
+    #[must_use]
+    pub fn gateway(&self) -> &ObservationField<IpAddr> {
+        &self.gateway
+    }
+    /// Returns the optional effective native route metric, preserving an explicit zero.
+    #[must_use]
+    pub fn metric(&self) -> &ObservationField<u32> {
+        &self.metric
+    }
+    /// Returns the native route type. This is version-inapplicable before Podman 6.0.
+    #[must_use]
+    pub fn route_type(&self) -> &ObservationField<NativeNetworkRouteType> {
+        &self.route_type
+    }
+}
+
+fn native_masked_address(address: IpAddr, prefix: u8) -> IpAddr {
+    match address {
+        IpAddr::V4(address) => {
+            let mask = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix) };
+            IpAddr::V4(std::net::Ipv4Addr::from(u32::from(address) & mask))
+        }
+        IpAddr::V6(address) => {
+            let mask = if prefix == 0 { 0 } else { u128::MAX << (128 - prefix) };
+            IpAddr::V6(std::net::Ipv6Addr::from(u128::from(address) & mask))
+        }
+    }
+}
 
 /// Public, value-free network option observation.
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -1381,6 +1569,7 @@ fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> Re
             ResourceDetails::Pod(PodObservation::new(incomplete_field(state), incomplete_field(state)))
         }
         ResourceKind::Network => ResourceDetails::Network(NetworkObservation::new(
+            incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),

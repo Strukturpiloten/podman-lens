@@ -30,7 +30,16 @@ where applicable, reviewed target versions, public access point, diagnostic, and
 exhaustive after `PLN0021` or an incomplete observation. The old generic record projection has no
 alias or deprecation period because this is a pre-release API.
 
-The packaged ledger currently contains 56 input-observation rows and 50 output-intent rows. M6-B4
+M7-B2a adds input-only `NativeNetworkCidr`, `NativeNetworkLeaseRange`, subnet, and route
+observation types. `NativeNetworkLeaseRange::start_ip` and `end_ip` each expose an
+`ObservationField<IpAddr>` because Podman's native object permits either endpoint independently.
+`NetworkObservation::subnets` preserves exact network-subnet CIDR evidence, including reviewed
+host-bit spellings; callers must not treat it as a normalized deployment value. Generic native CIDR
+wire parsing preserves valid syntax defensively and does not claim that host-bit route destinations
+are valid on every reviewed Podman version.
+
+The packaged ledger currently contains 66 input-observation rows and 50 output-intent rows (116
+total). M6-B4
 extends the latter beyond container runtime settings to container mounts and secret grants, volume
 ownership, image acquisition policy/source portability, and the explicitly blocked pod-infra mount
 surface. It remains a strict catalogue: each row fixes its resource kind, target applicability,

@@ -424,6 +424,11 @@
                 "state": "observed",
                 "origin": "effective",
                 "count": 1
+              },
+              "routes": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
               }
             },
             "memory_swappiness": null,

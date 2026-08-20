@@ -275,3 +275,7 @@ use its native default. Pod networking has no corresponding order contract.
 
 The input API does not discover an ambient connection, parse `podman` command output, execute
 commands, choose BoxFerry mappings, or decide a target pod layout.
+
+BoxFerry mapping is deliberately downstream policy. Its exact first-release field-state,
+provenance, resource, and output-bridge rules are documented in
+`boxferry-integration.md`; compatibility boundaries are summarized in `compatibility.md`.

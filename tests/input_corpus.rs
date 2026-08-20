@@ -161,7 +161,7 @@ fn corpus_manifest_verifies_fixed_provenance_and_hashes() -> Result<(), Box<dyn 
     assert_eq!(manifest.schema_version, 1);
     assert_eq!(manifest.evidence_kind, "source-derived-synthetic-sanitized");
     assert!(manifest.sanitization.contains("no real"));
-    assert_eq!(manifest.artifacts.len(), 5);
+    assert_eq!(manifest.artifacts.len(), 9);
     for artifact in manifest.artifacts {
         assert!(artifact.synthetic, "{} must explicitly be synthetic", artifact.name);
         assert!(artifact.engine_version.starts_with("5.") || artifact.engine_version.starts_with("6."));
@@ -177,6 +177,46 @@ fn corpus_manifest_verifies_fixed_provenance_and_hashes() -> Result<(), Box<dyn 
             write!(&mut digest, "{byte:02x}").expect("writing into a String cannot fail");
         }
         assert_eq!(digest, artifact.sha256, "{} hash", artifact.name);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn pinned_boxferry_corpora_cover_all_six_resource_kinds() -> Result<(), Box<dyn std::error::Error>> {
+    for (fixture, version, container_count) in [
+        ("boxferry-5.7.responses.json", "5.7.0", 1),
+        ("boxferry-6.0.responses.json", "6.0.0", 1),
+        ("boxferry-6.1.responses.json", "6.1.0", 2),
+    ] {
+        let inventory = inventory(fixture).await?;
+        assert_eq!(inventory.service().engine_version().original(), version);
+        assert_eq!(inventory.service().api_version().original(), version);
+
+        for kind in [
+            ResourceKind::Container,
+            ResourceKind::Pod,
+            ResourceKind::Network,
+            ResourceKind::Volume,
+            ResourceKind::Image,
+            ResourceKind::Secret,
+        ] {
+            let section = inventory.section(kind).ok_or("all fixed sections must exist")?;
+            assert_eq!(
+                section.availability(),
+                podman_lens::InventorySectionAvailability::Available,
+                "{fixture} {kind:?} must be available"
+            );
+            let expected = if kind == ResourceKind::Container {
+                container_count
+            } else {
+                1
+            };
+            assert_eq!(section.observations().len(), expected, "{fixture} {kind:?}");
+            assert!(section.observations().iter().all(|observation| {
+                observation.header().state() == podman_lens::ResourceObservationState::Complete
+                    && observation.header().evidence().engine_version() == version
+            }));
+        }
     }
     Ok(())
 }

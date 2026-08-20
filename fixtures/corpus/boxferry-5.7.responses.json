@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "boxferry-all-resources",
+  "engine_version": "5.7.0",
+  "api_version": "5.7.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "5.7.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "5.7.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "Id": "bf57-container", "Names": ["bf57-service"] }]
+    },
+    { "status": 200, "headers": [], "body": [{ "Id": "bf57-pod", "Name": "bf57-group" }] },
+    { "status": 200, "headers": [], "body": [{ "id": "bf57-network", "name": "bf57-network" }] },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "bf57-volume" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "Id": "sha256:bf57", "Names": ["registry.example.invalid/boxferry/app:5.7"] }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "bf57-secret", "Spec": { "Name": "bf57-secret" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "bf57-container",
+        "Name": "bf57-service",
+        "Image": "sha256:bf57",
+        "ImageName": "registry.example.invalid/boxferry/app:5.7",
+        "Pod": "bf57-pod",
+        "Config": {
+          "Image": "registry.example.invalid/boxferry/app:5.7",
+          "Cmd": ["serve"],
+          "Labels": { "org.example.fixture": "5.7" },
+          "Secrets": [{ "ID": "bf57-secret", "Name": "bf57-secret" }]
+        },
+        "NetworkSettings": { "Networks": { "bf57-network": {} } },
+        "Mounts": [
+          { "Type": "volume", "Name": "bf57-volume", "Destination": "/var/lib/app", "RW": true }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "bf57-pod",
+        "Name": "bf57-group",
+        "CreateInfra": true,
+        "Containers": [{ "Id": "bf57-container" }],
+        "InfraConfig": { "Networks": ["bf57-network"] }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "id": "bf57-network",
+        "name": "bf57-network",
+        "internal": false,
+        "subnets": [{ "subnet": "10.57.0.0/24", "gateway": "10.57.0.1" }]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Name": "bf57-volume",
+        "Driver": "local",
+        "CreatedAt": "2026-08-20T05:07:00Z",
+        "Anonymous": false
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "sha256:bf57",
+        "RepoTags": ["registry.example.invalid/boxferry/app:5.7"],
+        "RepoDigests": ["registry.example.invalid/boxferry/app@sha256:bf57"],
+        "Digest": "sha256:bf57",
+        "Created": "2026-08-19T05:07:00Z",
+        "Architecture": "amd64",
+        "Os": "linux"
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "ID": "bf57-secret",
+        "CreatedAt": "2026-08-18T05:07:00Z",
+        "UpdatedAt": "2026-08-19T05:07:00Z",
+        "Spec": { "Name": "bf57-secret", "Driver": { "Name": "file", "Options": {} } }
+      }
+    }
+  ]
+}

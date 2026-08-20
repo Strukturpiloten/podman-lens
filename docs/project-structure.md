@@ -14,7 +14,7 @@ have a demonstrated public-contract boundary.
 | `src/networking.rs`    | Typed declared networking, IPAM, DNS, ports, and host aliases          |
 | `src/render.rs`        | Review-only CLI and Libpod deployment representations                  |
 | `catalogue/v1/`        | Versioned compatibility, rendering evidence, and native-field ledger   |
-| `fixtures/corpus/`     | Fixed sanitized input and graph-boundary corpus                        |
+| `fixtures/corpus/`     | Fixed sanitized input, graph, and downstream-adapter corpus            |
 | `fixtures/snapshots/`  | Exact versioned snapshot goldens                                       |
 | `fixtures/deployment/` | Byte-exact deployment JSON and POSIX-script goldens                    |
 | `docs/schemas/`        | Public JSON Schemas                                                    |
@@ -25,3 +25,6 @@ have a demonstrated public-contract boundary.
 
 Future protocol, resource-model, discovery, and plan modules must follow the layers in the
 [architecture](architecture.md), not a root-level convenience API.
+
+The downstream mapping and release acceptance documents live beside the architecture because they
+govern public consumption without introducing a BoxFerry crate dependency.

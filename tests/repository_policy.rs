@@ -59,8 +59,11 @@ fn required_governance_documents_exist() {
         "CONTRIBUTING.md",
         "SECURITY.md",
         "docs/api-stability.md",
+        "docs/boxferry-integration.md",
+        "docs/compatibility.md",
         "docs/dependency-policy.md",
         "docs/development-environment.md",
+        "docs/release-readiness.md",
         "docs/releasing.md",
         "docs/testing.md",
     ] {
@@ -124,6 +127,10 @@ fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
         "fixtures/corpus/malformed-6.1.responses.json",
         "fixtures/corpus/graph-boundaries-6.1.responses.json",
         "fixtures/corpus/network-ipam-routes-6.0.responses.json",
+        "fixtures/corpus/boxferry-5.7.responses.json",
+        "fixtures/corpus/boxferry-6.0.responses.json",
+        "fixtures/corpus/boxferry-6.1.responses.json",
+        "fixtures/corpus/boxferry-adapter-6.1.expected.json",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }

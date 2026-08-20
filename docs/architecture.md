@@ -20,6 +20,10 @@ cross-format semantics.
 PodmanLens is a library. It must not shell out to `podman` to acquire input, depend on BoxFerry, or
 execute generated operations.
 
+The downstream dependency direction and exact origin-gated neutral mapping are normative in
+`boxferry-integration.md`. Version, resource-kind, and transport support are summarized in
+`compatibility.md`; neither document creates a runtime dependency on BoxFerry.
+
 ## Data flow
 
 ```text

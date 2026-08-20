@@ -2,6 +2,9 @@
 
 - [Architecture](architecture.md)
 - [Library API](library-api.md)
+- [BoxFerry integration contract](boxferry-integration.md)
+- [Compatibility matrices](compatibility.md)
+- [First-release readiness](release-readiness.md)
 - [Roadmap](roadmap.md)
 - [Project structure](project-structure.md)
 - [API stability](api-stability.md)

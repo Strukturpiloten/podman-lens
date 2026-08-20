@@ -5,6 +5,11 @@ contract. M1 publishes the explicit connection, redacted diagnostic, bounded Lib
 messages, GET-only Unix acquisition transport, version probe, target-profile, and evidence-catalogue
 contracts. They are exercised by the external-consumer `public_api` integration test.
 
+Milestone 7 completes the audited first-release surface. The external-consumer
+`boxferry_adapter` integration test exercises acquisition through rendering without private
+access or a BoxFerry dependency. Version `0.1.0` is the first semver baseline; the complete audit
+and post-release change rules are in `release-readiness.md`.
+
 `ConnectionKind`, `ConnectionSpec`, and `LibpodMethod` are intentionally closed protocol and
 control enums. Exhaustive matching makes every supported endpoint category and mutating-capability
 boundary reviewable; adding one is a deliberate public API change. Evolving native-data enums,

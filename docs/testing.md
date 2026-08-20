@@ -100,6 +100,13 @@ and dependency cycles. Manifest tests verify immutable source provenance and SHA
 artifact. Fixed list and selector permutations must produce byte-identical snapshots. No corpus
 test discovers or contacts a live Podman service, and no fuzzing infrastructure is required.
 
+M7 adds revision-pinned all-six-resource-kind streams for Podman 5.7.0, 6.0.0, and bounded 6.1.0.
+`tests/input_corpus.rs` proves every section is available and complete at each boundary.
+`tests/boxferry_adapter.rs` is a public-only downstream consumer. Its 6.1 scenario covers
+acquisition, discovery, typed observation/origin decisions, a neutral application projection,
+deployment-intent construction, planning, and deterministic CLI/Libpod rendering against
+`fixtures/corpus/boxferry-adapter-6.1.expected.json`.
+
 M5 deployment tests use no transport. They cover every typed resource kind, explicit external
 preconditions, all reviewed target versions, strict managed image sources, migration-safe image
 policy, deterministic resource permutations, shared-prerequisite deduplication, pod membership,

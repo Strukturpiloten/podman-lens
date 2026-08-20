@@ -220,7 +220,7 @@ without silent loss; all other native output remains explicitly outside that con
       addresses and assignments are never promoted.
 - [x] M7-B2: Complete bounded native network input coverage without inferring container runtime
       addresses, arbitrary driver/option values, or output behavior.
-- [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
+- [x] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
 - [x] M7-B3a: Add observation-only container restart policy, normal and startup health checks,
       health-failure action, and logging. These are effective inspect evidence, not authored
       deployment intent: inspect may include image health defaults and normalized host settings.
@@ -239,13 +239,20 @@ without silent loss; all other native output remains explicitly outside that con
       metadata. Native timestamps retain an exact validated RFC 3339 spelling. Image repository
       references remain local-resolution evidence, secret option names/values are discarded, and
       this batch adds no output mapping.
-- [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
-- [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.
-- [ ] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.
-- [ ] Reach first BoxFerry-ready release readiness; publication remains a maintainer-controlled
+- [x] Provide large offline input and output scenarios for BoxFerry adapter tests.
+- [x] Publish compatibility matrices for Podman versions, resource kinds, and transports.
+- [x] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.
+- [x] Reach first BoxFerry-ready release readiness; publication remains a maintainer-controlled
       step after merge.
 
 Exit: BoxFerry can add Podman input and output routes using only public PodmanLens APIs.
+
+M7 is complete. The normative mapping contract is `docs/boxferry-integration.md`; compatibility
+matrices are in `docs/compatibility.md`; `docs/release-readiness.md` records the public API,
+schema, diagnostics, redaction, release-policy, semver, and M0-M7 acceptance audits. Revision-pinned
+5.7, 6.0, and bounded 6.1 corpora cover all six kinds. The public-only adapter golden proves
+acquisition, discovery, typed observation consumption, explicit neutral decisions, deployment
+intent, planning, and both non-executing renderers.
 
 M7-A is complete when `ResourceObservation` exposes one kind-safe `ResourceDetails` payload and
 every modeled field reports an `ObservationField` state. Configured, effective,

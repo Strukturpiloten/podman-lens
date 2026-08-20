@@ -1,5 +1,9 @@
 # Release process
 
+The first public baseline is `0.1.0`. Merging an implementation pull request does not publish it:
+release-plz prepares the release proposal and a maintainer controls the protected publication
+workflow. See `release-readiness.md` for the audited baseline and pre-1.0 change policy.
+
 release-plz prepares version and changelog pull requests only for merged release-worthy code
 commits. The protected `Release` workflow remains the only publisher, tagger, and GitHub-release
 creator. Merging the `release-plz-*` pull request automatically dispatches that protected workflow;

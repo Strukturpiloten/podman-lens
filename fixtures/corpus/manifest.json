@@ -96,6 +96,78 @@
         "effective default unicast route type",
         "all Podman 6.0 route types"
       ]
+    },
+    {
+      "name": "BoxFerry all-resource Podman 5.7",
+      "engine_version": "5.7.0",
+      "api_version": "5.7.0",
+      "release_tag": "v5.7.0",
+      "commit": "0370128fc8dcae93533334324ef838db8f8da8cb",
+      "source_url": "https://github.com/containers/podman/tree/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod",
+      "artifact": "boxferry-5.7.responses.json",
+      "sha256": "c777a59b0fcb7201e4ae3dafd8772ed6a0a6fb28cf6da1c4bdec6df61cf258f1",
+      "synthetic": true,
+      "coverage": [
+        "all six native resource kinds",
+        "configured container image",
+        "pod membership",
+        "named volume and secret grant",
+        "pre-route-type compatibility boundary"
+      ]
+    },
+    {
+      "name": "BoxFerry all-resource Podman 6.0",
+      "engine_version": "6.0.0",
+      "api_version": "6.0.0",
+      "release_tag": "v6.0.0",
+      "commit": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+      "source_url": "https://github.com/containers/podman/tree/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod",
+      "artifact": "boxferry-6.0.responses.json",
+      "sha256": "38d0e0dac83d4b4d2f616fb28a774bb86ce31c6b7f5c1c6876b55b5de6e95255",
+      "synthetic": true,
+      "coverage": [
+        "all six native resource kinds",
+        "configured container image",
+        "pod membership",
+        "named volume and secret grant",
+        "Podman 6 route-type boundary"
+      ]
+    },
+    {
+      "name": "BoxFerry bounded all-resource Podman 6.1",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "artifact": "boxferry-6.1.responses.json",
+      "sha256": "599f84cdf11f4d4d3bf7753229097aa62a31e32de9a68f690e37e5973af81224",
+      "synthetic": true,
+      "coverage": [
+        "all six native resource kinds",
+        "pod and unpodded containers",
+        "configured and local-resolution image evidence",
+        "named volume and local bind boundary",
+        "secret metadata without payload",
+        "BoxFerry public-adapter scenario"
+      ]
+    },
+    {
+      "name": "BoxFerry public-adapter expected result Podman 6.1",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "artifact": "boxferry-adapter-6.1.expected.json",
+      "sha256": "d9c5446c0c52a3e3372bad85d2c8d12520ad46e4e48b0bf155f2edf1feb2ecf7",
+      "synthetic": true,
+      "coverage": [
+        "public-only downstream adapter",
+        "explicit neutral mapping decisions",
+        "deployment planning",
+        "CLI and Libpod rendering fingerprints"
+      ]
     }
   ]
 }

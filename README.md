@@ -5,8 +5,9 @@ applications. It is the native Podman boundary used by
 [BoxFerry](https://github.com/Strukturpiloten/boxferry), but it will not depend on BoxFerry.
 
 > [!NOTE]
-> The stable native input contract, transport-neutral deployment semantics, and bounded M6-B1–B4
-> CLI/API renderings are complete. Broader native output coverage remains under active development.
+> The stable native input contract, transport-neutral deployment semantics, bounded M6-B1–B4
+> CLI/API renderings, and M7 BoxFerry integration-readiness contract are complete. Broader native
+> output coverage remains explicitly deferred.
 
 PodmanLens will:
 
@@ -24,6 +25,9 @@ plans, or depend on BoxFerry.
 
 - [Architecture](docs/architecture.md)
 - [Library API](docs/library-api.md)
+- [BoxFerry integration contract](docs/boxferry-integration.md)
+- [Compatibility matrices](docs/compatibility.md)
+- [First-release readiness](docs/release-readiness.md)
 - [Roadmap](docs/roadmap.md)
 - [Accepted decisions](docs/decisions/README.md)
 
@@ -59,3 +63,8 @@ Each resource is a typed observation whose fields preserve absence, malformed/un
 and configured/effective/runtime/local-resolution provenance. Unmodeled data is retained only as
 bounded, redacted metadata; an incomplete observation or overflow finding means that metadata is
 explicitly incomplete rather than an exhaustive native configuration export.
+
+M7 adds the exact origin-gated PodmanLens-to-BoxFerry mapping contract, public compatibility
+matrices, pinned all-six-resource corpora for Podman 5.7, 6.0, and bounded 6.1, and a public-only
+downstream scenario from acquisition through CLI and Libpod rendering. Version 0.1.0 is the
+maintainer-controlled first-release semver baseline.

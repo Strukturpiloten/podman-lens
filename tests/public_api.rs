@@ -4,8 +4,9 @@
 use std::time::Duration;
 
 use podman_lens::{
-    ConnectionSpec, LibpodHeaders, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport, LibpodTransportFuture,
-    OpaqueReference, SshConnection, TransportError, UnixConnection, probe_libpod_service,
+    AcquisitionOptions, ConnectionSpec, LibpodHeaders, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,
+    LibpodTransportFuture, OpaqueReference, ResourceKind, SshConnection, TransportError, UnixConnection,
+    acquire_inventory, probe_libpod_service,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -47,6 +48,18 @@ fn external_consumer_can_construct_explicit_connections_and_an_object_safe_trans
 #[test]
 fn crate_can_be_linked_by_an_external_consumer() {
     assert_eq!(env!("CARGO_PKG_NAME"), "podman-lens");
+}
+
+#[test]
+fn external_consumer_can_select_the_redacted_inventory_contract() {
+    let options = AcquisitionOptions::redacted();
+    assert_eq!(options, AcquisitionOptions::default());
+    assert_eq!(ResourceKind::Container, ResourceKind::Container);
+    let transport: &dyn LibpodTransport = &FixtureTransport;
+    drop(acquire_inventory(
+        transport,
+        AcquisitionOptions::include_environment_values(),
+    ));
 }
 
 #[tokio::test]

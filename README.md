@@ -28,8 +28,10 @@ plans, or depend on BoxFerry.
 
 ## Status
 
-M1 provides explicit redacted connection specifications, a replaceable asynchronous Libpod
-transport contract, a built-in read-only Unix transport, an offline Podman 5.4–6.1 compatibility
-catalogue, and deterministic version probing. The built-in transport accepts only `GET` requests;
-the public probe itself performs two fixed `GET` requests. SSH and mutual-TLS transports remain
-caller-provided. See the roadmap for the next native inventory work.
+M2 adds read-only acquisition of containers, pods, networks, named volumes, images, and secret
+metadata. It probes first, lists every kind in a fixed order, then inspects canonical stable IDs
+through the observed Libpod API version. Inventory values retain typed identity, labels,
+relationships, evidence, unknown-field metadata, partial races, and structured findings. Runtime
+environment values are redacted by default; explicit inclusion uses a non-serializing opaque type.
+Secret payload endpoints are never requested. See the roadmap for the remaining discovery and
+deployment work.

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "source-derived-minimal",
+  "sanitization": "Synthetic, value-free resource records derived from versioned Libpod endpoint contracts. They contain no real endpoint, user, container, image, environment, or secret data.",
+  "fixtures": [
+    {
+      "engine_version": "5.4.0",
+      "api_version": "5.4.0",
+      "release_tag": "v5.4.0",
+      "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+      "source_url": "https://docs.podman.io/en/v5.4.0/_static/api.html",
+      "artifact": "podman-5.4.0.responses.json",
+      "sha256": "ab040297206121163f49d6e84b9d7cd8d0f28f44b736127322a115f2ff9525bc"
+    },
+    {
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
+      "artifact": "podman-6.1.0.responses.json",
+      "sha256": "4779783c14798708a4f938874c57ddfdc47aeb92340afe1a9dc786a76644b094"
+    }
+  ]
+}

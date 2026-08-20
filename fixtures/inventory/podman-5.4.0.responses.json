@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "engine_version": "5.4.0",
+  "api_version": "5.4.0",
+  "provenance": "Minimal, sanitised endpoint bodies derived from the versioned Libpod API contract; no live runtime values.",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "5.4.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "5.4.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": [
+        { "Id": "container-z", "Names": ["z"] },
+        { "Id": "container-a", "Names": ["a"] }
+      ]
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": [{ "Id": "pod-1", "Name": "pod-one" }]
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": [{ "id": "network-1", "name": "app" }]
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Volumes": [{ "Name": "database-data" }] }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": [
+        { "Id": "sha256:abc", "Names": ["registry.example.invalid/team/image:1@sha256:abc"] }
+      ]
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": [{ "ID": "secret-1", "Spec": { "Name": "db-password" } }]
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "Id": "container-a",
+        "Name": "a",
+        "Image": "sha256:abc",
+        "ImageName": "sha256:abc",
+        "Pod": "pod-1",
+        "NetworkSettings": { "Networks": { "app": {} } },
+        "Mounts": [{ "Type": "volume", "Name": "database-data" }],
+        "Dependencies": ["container-z"],
+        "Config": {
+          "Labels": { "project": "fixture-label" },
+          "Env": ["A=one", "A=two"],
+          "Secrets": [{ "ID": "secret-1", "Name": "db-password" }],
+          "FutureConfig": true
+        },
+        "HostConfig": { "MemorySwappiness": null },
+        "FutureField": 42
+      }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "Id": "container-z",
+        "Name": "z",
+        "Config": { "Env": null, "Labels": null },
+        "NetworkSettings": { "Networks": null },
+        "Mounts": null,
+        "Dependencies": null
+      }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "Id": "pod-1",
+        "Name": "pod-one",
+        "Labels": { "pod": "one" },
+        "Containers": [{ "Id": "container-a" }],
+        "Networks": ["app"]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "id": "network-1",
+        "name": "app",
+        "labels": { "network": "one" },
+        "internal": true,
+        "options": { "mtu": "fixture-option" },
+        "subnets": [{ "subnet": "10.88.0.0/16" }]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Name": "database-data", "Labels": { "volume": "one" } }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "Id": "sha256:abc",
+        "Names": ["registry.example.invalid/team/image:1@sha256:abc", "image:latest"],
+        "Labels": { "image": "shared" },
+        "Config": { "Env": ["IMAGE_ENV=value"] }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": {
+        "ID": "secret-1",
+        "Spec": { "Name": "db-password", "Labels": { "secret": "metadata" }, "Driver": "file" },
+        "SecretData": "discarded"
+      }
+    }
+  ]
+}

@@ -88,6 +88,21 @@ The following names remain conceptual until their milestones:
 - `Operation` contains identity, dependencies, resource action, and all exact supported transport
   representations.
 
+## M2 inventory acquisition
+
+`acquire_inventory` is read-only and first performs the fixed service probe. It then lists the six
+resource kinds in this exact order—containers, pods, networks, volumes, images, secrets—and only
+then inspects each canonical-sorted stable ID. Containers use `all=true&sync=true`; images use
+`all=true`. All inventory requests use the API version observed by the probe. The protocol decoder
+creates only `GET` requests; it never calls a secret payload endpoint or adds a secret-revealing
+query parameter.
+
+The acquisition is deliberately non-atomic. An unavailable list makes only that section
+unavailable. A `404` or malformed inspect response creates a partial record with its stable list
+identity, leaving every unrelated list and record available. Unknown data is represented only by
+path, JSON kind, record identity, and source/version evidence—not raw JSON. Podman image names and
+IDs are treated as raw identifiers and percent-encoded once before an inspect path is generated.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

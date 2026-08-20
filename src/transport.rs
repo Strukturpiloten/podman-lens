@@ -226,6 +226,42 @@ impl LibpodPath {
         Ok(Self(path_and_query))
     }
 
+    /// Constructs one versioned resource path from a raw, trusted identifier.
+    ///
+    /// This is deliberately narrower than [`Self::parse`]: callers provide an identifier as it
+    /// was returned by Podman, never a pre-escaped URI segment. Reserved bytes such as `/`, `:`,
+    /// and `@` are encoded exactly once. A raw percent sign is rejected so `%2F` cannot be
+    /// silently treated as a pre-escaped slash. It is used for image names as well as stable IDs,
+    /// whose spelling cannot safely be interpolated into an HTTP path.
+    ///
+    /// The collection and suffix are internal protocol constants. Keeping them private prevents
+    /// an arbitrary-path escape hatch from becoming part of the transport API before M4.
+    pub(crate) fn resource(
+        api_version: &crate::ObservedApiVersion,
+        collection: &'static str,
+        identifier: &str,
+        suffix: &'static str,
+    ) -> PodmanLensResult<Self> {
+        if !matches!(
+            collection,
+            "containers" | "pods" | "networks" | "volumes" | "images" | "secrets"
+        ) || !matches!(suffix, "json")
+            || !valid_unescaped_identifier(identifier)
+        {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidTransportMessage));
+        }
+        let path = format!(
+            "/v{}/libpod/{collection}/{}/{}",
+            api_version.original(),
+            percent_encode_identifier(identifier),
+            suffix
+        );
+        if path.len() > MAX_PATH_AND_QUERY_BYTES {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidTransportMessage));
+        }
+        Ok(Self(path))
+    }
+
     /// Returns the validated relative Libpod path and its encoded query.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -470,6 +506,29 @@ fn valid_encoded_query(query: &str) -> bool {
         })
 }
 
+fn valid_unescaped_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.is_ascii()
+        && !matches!(value, "." | "..")
+        && !value.contains(['?', '#', '%', '\\'])
+        && !value
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+}
+
+fn percent_encode_identifier(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            use std::fmt::Write as _;
+            let _ = write!(encoded, "%{byte:02X}");
+        }
+    }
+    encoded
+}
+
 fn valid_raw_path(path: &str) -> bool {
     path.split('/')
         .all(|segment| !matches!(segment, "." | "..") && valid_encoded_component(segment))
@@ -550,4 +609,46 @@ fn validate_message(headers: &LibpodHeaders, body: &[u8], limits: TransportLimit
         return Err(Diagnostic::new(DiagnosticCode::InvalidTransportMessage));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LibpodPath;
+    use crate::ObservedApiVersion;
+
+    #[test]
+    fn trusted_resource_paths_encode_raw_image_identifiers_exactly_once() -> Result<(), Box<dyn std::error::Error>> {
+        let api = ObservedApiVersion::parse("6.1.0")?;
+        let path = LibpodPath::resource(
+            &api,
+            "images",
+            "registry.example.invalid/team/image:1@sha256:abcdef",
+            "json",
+        )?;
+        assert_eq!(
+            path.as_str(),
+            "/v6.1.0/libpod/images/registry.example.invalid%2Fteam%2Fimage%3A1%40sha256%3Aabcdef/json"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_resource_paths_reject_preescaped_and_ambiguous_identifier_spelling()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let api = ObservedApiVersion::parse("6.1.0")?;
+        for identifier in [
+            "registry.example.invalid%2Fteam%2Fimage",
+            "image?all=true",
+            "image#fragment",
+            "image\\name",
+            "image name",
+            "image\nname",
+            "",
+        ] {
+            assert!(LibpodPath::resource(&api, "images", identifier, "json").is_err());
+        }
+        assert!(LibpodPath::resource(&api, "unknown", "image", "json").is_err());
+        assert!(LibpodPath::resource(&api, "images", "image", "delete").is_err());
+        Ok(())
+    }
 }

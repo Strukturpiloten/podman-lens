@@ -30,6 +30,34 @@ pub enum DiagnosticCode {
     ProbeComponent,
     /// Observed engine and API versions are outside reviewed compatibility evidence.
     ObservedCompatibility,
+    /// A Libpod inventory request received an unexpected HTTP status.
+    InventoryHttpStatus,
+    /// A Libpod inventory response is not valid bounded JSON.
+    InventoryJson,
+    /// A Libpod inventory response has an unsupported JSON shape.
+    InventoryShape,
+    /// A listed resource could no longer be inspected.
+    ResourceUnavailable,
+    /// An individual resource response is malformed.
+    ResourceMalformed,
+    /// A secret metadata response unexpectedly included payload material.
+    SecretPayloadDiscarded,
+    /// A runtime environment entry has an unsupported spelling.
+    EnvironmentMalformed,
+    /// Native fields contain contradictory relationship evidence.
+    RelationshipConflict,
+    /// Unknown-field metadata reached a configured safe retention limit.
+    UnknownFieldOverflow,
+    /// A field is not representable for the observed Libpod API version.
+    VersionInapplicableField,
+    /// A retained unknown native field has no typed M2 representation.
+    NativeFieldUnsupported,
+    /// A relationship cannot be resolved in an available target section.
+    UnresolvedRelationship,
+    /// Pod and container membership evidence disagrees.
+    PodMembershipConflict,
+    /// The observed version lacks matching immutable capability evidence.
+    InventoryEvidenceUnavailable,
 }
 
 impl DiagnosticCode {
@@ -49,6 +77,20 @@ impl DiagnosticCode {
             Self::ProbeShape => "PLN0010",
             Self::ProbeComponent => "PLN0011",
             Self::ObservedCompatibility => "PLN0012",
+            Self::InventoryHttpStatus => "PLN0013",
+            Self::InventoryJson => "PLN0014",
+            Self::InventoryShape => "PLN0015",
+            Self::ResourceUnavailable => "PLN0016",
+            Self::ResourceMalformed => "PLN0017",
+            Self::SecretPayloadDiscarded => "PLN0018",
+            Self::EnvironmentMalformed => "PLN0019",
+            Self::RelationshipConflict => "PLN0020",
+            Self::UnknownFieldOverflow => "PLN0021",
+            Self::VersionInapplicableField => "PLN0022",
+            Self::NativeFieldUnsupported => "PLN0023",
+            Self::UnresolvedRelationship => "PLN0024",
+            Self::PodMembershipConflict => "PLN0025",
+            Self::InventoryEvidenceUnavailable => "PLN0026",
         }
     }
 }
@@ -95,6 +137,28 @@ impl Diagnostic {
                 }
                 DiagnosticCode::ObservedCompatibility => {
                     "the observed Podman engine and Libpod API versions are outside reviewed evidence"
+                }
+                DiagnosticCode::InventoryHttpStatus => "a Libpod inventory request received an unexpected HTTP status",
+                DiagnosticCode::InventoryJson => "a Libpod inventory response is invalid or exceeds its safety bound",
+                DiagnosticCode::InventoryShape => "a Libpod inventory response has an unsupported JSON shape",
+                DiagnosticCode::ResourceUnavailable => {
+                    "a listed Podman resource was unavailable during non-atomic inspection"
+                }
+                DiagnosticCode::ResourceMalformed => "a Podman resource response is malformed",
+                DiagnosticCode::SecretPayloadDiscarded => {
+                    "unexpected secret payload material was discarded from metadata inspection"
+                }
+                DiagnosticCode::EnvironmentMalformed => "a Podman runtime environment entry is malformed",
+                DiagnosticCode::RelationshipConflict => "a Podman resource contains conflicting relationship evidence",
+                DiagnosticCode::UnknownFieldOverflow => "unknown Podman field metadata exceeded a safe retention limit",
+                DiagnosticCode::VersionInapplicableField => {
+                    "a Podman field is inapplicable for the observed Libpod API version"
+                }
+                DiagnosticCode::NativeFieldUnsupported => "a Podman native field is retained as unsupported metadata",
+                DiagnosticCode::UnresolvedRelationship => "a Podman native relationship could not be resolved",
+                DiagnosticCode::PodMembershipConflict => "Podman pod and container membership evidence disagrees",
+                DiagnosticCode::InventoryEvidenceUnavailable => {
+                    "the observed Podman version has no matching immutable inventory evidence"
                 }
             },
         }

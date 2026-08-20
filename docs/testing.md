@@ -28,3 +28,9 @@ The built-in Unix transport tests prove that mutation methods, body-bearing acqu
 caller-supplied `Host`, and over-limit requests fail before a socket is opened. The Unix-only module
 is conditionally compiled so platform-neutral connection and caller-provided transport contracts
 remain usable on non-Unix targets.
+
+M2 inventory tests use fixture transports only. They cover the Podman 5.4 and 6.1 evidence
+boundaries; probe-before-list ordering; canonical list sorting; exact list queries; escaped image
+inspect paths; partial races; malformed and duplicate list records; secret-metadata-only requests;
+unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
+Podman service or contains a real secret or environment value.

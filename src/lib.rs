@@ -11,6 +11,7 @@
 pub mod connection;
 pub mod diagnostic;
 pub mod evidence;
+pub mod inventory;
 pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
@@ -23,6 +24,12 @@ pub use connection::{
 };
 pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
+pub use inventory::{
+    AcquisitionOptions, EnvironmentEntry, EnvironmentValue, EnvironmentValuePolicy, InventoryFinding, InventorySection,
+    JsonValueKind, MAX_INVENTORY_JSON_BYTES, MAX_UNKNOWN_FIELDS_PER_INVENTORY, MAX_UNKNOWN_FIELDS_PER_RECORD,
+    NetworkDetails, ObservationState, ResourceEvidence, ResourceIdentity, ResourceInventory, ResourceKind,
+    ResourceRecord, ResourceRelationship, SensitiveEnvironmentValue, UnknownNativeField, acquire_inventory,
+};
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]
 pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts};

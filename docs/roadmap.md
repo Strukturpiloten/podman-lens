@@ -37,15 +37,22 @@ explicit current-patch read-only conformance transport.
 
 ## M2: Native resource inventory
 
-- [ ] Inspect containers and pods.
-- [ ] Inspect networks and named volumes.
-- [ ] Inspect images without treating shared images as application ownership.
-- [ ] Inspect secret metadata without requesting payloads.
-- [ ] Preserve identifiers, labels, relationships, native fields, and evidence provenance.
-- [ ] Report unsupported, malformed, conflicting, and version-inapplicable fields individually.
-- [ ] Implement explicit redacted and included environment-value policies.
+- [x] Inspect containers and pods.
+- [x] Inspect networks and named volumes.
+- [x] Inspect images without treating shared images as application ownership.
+- [x] Inspect secret metadata without requesting payloads.
+- [x] Preserve identifiers, labels, relationships, native fields, and evidence provenance.
+- [x] Report unsupported, malformed, conflicting, and version-inapplicable fields individually.
+- [x] Implement explicit redacted and included environment-value policies.
 
 Exit: an explicitly selected connection produces a complete typed inventory with no silent loss.
+
+M2 is complete. Its offline 5.4 and 6.1 fixture provenance covers the reviewed compatibility
+boundaries. Every acquisition probes first, lists all six kinds, then inspects every valid stable
+identifier exactly once. It retains unavailable sections, malformed list entries, duplicate IDs,
+disappeared records, unknown fields, conflicting image evidence, and unexpected secret payload
+fields as structured findings rather than silently deleting them. The inventory is a provisional
+public API; M4 will stabilize it with the resource graph and broader corpus.
 
 ## M3: Resource discovery
 

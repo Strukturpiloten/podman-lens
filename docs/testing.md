@@ -41,6 +41,12 @@ mutations. Inventory tests prove that unmodeled `HostConfig` members become boun
 metadata, `Secret.Spec.Driver` does not become unknown metadata, and overflow or partial inspection
 makes `ResourceRecord::unknown_fields_complete()` false.
 
+M6-B3a tests cover public and redacted shell/direct health-command forms, timing and startup-health
+dependency, logging driver/label rules, explicit security false values and conflicts, bounded CPU,
+memory, PID, and rlimit controls, cgroup/root-context boundaries, pod-member runtime acceptance,
+the namespace-only member boundary, all-seven reviewed-target matrices for journald labels and
+unlimited rlimits, CPU-quota boundaries, and renderer blocking.
+
 M3 discovery tests use fixture transports only. They cover all six exact resource-root kinds;
 label-presence, label-value, empty-value, and rejected selectors; dependent-to-prerequisite closure;
 cycle-free pod membership; shared prerequisites; explicit shared roots; exact network name-or-ID

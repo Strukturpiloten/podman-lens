@@ -1669,6 +1669,9 @@ fn unsupported_fields(
         }
         DeploymentResource::Container(container) => {
             let mut fields = Vec::new();
+            if !container.runtime().is_empty() {
+                fields.push("runtime");
+            }
             if container.pod().is_some() && !container.networks().is_empty() {
                 fields.push("networks");
             }

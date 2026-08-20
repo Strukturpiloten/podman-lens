@@ -160,6 +160,16 @@ finding and no partial rendering. Multi-IP attachment forms, port ranges, interf
 arbitrary network drivers/options, and unmanaged namespace modes remain deliberately unmodelled
 for the coverage ledger rather than being silently reduced.
 
+M6-B3a retains bounded health, logging, security, and resource-control intent for containers,
+including pod members, but deliberately has no renderer claims. It retains private/host PID, IPC,
+UTS, and cgroup namespace modes plus IPC `shareable`/`none` only for unpodded containers; a member
+namespace declaration is rejected rather than moved to the pod. Pod-level namespaces, userns and
+ID maps, paths, and reference modes remain deferred pending independent pod-create evidence.
+Cgroup support and root context are explicit caller evidence, never host detection.
+Planning accepts journald labels only from Podman 6.0 and unlimited rlimits only from 5.6. CPU
+quota is limited to positive values of at least one millisecond because lower or non-positive
+values are not dual-exact. B3b rendering must defensively repeat these semantic target gates.
+
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.
 

@@ -4,14 +4,16 @@
 use std::time::Duration;
 
 use podman_lens::{
-    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
+    AbsoluteContainerPath, ArgumentArray, CgroupCapabilityEvidence, CgroupController, CgroupVersion,
+    ConfiguredHealthCheck, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentPlan, DeploymentResource,
-    DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
-    ImageIntent, ImagePullPolicy, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment,
-    NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion,
-    PlanningFinding, PlanningOutcome, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue,
-    RestartPolicy, RouteType, SemanticOperationAction, SensitiveInlineEnvironmentValue, StartupDependency,
-    StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
+    DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HealthCheck,
+    HealthCommand, HostAlias, ImageIntent, ImagePullPolicy, Label, LabelKey, LinuxCapability, LogDriver, LogSize,
+    NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet,
+    ObservedApiVersion, ObservedPodmanVersion, PlanningFinding, PlanningOutcome, PodIntent, PortMapping, PortProtocol,
+    PublicEnvironmentValue, PublicHealthArgumentArray, PublicHealthCommand, PublicLabelValue, RestartPolicy, Rlimit,
+    RlimitKind, RlimitValue, RouteType, SemanticOperationAction, SensitiveInlineEnvironmentValue, StartupDependency,
+    StartupHealthCheck, StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
@@ -113,6 +115,54 @@ fn external_consumer_can_inspect_the_strict_native_field_coverage_ledger() -> Re
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ResourceRecord::unknown_fields_complete"
     }));
+    Ok(())
+}
+
+#[test]
+fn external_consumer_can_declare_bounded_runtime_intent_with_explicit_cgroup_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut target = TargetProfile::new(
+        ObservedPodmanVersion::parse("6.1.0")?,
+        ObservedApiVersion::parse("6.1.0")?,
+    )?;
+    target.set_cgroup_capabilities(CgroupCapabilityEvidence::new(
+        CgroupVersion::V2,
+        [CgroupController::Cpu, CgroupController::Memory, CgroupController::Pids],
+    ));
+    let image = DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/runtime:1")?;
+    let mut container = ContainerIntent::new(
+        DeploymentResourceId::new(ResourceKind::Container, "runtime")?,
+        image.clone(),
+    )?;
+    container
+        .runtime_mut()
+        .set_health(HealthCheck::Command(ConfiguredHealthCheck::new(HealthCommand::Shell(
+            PublicHealthCommand::new("true")?,
+        ))))?;
+    container
+        .runtime_mut()
+        .set_startup_health(StartupHealthCheck::new(HealthCommand::Exec(
+            PublicHealthArgumentArray::new(["/usr/bin/true"])?,
+        )))?;
+    container.runtime_mut().logging_mut().set_driver(LogDriver::K8sFile)?;
+    container
+        .runtime_mut()
+        .logging_mut()
+        .set_max_size(LogSize::new(1024)?)?;
+    container
+        .runtime_mut()
+        .security_mut()
+        .add_capability(LinuxCapability::new("CHOWN")?)?;
+    container.runtime_mut().resources_mut().set_cpu_shares(250)?;
+    container.runtime_mut().resources_mut().set_memory_bytes(1024)?;
+    container.runtime_mut().resources_mut().set_pids(32)?;
+    container.runtime_mut().resources_mut().add_rlimit(Rlimit::new(
+        RlimitKind::NoFile,
+        RlimitValue::finite(128),
+        RlimitValue::Unlimited,
+    )?)?;
+    assert!(container.runtime().health().is_some());
+    assert!(container.runtime().startup_health().is_some());
     Ok(())
 }
 

@@ -119,6 +119,7 @@ pub struct TargetProfile {
     podman_version: ObservedPodmanVersion,
     api_version: ObservedApiVersion,
     execution_context: TargetExecutionContext,
+    cgroup_capabilities: Option<CgroupCapabilityEvidence>,
 }
 
 /// Explicit privilege context of the selected deployment target.
@@ -136,6 +137,63 @@ pub enum TargetExecutionContext {
     Rootless,
     /// The target is explicitly rootful.
     Rootful,
+}
+
+/// Caller-proven cgroup hierarchy version for the selected deployment target.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum CgroupVersion {
+    /// The target uses the legacy cgroup v1 hierarchy.
+    V1,
+    /// The target uses the unified cgroup v2 hierarchy.
+    V2,
+}
+
+/// One cgroup controller required by a bounded container resource control.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum CgroupController {
+    /// CPU controller evidence.
+    Cpu,
+    /// Memory controller evidence.
+    Memory,
+    /// Process-ID controller evidence.
+    Pids,
+}
+
+/// Explicit caller-supplied cgroup capability evidence.
+///
+/// `PodmanLens` never reads the local cgroup hierarchy and does not derive this from root mode.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CgroupCapabilityEvidence {
+    version: CgroupVersion,
+    controllers: std::collections::BTreeSet<CgroupController>,
+}
+
+impl CgroupCapabilityEvidence {
+    /// Creates evidence for one cgroup hierarchy and controller set.
+    #[must_use]
+    pub fn new<I>(version: CgroupVersion, controllers: I) -> Self
+    where
+        I: IntoIterator<Item = CgroupController>,
+    {
+        Self {
+            version,
+            controllers: controllers.into_iter().collect(),
+        }
+    }
+
+    /// Returns the caller-proven hierarchy version.
+    #[must_use]
+    pub const fn version(&self) -> CgroupVersion {
+        self.version
+    }
+
+    /// Returns whether the selected controller is caller-proven available.
+    #[must_use]
+    pub fn supports(&self, controller: CgroupController) -> bool {
+        self.controllers.contains(&controller)
+    }
 }
 
 impl TargetProfile {
@@ -157,12 +215,18 @@ impl TargetProfile {
             podman_version,
             api_version,
             execution_context: TargetExecutionContext::Unknown,
+            cgroup_capabilities: None,
         })
     }
 
     /// Records the caller-proven privilege context of the deployment target.
     pub fn set_execution_context(&mut self, context: TargetExecutionContext) {
         self.execution_context = context;
+    }
+
+    /// Records explicit caller-proven cgroup capabilities for resource planning.
+    pub fn set_cgroup_capabilities(&mut self, capabilities: CgroupCapabilityEvidence) {
+        self.cgroup_capabilities = Some(capabilities);
     }
 
     /// Returns the explicit Podman target version.
@@ -181,6 +245,12 @@ impl TargetProfile {
     #[must_use]
     pub const fn execution_context(&self) -> TargetExecutionContext {
         self.execution_context
+    }
+
+    /// Returns caller-proven cgroup capabilities, if supplied.
+    #[must_use]
+    pub fn cgroup_capabilities(&self) -> Option<&CgroupCapabilityEvidence> {
+        self.cgroup_capabilities.as_ref()
     }
 }
 

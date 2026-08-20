@@ -11,7 +11,10 @@ use crate::networking::{
     add_port, add_route, add_subnet,
 };
 use crate::settings::{ContainerSettings, NamedVolumeMount};
-use crate::{Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind, TargetExecutionContext, TargetProfile};
+use crate::{
+    CgroupController, ContainerRuntimeSettings, Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind,
+    TargetExecutionContext, TargetProfile,
+};
 
 const MAX_REFERENCE_BYTES: usize = 256;
 const MAX_CONNECTION_NAME_BYTES: usize = 64;
@@ -473,6 +476,7 @@ pub struct ContainerIntent {
     mounts: Vec<NamedVolumeMount>,
     secrets: Vec<DeploymentResourceId>,
     settings: Box<ContainerSettings>,
+    runtime: Box<ContainerRuntimeSettings>,
 }
 
 impl ContainerIntent {
@@ -496,6 +500,7 @@ impl ContainerIntent {
             mounts: Vec::new(),
             secrets: Vec::new(),
             settings: Box::default(),
+            runtime: Box::default(),
         })
     }
 
@@ -656,6 +661,18 @@ impl ContainerIntent {
     #[must_use]
     pub fn settings_mut(&mut self) -> &mut ContainerSettings {
         &mut self.settings
+    }
+
+    /// Returns typed M6-B3a runtime settings retained for semantic planning only.
+    #[must_use]
+    pub fn runtime(&self) -> &ContainerRuntimeSettings {
+        &self.runtime
+    }
+
+    /// Returns mutable M6-B3a runtime settings retained for semantic planning only.
+    #[must_use]
+    pub fn runtime_mut(&mut self) -> &mut ContainerRuntimeSettings {
+        &mut self.runtime
     }
 }
 
@@ -1065,7 +1082,7 @@ impl DeploymentPlan {
 #[must_use]
 pub fn plan_deployment(intent: &DeploymentIntent) -> PlanningOutcome {
     let (resources, mut findings) = index_resources(intent.resources());
-    validate_resources(&resources, intent.target.execution_context(), &mut findings);
+    validate_resources(&resources, intent.target(), &mut findings);
     validate_startup_dependencies(intent, &resources, &mut findings);
     if findings.is_empty() {
         let mut nodes = BTreeMap::<DeploymentOperationId, BTreeSet<DeploymentOperationId>>::new();
@@ -1173,7 +1190,7 @@ fn external_preconditions(
 
 fn validate_resources(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
-    execution_context: TargetExecutionContext,
+    target: &TargetProfile,
     findings: &mut Vec<PlanningFinding>,
 ) {
     for resource in resources.values() {
@@ -1199,9 +1216,11 @@ fn validate_resources(
                     ));
                 }
             }
-            DeploymentResource::Pod(pod) => validate_pod(resources, pod, execution_context, findings),
+            DeploymentResource::Pod(pod) => {
+                validate_pod(resources, pod, target.execution_context(), findings);
+            }
             DeploymentResource::Container(container) => {
-                validate_container(resources, container, execution_context, findings);
+                validate_container(resources, container, target, findings);
             }
         }
     }
@@ -1246,11 +1265,16 @@ fn validate_pod(
 fn validate_container(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
     container: &ContainerIntent,
-    execution_context: TargetExecutionContext,
+    target: &TargetProfile,
     findings: &mut Vec<PlanningFinding>,
 ) {
     validate_network_attachments(container.networks(), container.identity(), "networks", findings);
-    validate_static_network_addresses(container.networks(), container.identity(), execution_context, findings);
+    validate_static_network_addresses(
+        container.networks(),
+        container.identity(),
+        target.execution_context(),
+        findings,
+    );
     validate_mounts(resources, container.mounts(), container.identity(), "mounts", findings);
     validate_distinct(container.secrets(), container.identity(), "secrets", findings);
     require_resolved(
@@ -1262,6 +1286,13 @@ fn validate_container(
         findings,
     );
     if let Some(pod) = container.pod() {
+        if !container.runtime().namespaces().is_empty() {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("runtime.namespaces.pod_member"),
+            ));
+        }
         if container.settings().hostname().is_some() {
             findings.push(PlanningFinding::new(
                 DiagnosticCode::DeploymentUnsupportedCombination,
@@ -1362,6 +1393,163 @@ fn validate_container(
             "secrets",
             findings,
         );
+    }
+    validate_runtime_settings(container, target, findings);
+}
+
+#[allow(clippy::too_many_lines)] // Health, logging, security, and cgroup invariants share one outcome.
+fn validate_runtime_settings(container: &ContainerIntent, target: &TargetProfile, findings: &mut Vec<PlanningFinding>) {
+    let runtime = container.runtime();
+    if runtime.namespaces().uts() == Some(crate::NamespaceMode::Host) && container.settings().hostname().is_some() {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.namespaces.uts_host_with_hostname"),
+        ));
+    }
+    if runtime.namespaces().cgroup() == Some(crate::NamespaceMode::Private)
+        && !target
+            .cgroup_capabilities()
+            .is_some_and(|evidence| evidence.version() == crate::CgroupVersion::V2)
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.namespaces.cgroup_private_requires_v2"),
+        ));
+    }
+    if runtime.startup_health().is_some() && !matches!(runtime.health(), Some(crate::HealthCheck::Command(_))) {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.startup_health_requires_health"),
+        ));
+    }
+    if runtime.logging().driver().is_none()
+        && (runtime.logging().max_size().is_some() || !runtime.logging().journald_labels().is_empty())
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.logging.driver"),
+        ));
+    }
+    if !runtime.logging().journald_labels().is_empty() && runtime.logging().driver() != Some(crate::LogDriver::Journald)
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.logging.journald_labels"),
+        ));
+    }
+    if !runtime.logging().journald_labels().is_empty()
+        && target.podman_version().as_semver() < &semver::Version::new(6, 0, 0)
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.logging.journald_labels.target_version"),
+        ));
+    }
+    if runtime.logging().max_size().is_some() && runtime.logging().driver() != Some(crate::LogDriver::K8sFile) {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.logging.max_size"),
+        ));
+    }
+    if runtime.security().privileged() == Some(true)
+        && (!runtime.security().cap_add().is_empty() || !runtime.security().cap_drop().is_empty())
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.security.privileged_capabilities"),
+        ));
+    }
+    if runtime
+        .security()
+        .cap_add()
+        .iter()
+        .any(|capability| runtime.security().cap_drop().contains(capability))
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.security.capability_overlap"),
+        ));
+    }
+    if runtime.security().read_write_tmpfs() == Some(true) && runtime.security().read_only_filesystem() != Some(true) {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.security.read_write_tmpfs"),
+        ));
+    }
+    let resources = runtime.resources();
+    if resources.rlimits().iter().any(|limit| {
+        matches!(limit.soft(), crate::RlimitValue::Unlimited) || matches!(limit.hard(), crate::RlimitValue::Unlimited)
+    }) && target.podman_version().as_semver() < &semver::Version::new(5, 6, 0)
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.resources.rlimits.unlimited.target_version"),
+        ));
+    }
+    let controls_requested = resources.cpu_shares().is_some()
+        || resources.cpu_period().is_some()
+        || resources.cpu_quota().is_some()
+        || resources.memory_bytes().is_some()
+        || resources.pids().is_some();
+    if controls_requested && target.cgroup_capabilities().is_none() {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.resources.cgroup_evidence"),
+        ));
+        return;
+    }
+    if controls_requested
+        && target.cgroup_capabilities().is_some_and(|evidence| {
+            evidence.version() == crate::CgroupVersion::V1
+                && target.execution_context() != TargetExecutionContext::Rootful
+        })
+    {
+        findings.push(PlanningFinding::new(
+            DiagnosticCode::DeploymentUnsupportedCombination,
+            Some(container.identity().clone()),
+            Some("runtime.resources.cgroup_v1_requires_rootful"),
+        ));
+    }
+    for (configured, controller, field) in [
+        (
+            resources.cpu_shares().is_some() || resources.cpu_period().is_some() || resources.cpu_quota().is_some(),
+            CgroupController::Cpu,
+            "runtime.resources.cpu",
+        ),
+        (
+            resources.memory_bytes().is_some(),
+            CgroupController::Memory,
+            "runtime.resources.memory_bytes",
+        ),
+        (
+            resources.pids().is_some(),
+            CgroupController::Pids,
+            "runtime.resources.pids",
+        ),
+    ] {
+        if configured
+            && !target
+                .cgroup_capabilities()
+                .is_some_and(|evidence| evidence.supports(controller))
+        {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some(field),
+            ));
+        }
     }
 }
 

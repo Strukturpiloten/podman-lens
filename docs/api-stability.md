@@ -86,6 +86,16 @@ non-unicast route types are intentionally target-gated to Podman 6.0+; runtime-a
 multi-IP attachments, port ranges, interface names, arbitrary driver/options, and unmanaged
 namespace modes remain explicit later-ledger work.
 
+M6-B3a adds provisional `ContainerRuntimeSettings` and its bounded health, logging, security, and
+resource-control value types for every `ContainerIntent`. It separately exposes bounded namespace
+intent only for an unpodded container; a pod member carrying namespace intent is rejected with
+`PLN0038`, rather than having it silently reassigned to a pod. Sensitive shell and direct-exec
+health forms remain redacted, cgroup support and root context are caller-provided evidence, and
+every populated runtime setting blocks rendering with `PLN0046` until per-field renderer evidence
+is committed. Semantic planning already rejects journald labels before Podman 6.0, unlimited
+rlimits before 5.6, and non-positive or sub-millisecond CPU quota; B3b renderers must repeat
+these target gates defensively.
+
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate
 pre-1.0 minor release. Private Libpod wire types never become public compatibility commitments.

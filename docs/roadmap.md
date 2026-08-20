@@ -164,6 +164,10 @@ remain external; only a redacted external material reference is available to M6.
       an explicit rootful planner target. Multi-IP attachment forms, port ranges, interface names,
       arbitrary network drivers/options, and unmanaged namespace modes remain explicitly outside
       this bounded model for the later native-field coverage ledger.
+- [x] M6-B3a: Retain bounded health, logging, security, and container resource intent for all
+      containers; retain bounded namespace intent only for unpodded containers; require explicit
+      cgroup/root-context evidence; enforce the reviewed journald-label, unlimited-rlimit, and
+      CPU-quota planning boundaries; and block rendering until exact per-field evidence exists.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.

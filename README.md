@@ -48,6 +48,13 @@ create/start semantics. A pod with members gets one `StartPod`; unpodded contain
 `StartContainer`. The plan contains no shell, HTTP, environment, or secret-payload representation;
 M6 owns those renderings.
 
+M6-B3a adds bounded semantic-only health, logging, security, CPU, memory, PID, and rlimit intent
+for containers, including pod members. Namespace intent is intentionally narrower: it is only
+valid on an unpodded container and a pod-member declaration is rejected. All runtime settings
+remain deliberately unrendered until per-field version evidence exists; sensitive health commands
+stay redacted. Semantic planning accepts journald labels from Podman 6.0 and unlimited rlimits
+from 5.6; it accepts CPU quota only as a positive value of at least one millisecond.
+
 The inventory's currently accepted native fields are declared in a strict machine-readable ledger.
 Unmodeled data is retained only as bounded, redacted metadata; a partial record or overflow finding
 means that metadata is explicitly incomplete rather than an exhaustive native configuration export.

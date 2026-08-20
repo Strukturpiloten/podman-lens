@@ -13,7 +13,7 @@ after overflow.
 ## Decision
 
 `catalogue/v1/native-field-coverage.json` is a strict, packaged ledger for every M2 native input
-field currently accepted by the inventory decoder. Each deterministic row states its native path,
+field currently accepted by the inventory decoder. It is not an M6 output coverage claim. Each deterministic row states its native path,
 coverage classification, decoder owner, planner and renderer applicability, public API contract,
 diagnostic, and focused positive and negative test identifiers. The embedded parser rejects an
 unknown JSON key, altered semantic link, reordered or missing expected row, duplicate identifier,
@@ -38,4 +38,6 @@ slice for complete native configuration in either case.
   conversion support.
 - Future output work can replace `not_applicable` planner or renderer references only when exact
   semantic and rendering evidence exists.
+- M6-B3 semantic intent does not create ledger output rows. Those rows are added only with the
+  B3b exact per-version renderer evidence.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

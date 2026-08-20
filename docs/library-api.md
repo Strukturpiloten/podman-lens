@@ -79,6 +79,20 @@ does not mean anonymous; callers must still handle reports as operational data.
 
 ## Plan native deployment semantics
 
+M6-B3a adds `ContainerIntent::runtime_mut()` for bounded health, logging, security, CPU shares,
+period/quota, memory, PID, and rlimit intent on containers, including pod members. Startup health
+requires configured normal health. Public health shell and direct-exec forms are explicit; inline
+and external forms stay redacted. `HealthInterval::Disabled` is the only representable native-zero
+interval; normal retries are at least one, startup retries and successes allow zero, and timeouts
+are at least one second. Logging labels retain public key/value pairs. CPU, memory, and PID controls
+require explicit `CgroupCapabilityEvidence` and root context, while rlimits do not; PodmanLens
+never discovers either locally. Journald labels require Podman 6.0 or newer, unlimited rlimits
+require 5.6 or newer, and CPU quota is positive and at least one millisecond; semantic planning
+enforces these target gates. `namespaces_mut()` retains only unpodded private/host PID, IPC, UTS,
+and cgroup modes plus IPC `shareable`/`none`; cgroup private requires v2 evidence and a pod member
+gets `PLN0038`. These settings are semantic-only and make rendering return `PLN0046` until exact
+renderer evidence is added; B3b must repeat the planner's target gates defensively.
+
 Create one `DeploymentIntent` with an explicit reviewed `TargetProfile`, then add fully resolved
 target-side `DeploymentResource` values. `DeploymentResourceId` is deliberately separate from an
 observed `ResourceIdentity`: output names are declarations, not input observations. A required

@@ -22,6 +22,7 @@ pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
 pub mod render;
+pub mod runtime;
 pub mod settings;
 pub mod snapshot;
 pub mod transport;
@@ -62,6 +63,14 @@ pub use render::{
     CliInvocation, DeploymentRendering, LibpodInvocation, RenderStatus, RenderedHttpBody, RenderedHttpMethod,
     RenderedOperation, RenderingFinding, RenderingOutcome, render_deployment,
 };
+pub use runtime::{
+    ConfiguredHealthCheck, ContainerNamespaceSettings, ContainerResourceControls, ContainerRuntimeSettings,
+    HealthCheck, HealthCommand, HealthDuration, HealthInterval, HealthOnFailure, HealthRetries, HealthStartPeriod,
+    HealthTimeout, IpcNamespaceMode, LinuxCapability, LogDriver, LogSize, LoggingSettings, NamespaceMode,
+    PublicHealthArgumentArray, PublicHealthCommand, Rlimit, RlimitKind, RlimitValue, SecuritySettings,
+    SensitiveInlineHealthArgumentArray, SensitiveInlineHealthCommand, StartupHealthCheck, StartupHealthRetries,
+    StartupHealthSuccesses,
+};
 pub use settings::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerSettings, ContainerUser, ContainerWorkdir,
     DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, NamedVolumeCopyMode,
@@ -72,5 +81,6 @@ pub use transport::{
     LibpodTransportFuture, MAX_PATH_AND_QUERY_BYTES, TransportError, TransportLimits,
 };
 pub use version::{
-    ObservedApiVersion, ObservedPodmanVersion, SupportedPodmanRange, TargetExecutionContext, TargetProfile,
+    CgroupCapabilityEvidence, CgroupController, CgroupVersion, ObservedApiVersion, ObservedPodmanVersion,
+    SupportedPodmanRange, TargetExecutionContext, TargetProfile,
 };

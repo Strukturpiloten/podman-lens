@@ -35,7 +35,8 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The coverage ledger is parsed as a strict public two-plane catalogue. Its unit tests reject schema,
+The coverage ledger is parsed as a strict public two-plane catalogue with 38 input-observation and
+50 output-intent rows. Its unit tests reject schema,
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
 become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
@@ -50,6 +51,14 @@ M6-B3b adds exact CLI/Libpod assertions for public health and runtime resource f
 reviewed target, every health failure action's distinct CLI/native-integer form, and all sensitive
 or external health command variants in both normal and startup positions. The strict renderer
 catalogue records and mutation-tests the Libpod member value shape, not only its spelling.
+
+M6-B4 tests cover every typed mount form and access mode, normalized and rejected subpaths,
+subpath-with-`NoCopy` rejection, duplicate destinations, individually absent/zero/maximum volume
+UID/GID, all four image pull policies, five-version exact output matrices, 5.4/5.5 policy blocks,
+and manual local/unqualified/tagless image portability findings. Secret grants cover mount and
+environment targets, optional UID/GID/mode, duplicate target rejection, wrong/missing source
+identity, and distinctive payload/reference redaction in debug and rendered artifacts. Pod infra
+mounts always produce sorted `PLN0046` findings and no partial artifact.
 
 M3 discovery tests use fixture transports only. They cover all six exact resource-root kinds;
 label-presence, label-value, empty-value, and rejected selectors; dependent-to-prerequisite closure;

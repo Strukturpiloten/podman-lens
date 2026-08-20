@@ -5,11 +5,12 @@ use podman_lens::{
     CgroupCapabilityEvidence, CgroupController, CgroupVersion, ConfiguredHealthCheck, ContainerHostname,
     ContainerIntent, DeploymentIntent, DeploymentResource, DeploymentResourceId, ExternalPrecondition, HealthCheck,
     HealthCommand, HealthDuration, HealthInterval, HealthOnFailure, HealthRetries, HealthStartPeriod, HealthTimeout,
-    ImageIntent, IpcNamespaceMode, Label, LabelKey, LinuxCapability, LogDriver, LogSize, NamespaceMode,
-    ObservedApiVersion, ObservedPodmanVersion, PublicHealthArgumentArray, PublicHealthCommand, PublicLabelValue,
-    RenderedHttpBody, ResourceKind, Rlimit, RlimitKind, RlimitValue, SensitiveInlineHealthArgumentArray,
-    SensitiveInlineHealthCommand, SensitiveInputReference, StartupHealthCheck, StartupHealthRetries,
-    StartupHealthSuccesses, TargetExecutionContext, TargetProfile, plan_deployment, render_deployment,
+    ImageIntent, ImagePullPolicy, ImageSource, IpcNamespaceMode, Label, LabelKey, LinuxCapability, LogDriver, LogSize,
+    NamespaceMode, ObservedApiVersion, ObservedPodmanVersion, PublicHealthArgumentArray, PublicHealthCommand,
+    PublicLabelValue, RenderedHttpBody, ResourceKind, Rlimit, RlimitKind, RlimitValue,
+    SensitiveInlineHealthArgumentArray, SensitiveInlineHealthCommand, SensitiveInputReference, StartupHealthCheck,
+    StartupHealthRetries, StartupHealthSuccesses, TargetExecutionContext, TargetProfile, plan_deployment,
+    render_deployment,
 };
 
 fn target_for(version: &str) -> TargetProfile {
@@ -145,7 +146,12 @@ fn complete_intent() -> (DeploymentIntent, DeploymentResourceId) {
         .expect("rlimit");
     let mut intent = DeploymentIntent::new(target());
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/web:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/web:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container));
     (intent, container_id)

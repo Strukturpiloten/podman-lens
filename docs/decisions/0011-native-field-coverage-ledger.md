@@ -14,7 +14,8 @@ after overflow.
 
 `catalogue/v1/native-field-coverage.json` is a strict, packaged two-plane ledger. Its input-
 observation rows cover every M2 native field accepted by the inventory decoder. Its output-intent
-rows cover only B3b fields with exact planner, CLI, and Libpod rendering evidence. Each deterministic
+rows cover B3b runtime fields and the complete M6-B4 mount, secret-grant, volume-ownership, and
+image-acquisition surface with exact planner, CLI, and Libpod rendering evidence. Each deterministic
 row states its field path, coverage classification, observation owner, planner owner, separate CLI
 and Libpod renderer owners, reviewed target applicability, public API contract, diagnostic, and
 focused positive and negative test identifiers. The embedded parser rejects an unknown JSON key,
@@ -43,4 +44,9 @@ slice for complete native configuration in either case.
 - M6-B3b adds 32 exact public runtime rows plus two manual, redacted health-command boundaries.
   Sensitive or externally supplied health commands have no payload rendering claim and block the
   complete resource artifact with `PLN0046` on every reviewed target.
+- M6-B4 adds 16 output rows: named-volume copy, subpath-copy, and no-copy mounts; bind and tmpfs
+  mounts; mount and environment secret grants; 5.6+ UID/GID and all four explicit pull policies;
+  plus manual source-portability, no-copy-subpath, and pod-infra-mount boundaries. The ledger has
+  38 input-observation rows and 50 output-intent rows (88 total). Every reviewed line records
+  immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

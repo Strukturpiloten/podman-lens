@@ -5,8 +5,8 @@ applications. It is the native Podman boundary used by
 [BoxFerry](https://github.com/Strukturpiloten/boxferry), but it will not depend on BoxFerry.
 
 > [!NOTE]
-> The stable native input contract and transport-neutral deployment semantics are complete. Exact
-> command/API renderings and broad native output coverage remain under active development.
+> The stable native input contract, transport-neutral deployment semantics, and bounded M6-B1–B4
+> CLI/API renderings are complete. Broader native output coverage remains under active development.
 
 PodmanLens will:
 
@@ -48,12 +48,11 @@ create/start semantics. A pod with members gets one `StartPod`; unpodded contain
 `StartContainer`. The plan contains no shell, HTTP, environment, or secret-payload representation;
 M6 owns those renderings.
 
-M6-B3a adds bounded semantic-only health, logging, security, CPU, memory, PID, and rlimit intent
-for containers, including pod members. Namespace intent is intentionally narrower: it is only
-valid on an unpodded container and a pod-member declaration is rejected. M6-B3b renders the
-bounded public runtime surface exactly to CLI and Libpod descriptions; sensitive health commands
-still block the complete resource artifact without leaking their values. Journald labels require
-Podman 6.0, unlimited rlimits require 5.6, and CPU quota is positive and at least one millisecond.
+M6 completes the ledger-backed B1–B4 output surface. It renders the reviewed CLI and Libpod forms,
+versioned deployment artifact, and shell review script without executing them. The bounded surface
+covers settings, networking, runtime controls, typed mounts and secret grants, volume ownership,
+and explicit image policies. Sensitive environment and secret payload values remain redacted or
+external; unsupported source portability and target-version boundaries return structured findings.
 
 The inventory's currently accepted native fields are declared in a strict machine-readable ledger.
 Unmodeled data is retained only as bounded, redacted metadata; a partial record or overflow finding

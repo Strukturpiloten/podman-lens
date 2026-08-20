@@ -578,9 +578,11 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];
 const UNLIMITED_RLIMIT_TARGETS: &[&str] = &["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];
 const JOURNALD_LABEL_TARGETS: &[&str] = &["6.0.0", "6.1.0"];
+const B4_VERSIONED_TARGETS: &[&str] = &["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];
 
 struct ExpectedOutputEntry {
     id: &'static str,
+    resource_kind: &'static str,
     field_path: &'static str,
     classification: &'static str,
     target_versions: &'static [&'static str],
@@ -597,6 +599,7 @@ macro_rules! output {
     ($id:literal, $field_path:literal, $classification:literal, $target_versions:expr, $public_contract:literal, $positive_test:expr, $negative_test:expr) => {
         ExpectedOutputEntry {
             id: $id,
+            resource_kind: "container",
             field_path: $field_path,
             classification: $classification,
             target_versions: $target_versions,
@@ -612,6 +615,7 @@ macro_rules! output {
     (manual $id:literal, $field_path:literal, $public_contract:literal) => {
         ExpectedOutputEntry {
             id: $id,
+            resource_kind: "container",
             field_path: $field_path,
             classification: "manual",
             target_versions: ALL_REVIEWED_TARGETS,
@@ -623,6 +627,40 @@ macro_rules! output {
             positive_test: "tests::runtime::sensitive_health_command_blocks_the_resource_without_leaking_an_artifact",
             negative_test: "tests::runtime::sensitive_health_commands_never_leak_from_runtime_debug",
         }
+    };
+}
+
+macro_rules! b4_output {
+    ($id:literal, $resource_kind:literal, $field_path:literal, $classification:literal, $target_versions:expr, $planner:literal, $cli_renderer:literal, $libpod_renderer:literal, $public_contract:literal, $positive_test:literal, $negative_test:literal) => {
+        ExpectedOutputEntry {
+            id: $id,
+            resource_kind: $resource_kind,
+            field_path: $field_path,
+            classification: $classification,
+            target_versions: $target_versions,
+            planner: $planner,
+            cli_renderer: $cli_renderer,
+            libpod_renderer: $libpod_renderer,
+            public_contract: $public_contract,
+            finding: "PLN0046",
+            positive_test: $positive_test,
+            negative_test: $negative_test,
+        }
+    };
+    (manual $id:literal, $resource_kind:literal, $field_path:literal, $planner:literal, $cli_renderer:literal, $libpod_renderer:literal, $public_contract:literal, $positive_test:literal, $negative_test:literal) => {
+        b4_output!(
+            $id,
+            $resource_kind,
+            $field_path,
+            "manual",
+            ALL_REVIEWED_TARGETS,
+            $planner,
+            $cli_renderer,
+            $libpod_renderer,
+            $public_contract,
+            $positive_test,
+            $negative_test
+        )
     };
 }
 
@@ -921,6 +959,193 @@ const EXPECTED_OUTPUT_ENTRIES: &[ExpectedOutputEntry] = &[
     ),
     output!(manual "PLN-OUT-0033", "runtime.health.command.sensitive", "HealthCommand"),
     output!(manual "PLN-OUT-0034", "runtime.startup_health.command.sensitive", "HealthCommand"),
+    b4_output!(
+        "PLN-OUT-0035",
+        "container",
+        "mount.named_volume.copy",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_mounts",
+        "render::append_mount_arguments",
+        "render::mount_json",
+        "MountIntent::NamedVolume",
+        "tests::render::b4_bind_tmpfs_ordinary_volume_and_secret_grants_are_exact_on_all_reviewed_targets",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0036",
+        "container",
+        "mount.named_volume.copy.subpath",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_mounts",
+        "render::append_mount_arguments",
+        "render::mount_json",
+        "NamedVolumeMount::set_subpath",
+        "tests::render::b4_mounts_secrets_and_volume_ownership_are_exact_on_every_supported_target",
+        "tests::deployment::b4_typed_mounts_volume_ownership_and_secret_grants_preserve_all_optional_states"
+    ),
+    b4_output!(
+        "PLN-OUT-0037",
+        "container",
+        "mount.named_volume.nocopy",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_mounts",
+        "render::append_mount_arguments",
+        "render::mount_json",
+        "MountIntent::NamedVolume",
+        "tests::render::b4_bind_tmpfs_ordinary_volume_and_secret_grants_are_exact_on_all_reviewed_targets",
+        "tests::deployment::b4_typed_mounts_volume_ownership_and_secret_grants_preserve_all_optional_states"
+    ),
+    b4_output!(manual
+        "PLN-OUT-0038", "container", "mount.named_volume.nocopy.subpath", "deployment::validate_mounts",
+        "render::unsupported_fields", "render::mount_json", "NamedVolumeMount::set_subpath",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact",
+        "tests::deployment::b4_typed_mounts_volume_ownership_and_secret_grants_preserve_all_optional_states"
+    ),
+    b4_output!(
+        "PLN-OUT-0039",
+        "container",
+        "mount.bind",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_mounts",
+        "render::append_mount_arguments",
+        "render::native_mount_json",
+        "MountIntent::Bind",
+        "tests::render::b4_bind_tmpfs_ordinary_volume_and_secret_grants_are_exact_on_all_reviewed_targets",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0040",
+        "container",
+        "mount.tmpfs",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_mounts",
+        "render::append_mount_arguments",
+        "render::native_mount_json",
+        "MountIntent::Tmpfs",
+        "tests::render::b4_bind_tmpfs_ordinary_volume_and_secret_grants_are_exact_on_all_reviewed_targets",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0041",
+        "container",
+        "secret_grant.mount",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_secret_grants",
+        "render::append_secret_grants_arguments",
+        "render::append_secret_grants_json",
+        "SecretGrant::Mount",
+        "tests::render::b4_secret_mount_default_and_explicit_modes_are_exact_on_all_reviewed_targets",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0042",
+        "container",
+        "secret_grant.environment",
+        "supported-exact",
+        ALL_REVIEWED_TARGETS,
+        "deployment::validate_secret_grants",
+        "render::append_secret_grants_arguments",
+        "render::append_secret_grants_json",
+        "SecretGrant::Environment",
+        "tests::render::renderer_renders_typed_secret_grants_without_exposing_secret_material",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0043",
+        "volume",
+        "ownership.uid",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_volume_ownership",
+        "render::volume_create_cli_arguments",
+        "render::volume_create_json",
+        "VolumeIntent::uid",
+        "tests::render::b4_mounts_secrets_and_volume_ownership_are_exact_on_every_supported_target",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0044",
+        "volume",
+        "ownership.gid",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_volume_ownership",
+        "render::volume_create_cli_arguments",
+        "render::volume_create_json",
+        "VolumeIntent::gid",
+        "tests::render::b4_mounts_secrets_and_volume_ownership_are_exact_on_every_supported_target",
+        "tests::render::b4_version_and_portability_boundaries_block_the_complete_resource_artifact"
+    ),
+    b4_output!(
+        "PLN-OUT-0045",
+        "image",
+        "pull_policy.always",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_image_policy",
+        "render::render_operation",
+        "render::render_operation",
+        "ImagePullPolicy::Always",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target"
+    ),
+    b4_output!(
+        "PLN-OUT-0046",
+        "image",
+        "pull_policy.missing",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_image_policy",
+        "render::render_operation",
+        "render::render_operation",
+        "ImagePullPolicy::Missing",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target"
+    ),
+    b4_output!(
+        "PLN-OUT-0047",
+        "image",
+        "pull_policy.never",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_image_policy",
+        "render::render_operation",
+        "render::render_operation",
+        "ImagePullPolicy::Never",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target"
+    ),
+    b4_output!(
+        "PLN-OUT-0048",
+        "image",
+        "pull_policy.newer",
+        "target-gated",
+        B4_VERSIONED_TARGETS,
+        "deployment::validate_image_policy",
+        "render::render_operation",
+        "render::render_operation",
+        "ImagePullPolicy::Newer",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target",
+        "tests::render::b4_image_pull_policies_are_exact_on_every_supported_target"
+    ),
+    b4_output!(manual
+        "PLN-OUT-0049", "image", "source.portability", "deployment::validate_image_source", "render::unsupported_fields",
+        "render::render_operation", "ImageSource::classification",
+        "tests::render::b4_image_portability_manual_boundaries_block_the_complete_artifact",
+        "tests::deployment::image_source_classification_requires_explicit_policy_and_preserves_manual_boundaries"
+    ),
+    b4_output!(manual
+        "PLN-OUT-0050", "pod", "infra_mounts", "deployment::validate_mounts", "render::unsupported_fields",
+        "render::render_operation", "PodIntent::infra_mounts",
+        "tests::render::b4_pod_infra_mounts_block_without_a_partial_artifact",
+        "tests::deployment::infra_container_mounts_support_managed_external_and_duplicate_boundaries"
+    ),
 ];
 
 /// One strict coverage row linking an observation or declared output field to its contract.
@@ -1050,8 +1275,8 @@ pub fn native_field_coverage_catalogue() -> PodmanLensResult<Vec<NativeFieldCove
 fn parse_native_field_coverage_catalogue(source: &str) -> PodmanLensResult<Vec<NativeFieldCoverageEntry>> {
     let catalogue: CoverageCatalogue =
         serde_json::from_str(source).map_err(|_| Diagnostic::new(DiagnosticCode::NativeFieldCoverageUnavailable))?;
-    if catalogue.schema_version != 2
-        || catalogue.scope != "m2-input-observation-and-m6-b3-output-intent"
+    if catalogue.schema_version != 3
+        || catalogue.scope != "m2-input-observation-and-m6-b3-b4-output-intent"
         || !valid_entries(&catalogue.entries)
     {
         return Err(Diagnostic::new(DiagnosticCode::NativeFieldCoverageUnavailable));
@@ -1094,7 +1319,7 @@ fn valid_entries(entries: &[NativeFieldCoverageEntry]) -> bool {
             .all(|(entry, expected)| {
                 entry.plane == NativeFieldCoveragePlane::OutputIntent
                     && entry.id == expected.id
-                    && entry.resource_kind == "container"
+                    && entry.resource_kind == expected.resource_kind
                     && entry.field_path == expected.field_path
                     && entry.classification.as_str() == expected.classification
                     && entry.observation == "not_applicable"
@@ -1110,7 +1335,30 @@ fn valid_entries(entries: &[NativeFieldCoverageEntry]) -> bool {
                     && entry.finding == expected.finding
                     && entry.positive_test == expected.positive_test
                     && entry.negative_test == expected.negative_test
-                    && valid_field_path(&entry.field_path, "runtime.")
+                    && valid_field_path(
+                        &entry.field_path,
+                        match expected.resource_kind {
+                            "container" => {
+                                if expected.field_path.starts_with("runtime.") {
+                                    "runtime."
+                                } else if expected.field_path.starts_with("mount.") {
+                                    "mount."
+                                } else {
+                                    "secret_grant."
+                                }
+                            }
+                            "volume" => "ownership.",
+                            "image" => {
+                                if expected.field_path.starts_with("pull_policy.") {
+                                    "pull_policy."
+                                } else {
+                                    "source."
+                                }
+                            }
+                            "pod" => "infra_mounts",
+                            _ => return false,
+                        },
+                    )
                     && valid_semantic_links(entry)
             })
 }
@@ -1165,7 +1413,7 @@ mod tests {
     #[test]
     fn malformed_or_incomplete_coverage_catalogue_is_rejected() {
         for (from, to) in [
-            ("\"schema_version\": 2", "\"schema_version\": 1"),
+            ("\"schema_version\": 3", "\"schema_version\": 1"),
             ("\"PLN-FLD-0037\"", "\"PLN-FLD-9999\""),
             ("\"observation\"", "\"unknown_observation\""),
         ] {

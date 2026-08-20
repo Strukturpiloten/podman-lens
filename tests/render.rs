@@ -6,11 +6,12 @@ use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
     DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
-    ImageIntent, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent,
-    NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion, PodIntent, PortMapping, PortProtocol,
-    PublicEnvironmentValue, PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, RouteType,
-    SecretIntent, SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetExecutionContext, TargetProfile,
-    VolumeIntent, artifact::deployment_v1, plan_deployment, render_deployment,
+    ImageIntent, ImagePullPolicy, ImageSource, Label, LabelKey, MountAccess, MountIntent, NamedVolumeCopyMode,
+    NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion,
+    ObservedPodmanVersion, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue,
+    RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, RouteType, SecretGrant, SecretIntent,
+    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetExecutionContext, TargetProfile, VolumeIntent,
+    artifact::deployment_v1, plan_deployment, render_deployment,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -21,7 +22,7 @@ fn mount(volume: DeploymentResourceId, destination: &str) -> NamedVolumeMount {
     NamedVolumeMount::new(
         volume,
         AbsoluteContainerPath::new(destination).expect("destination"),
-        false,
+        MountAccess::ReadWrite,
         NamedVolumeCopyMode::Copy,
     )
     .expect("mount")
@@ -53,7 +54,12 @@ fn complete_plan(version: &str) -> podman_lens::DeploymentPlan {
         NetworkIntent::new(network).expect("network"),
     ));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/team/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/team/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(container_intent));
@@ -88,7 +94,12 @@ fn all_operation_plan(version: &str) -> podman_lens::DeploymentPlan {
         .expect("secret"),
     ));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image.clone(), "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image.clone(),
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(member_intent));
@@ -125,22 +136,13 @@ fn core_settings_plan_with_restart(version: &str, restart_policy: RestartPolicy)
     let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
     let pod = id(ResourceKind::Pod, "infra-pod");
     let container = id(ResourceKind::Container, "application");
-    let mut pod_intent = PodIntent::new(pod).expect("pod");
-    pod_intent.add_infra_mount(
-        NamedVolumeMount::new(
-            volume.clone(),
-            AbsoluteContainerPath::new("/var/lib/infra").expect("destination"),
-            true,
-            NamedVolumeCopyMode::NoCopy,
-        )
-        .expect("infra mount"),
-    );
+    let pod_intent = PodIntent::new(pod).expect("pod");
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
     container_intent.add_mount(
         NamedVolumeMount::new(
             volume.clone(),
             AbsoluteContainerPath::new("/var/lib/application").expect("destination"),
-            false,
+            MountAccess::ReadWrite,
             NamedVolumeCopyMode::Copy,
         )
         .expect("mount"),
@@ -183,7 +185,12 @@ fn core_settings_plan_with_restart(version: &str, restart_policy: RestartPolicy)
     let mut intent = DeploymentIntent::new(target(version, version));
     intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(container_intent));
@@ -205,7 +212,12 @@ fn renderer_reports_one_pod_member_restart_boundary() {
         .expect("restart policy");
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(container_intent));
@@ -225,7 +237,7 @@ fn renderer_rejects_cli_ambiguous_named_volume_spelling_without_partial_output()
         NamedVolumeMount::new(
             volume.clone(),
             AbsoluteContainerPath::new("/var/lib/application").expect("destination"),
-            false,
+            MountAccess::ReadWrite,
             NamedVolumeCopyMode::Copy,
         )
         .expect("mount"),
@@ -233,7 +245,12 @@ fn renderer_rejects_cli_ambiguous_named_volume_spelling_without_partial_output()
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container_intent));
     let plan = plan_deployment(&intent).plan().cloned().expect("plan");
@@ -244,7 +261,7 @@ fn renderer_rejects_cli_ambiguous_named_volume_spelling_without_partial_output()
 
 #[test]
 fn reviewed_versions_render_the_complete_m5_surface_deterministically() {
-    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
         let plan = complete_plan(version);
         let first = render_deployment(&plan).rendering().cloned().expect("rendering");
         let second = render_deployment(&plan).rendering().cloned().expect("rendering");
@@ -329,7 +346,7 @@ fn reviewed_versions_render_the_complete_m5_surface_deterministically() {
 
 #[test]
 fn reviewed_versions_render_every_core_setting_exactly_and_in_declaration_order() {
-    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
         let rendering = render_deployment(&core_settings_plan(version))
             .rendering()
             .cloned()
@@ -340,18 +357,11 @@ fn reviewed_versions_render_every_core_setting_exactly_and_in_declaration_order(
             .iter()
             .find(|operation| operation.cli().argv().windows(2).any(|args| args == ["pod", "create"]))
             .expect("pod create");
-        assert!(
-            pod.cli()
-                .argv()
-                .windows(2)
-                .any(|args| args == ["--volume", "application-data:/var/lib/infra:ro,nocopy"])
-        );
         assert_eq!(
             pod.libpod().body(),
             &RenderedHttpBody::Json(serde_json::json!({
                 "name": "infra-pod",
                 "Networks": {},
-                "volumes": [{"Name": "application-data", "Dest": "/var/lib/infra", "Options": ["ro", "nocopy"]}],
             }))
         );
         let container = rendering
@@ -423,7 +433,7 @@ fn every_restart_policy_has_exact_cli_and_libpod_forms_for_every_reviewed_target
         (RestartPolicy::Always, "always"),
         (RestartPolicy::UnlessStopped, "unless-stopped"),
     ];
-    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
         for (policy, expected) in policies {
             let rendering = render_deployment(&core_settings_plan_with_restart(version, policy))
                 .rendering()
@@ -466,7 +476,12 @@ fn unpodded_container_uses_its_distinct_start_container_operation() {
     let container = id(ResourceKind::Container, "standalone");
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image.clone(), "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image.clone(),
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(
         ContainerIntent::new(container.clone(), image).expect("container"),
@@ -517,6 +532,9 @@ fn renderer_covers_every_evidenced_operation_for_every_reviewed_release() {
             .expect("renderer evidence");
     for version in evidence["reviewed_lines"].as_array().expect("reviewed lines") {
         let version = version["version"].as_str().expect("version");
+        if matches!(version, "5.4.0" | "5.5.0") {
+            continue;
+        }
         let rendering = render_deployment(&all_operation_plan(version))
             .rendering()
             .cloned()
@@ -570,6 +588,9 @@ fn every_reviewed_release_has_exact_cli_and_libpod_renderings_for_all_operation_
             .expect("renderer evidence");
     for release in evidence["reviewed_lines"].as_array().expect("reviewed lines") {
         let version = release["version"].as_str().expect("version");
+        if matches!(version, "5.4.0" | "5.5.0") {
+            continue;
+        }
         let rendering = render_deployment(&all_operation_plan(version))
             .rendering()
             .cloned()
@@ -723,7 +744,12 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
         NetworkIntent::new(network.clone()).expect("network"),
     ));
     managed.add_resource(DeploymentResource::Image(
-        ImageIntent::new(managed_image.clone(), "registry.example.invalid/actual-source:1").expect("image"),
+        ImageIntent::new(
+            managed_image.clone(),
+            ImageSource::new("registry.example.invalid/actual-source:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     let mut container_intent = ContainerIntent::new(container, managed_image).expect("container");
     container_intent
@@ -873,7 +899,12 @@ fn populated_networking_intent_is_rendered_exactly_with_cli_and_libpod_forms() {
     let mut intent = DeploymentIntent::new(selected_target);
     intent.add_resource(DeploymentResource::Network(network_intent));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/team/application:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container_intent));
     let plan = plan_deployment(&intent).plan().cloned().expect("plan");
@@ -958,7 +989,7 @@ fn populated_networking_intent_is_rendered_exactly_with_cli_and_libpod_forms() {
 #[allow(clippy::too_many_lines)] // The target matrix is intentionally visible in one test.
 #[test]
 fn basic_unpodded_networking_is_exact_for_every_reviewed_release() {
-    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
         let network = id(ResourceKind::Network, "network");
         let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
         let container = id(ResourceKind::Container, "application");
@@ -1032,7 +1063,12 @@ fn basic_unpodded_networking_is_exact_for_every_reviewed_release() {
         let mut intent = DeploymentIntent::new(selected_target);
         intent.add_resource(DeploymentResource::Network(network_intent));
         intent.add_resource(DeploymentResource::Image(
-            ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+            ImageIntent::new(
+                image,
+                ImageSource::new("registry.example.invalid/team/application:1").expect("image source"),
+                ImagePullPolicy::Missing,
+            )
+            .expect("image"),
         ));
         intent.add_resource(DeploymentResource::Container(container_intent));
         let plan = plan_deployment(&intent).plan().cloned().expect("plan");
@@ -1110,7 +1146,7 @@ fn basic_unpodded_networking_is_exact_for_every_reviewed_release() {
 #[allow(clippy::too_many_lines)] // Pod namespace ownership and its wire output are one invariant.
 #[test]
 fn pod_owned_networking_renders_on_the_infra_container() {
-    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
         let network = id(ResourceKind::Network, "network");
         let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
         let pod = id(ResourceKind::Pod, "application-pod");
@@ -1156,7 +1192,12 @@ fn pod_owned_networking_renders_on_the_infra_container() {
             NetworkIntent::new(network).expect("network"),
         ));
         intent.add_resource(DeploymentResource::Image(
-            ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+            ImageIntent::new(
+                image,
+                ImageSource::new("registry.example.invalid/team/application:1").expect("image source"),
+                ImagePullPolicy::Missing,
+            )
+            .expect("image"),
         ));
         intent.add_resource(DeploymentResource::Pod(pod_intent));
         intent.add_resource(DeploymentResource::Container(member_intent));
@@ -1254,35 +1295,44 @@ fn networking_target_boundaries_block_inexact_rendering() {
         let mut intent = DeploymentIntent::new(target(version, version));
         intent.add_resource(DeploymentResource::Network(network_intent));
         intent.add_resource(DeploymentResource::Image(
-            ImageIntent::new(image, "registry.example.invalid/team/image:1").expect("image"),
+            ImageIntent::new(
+                image,
+                ImageSource::new("registry.example.invalid/team/image:1").expect("image source"),
+                ImagePullPolicy::Missing,
+            )
+            .expect("image"),
         ));
         intent.add_resource(DeploymentResource::Container(container_intent));
         let plan = plan_deployment(&intent).plan().cloned().expect("plan");
         let outcome = render_deployment(&plan);
         assert!(!outcome.is_success());
+        let expected = if matches!(version, "5.4.0" | "5.5.0") {
+            vec!["network_order", "routes.route_type", "pull_policy.target_version"]
+        } else {
+            vec!["network_order", "routes.route_type"]
+        };
         assert_eq!(
             outcome
                 .findings()
                 .iter()
                 .filter_map(podman_lens::RenderingFinding::field)
                 .collect::<Vec<_>>(),
-            ["network_order", "routes.route_type"]
+            expected
         );
     }
 }
 
 #[test]
-fn renderer_rejects_unmodelled_secret_attachments_without_partial_output() {
+fn renderer_renders_typed_secret_grants_without_exposing_secret_material() {
     let volume = id(ResourceKind::Volume, "data");
     let secret = id(ResourceKind::Secret, "credential");
     let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
     let pod = id(ResourceKind::Pod, "pod");
     let container = id(ResourceKind::Container, "container");
-    let mut pod_intent = PodIntent::new(pod).expect("pod");
-    pod_intent.add_infra_mount(mount(volume.clone(), "/pod-data"));
+    let pod_intent = PodIntent::new(pod).expect("pod");
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
     container_intent.add_mount(mount(volume.clone(), "/container-data"));
-    container_intent.add_secret(secret.clone()).expect("secret");
+    container_intent.add_secret_grant(SecretGrant::mount(secret.clone()).expect("secret"));
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
     intent.add_resource(DeploymentResource::Secret(
@@ -1293,26 +1343,446 @@ fn renderer_rejects_unmodelled_secret_attachments_without_partial_output() {
         .expect("secret"),
     ));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(container_intent));
     let planning = plan_deployment(&intent);
     let plan = planning.plan().expect("valid semantic plan");
     let outcome = render_deployment(plan);
+    let rendering = outcome.rendering().expect("exact rendering");
+    let container = rendering
+        .operations()
+        .iter()
+        .find(|operation| operation.operation().id().resource().kind() == ResourceKind::Container)
+        .expect("container operation");
+    assert!(
+        container
+            .cli()
+            .argv()
+            .windows(2)
+            .any(|arguments| arguments == ["--secret", "source=credential,type=mount"])
+    );
+    assert!(!format!("{rendering:?}").contains("vault/app-password"));
+}
+
+#[test]
+#[allow(clippy::panic)] // The test must stop when a rendered body violates its typed contract.
+fn b4_secret_mount_default_and_explicit_modes_are_exact_on_all_reviewed_targets() {
+    use podman_lens::SecretMode;
+
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+        let default_secret = id(ResourceKind::Secret, "default-secret");
+        let explicit_secret = id(ResourceKind::Secret, "explicit-secret");
+        let container = id(ResourceKind::Container, "app");
+        let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+        container_intent.add_secret_grant(SecretGrant::mount(default_secret.clone()).expect("secret"));
+        let mut explicit = SecretGrant::mount(explicit_secret.clone()).expect("secret");
+        explicit
+            .set_mount_mode(SecretMode::new(0o440).expect("mode"))
+            .expect("mode");
+        container_intent.add_secret_grant(explicit);
+        let mut intent = DeploymentIntent::new(target(version, version));
+        for prerequisite in [image, default_secret, explicit_secret] {
+            intent.add_resource(DeploymentResource::ExternalPrecondition(
+                ExternalPrecondition::new(prerequisite).expect("external prerequisite"),
+            ));
+        }
+        intent.add_resource(DeploymentResource::Container(container_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let rendering = render_deployment(&plan).rendering().cloned().expect("rendering");
+        let container = rendering.operations().first().expect("container create");
+        assert!(
+            container
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--secret", "source=default-secret,type=mount"])
+        );
+        assert!(
+            container
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--secret", "source=explicit-secret,type=mount,mode=440"])
+        );
+        let RenderedHttpBody::Json(body) = container.libpod().body() else {
+            panic!("container must carry JSON");
+        };
+        assert_eq!(body["secrets"][0]["Mode"], 0o444);
+        assert_eq!(body["secrets"][1]["Mode"], 0o440);
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // The finite five-target rendering matrix is deliberately explicit.
+#[allow(clippy::panic)] // The test must stop when a rendered body violates its typed contract.
+fn b4_mounts_secrets_and_volume_ownership_are_exact_on_every_supported_target() {
+    use podman_lens::{BindMount, EnvironmentName, SecretMode, TmpfsMount, UnixId, VolumeSubpath};
+
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let volume = id(ResourceKind::Volume, "data");
+        let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+        let secret = id(ResourceKind::Secret, "credential");
+        let container = id(ResourceKind::Container, "app");
+        let mut volume_intent = VolumeIntent::new(volume.clone()).expect("volume");
+        volume_intent.set_uid(UnixId::new(0).expect("uid")).expect("uid");
+        volume_intent.set_gid(UnixId::new(1000).expect("gid")).expect("gid");
+        let mut named = NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/data").expect("destination"),
+            MountAccess::ReadOnly,
+            NamedVolumeCopyMode::Copy,
+        )
+        .expect("mount");
+        named
+            .set_subpath(VolumeSubpath::new("/state").expect("subpath"))
+            .expect("subpath");
+        let mut named_read_write = NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/data-read-write").expect("destination"),
+            MountAccess::ReadWrite,
+            NamedVolumeCopyMode::Copy,
+        )
+        .expect("mount");
+        named_read_write
+            .set_subpath(VolumeSubpath::new("/state-read-write").expect("subpath"))
+            .expect("subpath");
+        let mut container_intent = ContainerIntent::new(container.clone(), image.clone()).expect("container");
+        container_intent.add_mount(MountIntent::NamedVolume(named));
+        container_intent.add_mount(MountIntent::NamedVolume(named_read_write));
+        container_intent.add_mount(BindMount::new(
+            AbsoluteContainerPath::new("/srv/app").expect("source"),
+            AbsoluteContainerPath::new("/app").expect("destination"),
+            MountAccess::ReadWrite,
+        ));
+        container_intent.add_mount(TmpfsMount::new(
+            AbsoluteContainerPath::new("/run/cache").expect("destination"),
+            MountAccess::ReadOnly,
+        ));
+        let mut secret_mount = SecretGrant::mount(secret.clone()).expect("secret");
+        secret_mount
+            .set_mount_target(AbsoluteContainerPath::new("/run/secrets/credential").expect("target"))
+            .expect("target");
+        secret_mount.set_mount_uid(UnixId::new(0).expect("uid")).expect("uid");
+        secret_mount.set_mount_gid(UnixId::new(1).expect("gid")).expect("gid");
+        secret_mount
+            .set_mount_mode(SecretMode::new(0o440).expect("mode"))
+            .expect("mode");
+        container_intent.add_secret_grant(secret_mount);
+        container_intent.add_secret_grant(
+            SecretGrant::environment(secret.clone(), EnvironmentName::new("DATABASE_PASSWORD").expect("name"))
+                .expect("environment secret"),
+        );
+        let mut intent = DeploymentIntent::new(target(version, version));
+        intent.add_resource(DeploymentResource::Volume(volume_intent));
+        intent.add_resource(DeploymentResource::Secret(
+            SecretIntent::new(
+                secret,
+                SensitiveInputReference::new("vault/credential").expect("reference"),
+            )
+            .expect("secret intent"),
+        ));
+        intent.add_resource(DeploymentResource::Image(
+            ImageIntent::new(
+                image,
+                ImageSource::new("registry.example.invalid/app:1").expect("source"),
+                ImagePullPolicy::Always,
+            )
+            .expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Container(container_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let outcome = render_deployment(&plan);
+        let rendering = outcome.rendering().expect("rendering");
+        let volume = rendering
+            .operations()
+            .iter()
+            .find(|operation| {
+                operation
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|arguments| arguments == ["volume", "create"])
+            })
+            .expect("volume");
+        assert!(
+            volume
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--uid", "0"])
+        );
+        assert!(
+            volume
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--gid", "1000"])
+        );
+        let container = rendering
+            .operations()
+            .iter()
+            .find(|operation| {
+                operation
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|arguments| arguments == ["container", "create"])
+            })
+            .expect("container");
+        assert!(container.cli().argv().windows(2).any(|arguments| {
+            arguments
+                == [
+                    "--mount",
+                    "type=volume,source=data,target=/data,readonly,subpath=/state",
+                ]
+        }));
+        assert!(container.cli().argv().windows(2).any(|arguments| {
+            arguments
+                == [
+                    "--mount",
+                    "type=volume,source=data,target=/data-read-write,subpath=/state-read-write",
+                ]
+        }));
+        assert!(
+            container
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--mount", "type=bind,source=/srv/app,target=/app"])
+        );
+        assert!(
+            container
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--mount", "type=tmpfs,target=/run/cache,readonly"])
+        );
+        assert!(
+            container
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| { arguments == ["--secret", "source=credential,type=env,target=DATABASE_PASSWORD"] })
+        );
+        let RenderedHttpBody::Json(body) = container.libpod().body() else {
+            panic!("container must carry JSON");
+        };
+        assert_eq!(body["volumes"][0]["SubPath"], "/state");
+        assert_eq!(body["volumes"][0]["Options"], serde_json::json!(["ro"]));
+        assert_eq!(body["volumes"][1]["SubPath"], "/state-read-write");
+        assert_eq!(body["volumes"][1]["Options"], serde_json::json!([]));
+        assert_eq!(body["mounts"][0]["type"], "bind");
+        assert_eq!(body["mounts"][1]["type"], "tmpfs");
+        assert_eq!(body["secrets"][0]["Source"], "credential");
+        assert_eq!(body["secrets"][0]["Mode"], 288);
+        assert!(!format!("{rendering:?}").contains("vault/credential"));
+    }
+}
+
+#[test]
+#[allow(clippy::panic)] // The test must stop when a rendered body violates its typed contract.
+fn b4_bind_tmpfs_ordinary_volume_and_secret_grants_are_exact_on_all_reviewed_targets() {
+    use podman_lens::{BindMount, EnvironmentName, TmpfsMount};
+
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let volume = id(ResourceKind::Volume, "data");
+        let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+        let secret = id(ResourceKind::Secret, "credential");
+        let container = id(ResourceKind::Container, "app");
+        let mut container_intent = ContainerIntent::new(container.clone(), image.clone()).expect("container");
+        container_intent.add_mount(
+            NamedVolumeMount::new(
+                volume.clone(),
+                AbsoluteContainerPath::new("/data").expect("destination"),
+                MountAccess::ReadWrite,
+                NamedVolumeCopyMode::NoCopy,
+            )
+            .expect("mount"),
+        );
+        container_intent.add_mount(BindMount::new(
+            AbsoluteContainerPath::new("/srv/app").expect("source"),
+            AbsoluteContainerPath::new("/app").expect("destination"),
+            MountAccess::ReadOnly,
+        ));
+        container_intent.add_mount(TmpfsMount::new(
+            AbsoluteContainerPath::new("/run/cache").expect("destination"),
+            MountAccess::ReadWrite,
+        ));
+        container_intent.add_secret_grant(
+            SecretGrant::environment(secret.clone(), EnvironmentName::new("PASSWORD").expect("target"))
+                .expect("secret"),
+        );
+        let mut intent = DeploymentIntent::new(target(version, version));
+        for identity in [volume, image, secret] {
+            intent.add_resource(DeploymentResource::ExternalPrecondition(
+                ExternalPrecondition::new(identity).expect("external prerequisite"),
+            ));
+        }
+        intent.add_resource(DeploymentResource::Container(container_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let outcome = render_deployment(&plan);
+        let rendering = outcome.rendering().expect("rendering");
+        let operation = rendering.operations().first().expect("container create");
+        assert!(
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--volume", "data:/data:rw,nocopy"])
+        );
+        assert!(
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--mount", "type=bind,source=/srv/app,target=/app,readonly"])
+        );
+        assert!(
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|arguments| arguments == ["--mount", "type=tmpfs,target=/run/cache"])
+        );
+        let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+            panic!("container must carry JSON");
+        };
+        assert_eq!(body["volumes"][0]["Name"], "data");
+        assert_eq!(body["mounts"][0]["type"], "bind");
+        assert_eq!(body["mounts"][1]["type"], "tmpfs");
+        assert_eq!(body["secret_env"]["PASSWORD"], "credential");
+    }
+}
+
+#[test]
+fn b4_image_pull_policies_are_exact_on_every_supported_target() {
+    let policies = [
+        (ImagePullPolicy::Always, "always"),
+        (ImagePullPolicy::Missing, "missing"),
+        (ImagePullPolicy::Never, "never"),
+        (ImagePullPolicy::Newer, "newer"),
+    ];
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        for (policy, spelling) in policies {
+            let image = id(ResourceKind::Image, "managed-image");
+            let mut intent = DeploymentIntent::new(target(version, version));
+            intent.add_resource(DeploymentResource::Image(
+                ImageIntent::new(
+                    image,
+                    ImageSource::new("registry.example.invalid/app:1").expect("source"),
+                    policy,
+                )
+                .expect("image"),
+            ));
+            let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+            let rendering = render_deployment(&plan).rendering().cloned().expect("rendering");
+            let operation = rendering.operations().first().expect("image pull");
+            assert!(
+                operation
+                    .cli()
+                    .argv()
+                    .iter()
+                    .any(|argument| argument == &format!("--policy={spelling}"))
+            );
+            assert_eq!(
+                operation.libpod().path_and_query(),
+                format!(
+                    "/v{version}/libpod/images/pull?reference=registry.example.invalid%2Fapp%3A1&policy={spelling}"
+                )
+            );
+        }
+    }
+    for version in ["5.4.0", "5.5.0"] {
+        for (policy, _) in policies {
+            let image = id(ResourceKind::Image, "managed-image");
+            let mut intent = DeploymentIntent::new(target(version, version));
+            intent.add_resource(DeploymentResource::Image(
+                ImageIntent::new(
+                    image,
+                    ImageSource::new("registry.example.invalid/app:1").expect("source"),
+                    policy,
+                )
+                .expect("image"),
+            ));
+            let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+            let outcome = render_deployment(&plan);
+            assert!(!outcome.is_success());
+            assert!(outcome.findings().iter().any(|finding| {
+                finding.code().as_str() == "PLN0046" && finding.field() == Some("pull_policy.target_version")
+            }));
+        }
+    }
+}
+
+#[test]
+fn b4_image_portability_manual_boundaries_block_the_complete_artifact() {
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    for (name, source) in [
+        ("local", "localhost/app:1"),
+        ("tagless", "registry.example.invalid/app"),
+        ("unqualified", "app:1"),
+    ] {
+        intent.add_resource(DeploymentResource::Image(
+            ImageIntent::new(
+                id(ResourceKind::Image, name),
+                ImageSource::new(source).expect("valid manually portable source"),
+                ImagePullPolicy::Never,
+            )
+            .expect("image"),
+        ));
+    }
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
     assert!(!outcome.is_success());
+    assert!(outcome.rendering().is_none());
     assert_eq!(
         outcome
             .findings()
             .iter()
             .map(|finding| (
                 finding.code().as_str(),
-                finding.subject().expect("subject").name(),
+                finding.subject().map(DeploymentResourceId::name),
                 finding.field()
             ))
             .collect::<Vec<_>>(),
-        vec![("PLN0046", "container", Some("secrets"))]
+        vec![
+            ("PLN0048", Some("local"), Some("source.portability")),
+            ("PLN0048", Some("tagless"), Some("source.portability")),
+            ("PLN0048", Some("unqualified"), Some("source.portability")),
+        ]
     );
+}
+
+#[test]
+fn b4_pod_infra_mounts_block_without_a_partial_artifact() {
+    let volume = id(ResourceKind::Volume, "data");
+    let pod = id(ResourceKind::Pod, "application");
+    let mut pod_intent = PodIntent::new(pod).expect("pod");
+    pod_intent.add_infra_mount(
+        NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/data").expect("destination"),
+            MountAccess::ReadWrite,
+            NamedVolumeCopyMode::Copy,
+        )
+        .expect("mount"),
+    );
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
+    intent.add_resource(DeploymentResource::Pod(pod_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    assert_eq!(outcome.findings()[0].field(), Some("infra_mounts"));
+    assert!(outcome.rendering().is_none());
 }
 
 #[test]
@@ -1368,7 +1838,12 @@ fn renderer_rejects_sensitive_environment_values_without_leaking_names_or_values
     }
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container_intent));
     let planning = plan_deployment(&intent);
@@ -1404,7 +1879,12 @@ fn renderer_rejects_external_environment_values_without_leaking_names_or_referen
         .expect("environment");
     let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container_intent));
     let plan = plan_deployment(&intent).plan().cloned().expect("plan");
@@ -1527,7 +2007,7 @@ fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result
 fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Result<(), Box<dyn std::error::Error>> {
     let evidence: serde_json::Value =
         serde_json::from_str(include_str!("../catalogue/v1/podman-deployment-rendering.json"))?;
-    assert_eq!(evidence["schema_version"], 7);
+    assert_eq!(evidence["schema_version"], 8);
     let runtime_claims = evidence["runtime_field_claims"]
         .as_array()
         .expect("runtime field claims");
@@ -1559,7 +2039,12 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
         let fields = line["field_evidence"].as_array().expect("field evidence");
         let runtime = &line["runtime_evidence"];
         assert_eq!(operations.len(), 8);
-        assert_eq!(fields.len(), 41);
+        assert_eq!(fields.len(), 40);
+        assert!(
+            fields
+                .iter()
+                .all(|field| field["field"] != "pod-infra-named-volume-mount")
+        );
         let exact_runtime = runtime["exact_fields"].as_array().expect("exact runtime fields");
         let target_gated_runtime = runtime["target_gated_fields"]
             .as_array()

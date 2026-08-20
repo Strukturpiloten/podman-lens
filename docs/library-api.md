@@ -21,8 +21,10 @@ renderers. An `OutputIntent` row links a declared field to its planner, exact CL
 Libpod renderer, reviewed target versions, public accessor, diagnostic rule, and focused tests.
 `not_applicable` means no contract exists in that plane; it never authorizes a conversion. The B3b
 runtime rows name all seven reviewed targets except journald labels (6.0+) and unlimited rlimits
-(5.6+). Sensitive and external health commands are manual redacted boundaries that apply to all
-reviewed targets and block the complete resource artifact with `PLN0046`.
+(5.6+). The 16 B4 rows include exact typed mount and secret-grant forms, 5.6+ volume ownership and
+all four explicit image pull policies, and manual no-copy-subpath, source-portability, and
+pod-infra-mount boundaries. Sensitive and external health commands are manual redacted boundaries
+that apply to all reviewed targets and block the complete resource artifact with `PLN0046`.
 
 `ResourceRecord::unknown_fields()` retains bounded metadata for unmodeled native fields without raw
 values. Call `ResourceRecord::unknown_fields_complete()` before treating that metadata as an
@@ -82,6 +84,15 @@ does not mean anonymous; callers must still handle reports as operational data.
 
 ## Plan native deployment semantics
 
+M6-B4 replaces the original named-volume-only and raw secret surfaces with `MountIntent`
+(named volume, bind, tmpfs), `VolumeSubpath`, `MountAccess`, typed `SecretGrant` mount/environment
+forms, and independently optional volume `UnixId` UID/GID ownership. `ImageIntent` requires a
+validated `ImageSource` and an explicit `ImagePullPolicy`; its classification exposes portable,
+local, unqualified, and tagless sources without changing their spelling. Secret material remains
+only in `SecretIntent`'s redacted external input reference.
+For mounted secrets, omitted mode retains Podman's documented `0444` default in the Libpod request
+description as `Mode: 292`, so the CLI and API renderings have the same semantics.
+
 M6-B3a adds `ContainerIntent::runtime_mut()` for bounded health, logging, security, CPU shares,
 period/quota, memory, PID, and rlimit intent on containers, including pod members. Startup health
 requires configured normal health. Public health shell and direct-exec forms are explicit; inline
@@ -108,8 +119,12 @@ lifecycle and membership are validated.
 plan; an unsuccessful outcome has sorted `PlanningFinding` values and no partial plan. The only
 M5 operations are image acquisition, resource creation, `StartPod`, and `StartContainer`. Managed
 images use a bounded portable pull-reference grammar: a host-qualified lower-case registry/repository
-with either a tag or a `sha256` digest. Local, unqualified, and malformed spellings are rejected.
-They use explicit migration-safe `ImagePullPolicy::Missing`.
+with either a tag or a `sha256` digest. Only malformed spellings are constructor-rejected. Valid
+local, unqualified, and tagless spellings are retained with their `ImageSourceClassification`; managed
+rendering later blocks them with manual `PLN0048` portability findings rather than rewriting them.
+Every managed image uses an explicit `ImagePullPolicy`; no policy is implied. Portable sources can
+be acquired from Podman 5.6 onward. Callers that intentionally avoid managed acquisition declare
+an `ExternalPrecondition` instead.
 
 Pods can depend on networks and named volumes; containers declare matching membership in both
 directions. A pod with members gets one
@@ -119,8 +134,9 @@ same-pod edge is rejected. Secret material uses `SensitiveInputReference` and ne
 content; the typed external reference is retained on the managed secret operation so M6 can render
 it without recovering data from the caller. Every operation likewise retains its complete typed
 managed-resource intent, and `DeploymentPlan::external_preconditions` preserves all explicit
-network, volume, image, and secret boundaries in deterministic order. M6 will add CLI, Libpod
-HTTP, JSON, and shell representations.
+network, volume, image, and secret boundaries in deterministic order. `render_deployment` produces
+the reviewed M6 CLI argument arrays, Libpod request descriptions, a versioned deployment artifact,
+and a shell review script from that same plan without opening a connection or executing Podman.
 
 M6-A exposes `render_deployment`, producing deterministic CLI argument arrays and versioned Libpod
 request descriptions without opening a connection. `DeploymentRendering::connection` preserves the
@@ -150,7 +166,9 @@ Pod membership, unpodded-container topology, typed named-volume mounts, and the 
 container settings are exact. The bounded M6-B2 networking subset is also exact with committed
 per-release Podman and common-module evidence. Container network order and non-unicast route types
 need Podman 6.0 or newer; lower reviewed targets return a field-level finding and no output. Secret
-attachments remain unmodelled because their target and option semantics are not yet retained.
+grants retain typed mount/environment targets and bounded mounted-secret UID/GID/mode options, and
+render to both planes. Secret payload material remains an external deferred input and is never put
+in an artifact, diagnostic, or rendered request body.
 For the exact basic topology that is already rendered, Libpod create bodies use the native Go
 member spelling `Networks`; the lowercase JSON member is not emitted.
 

@@ -13,7 +13,7 @@ Making shell arguments the canonical plan would prevent safe native API use.
 A deployment plan is a versioned, ordered list of semantic resource operations. Each operation has a
 stable identifier, action, complete typed managed-resource intent, and dependencies. The plan also
 retains its exact deterministic external preconditions. M5 establishes that semantic source of
-truth. M6 adds its exact representations for the selected target:
+truth. M6 renders its exact reviewed representations for the selected target:
 
 - CLI representation as a program and argument array;
 - native Libpod representation as an HTTP method, versioned path, and typed body.
@@ -27,6 +27,7 @@ safe parallel execution, but a consumer does not need a graph scheduler.
 ## Consequences
 
 - Consumers do not parse shell strings.
-- CLI and API equivalence can be tested per semantic operation and Podman version once M6 exists.
+- CLI and API equivalence is regression-tested per bounded semantic operation and reviewed Podman
+  version.
 - A missing or approximate representation produces a structured outcome.
 - Sensitive payloads remain external references rather than serialized request bodies.

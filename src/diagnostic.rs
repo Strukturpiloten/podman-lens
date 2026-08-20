@@ -100,6 +100,8 @@ pub enum DiagnosticCode {
     RenderingUnsupported,
     /// The packaged native-field coverage catalogue is malformed or incomplete.
     NativeFieldCoverageUnavailable,
+    /// An image source is valid but cannot be assumed portable across target installations.
+    ImagePortabilityManual,
 }
 
 impl DiagnosticCode {
@@ -154,6 +156,7 @@ impl DiagnosticCode {
             Self::RenderingTargetMismatch => "PLN0045",
             Self::RenderingUnsupported => "PLN0046",
             Self::NativeFieldCoverageUnavailable => "PLN0047",
+            Self::ImagePortabilityManual => "PLN0048",
         }
     }
 }
@@ -269,6 +272,9 @@ impl Diagnostic {
                 DiagnosticCode::RenderingUnsupported => "a semantic operation has no reviewed renderer representation",
                 DiagnosticCode::NativeFieldCoverageUnavailable => {
                     "the native-field coverage catalogue is malformed or incomplete"
+                }
+                DiagnosticCode::ImagePortabilityManual => {
+                    "the image source needs a manual portability decision before it can be acquired"
                 }
             },
         }

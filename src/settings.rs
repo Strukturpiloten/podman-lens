@@ -392,13 +392,69 @@ pub enum NamedVolumeCopyMode {
     NoCopy,
 }
 
+/// Explicit read/write access for one typed mount.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MountAccess {
+    /// The mounted path is writable from the container.
+    ReadWrite,
+    /// The mounted path is read-only from the container.
+    ReadOnly,
+}
+
+impl MountAccess {
+    /// Returns whether the access declaration is read-only.
+    #[must_use]
+    pub const fn is_read_only(self) -> bool {
+        matches!(self, Self::ReadOnly)
+    }
+}
+
+/// A normalized absolute path rooted at the named volume root.
+///
+/// Podman's native `SubPath` is absolute relative to a volume root, not relative to the container
+/// filesystem. Empty, relative, `.` and `..` components are rejected before a renderer can build
+/// a native mount representation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VolumeSubpath(String);
+
+impl VolumeSubpath {
+    /// Creates one normalized absolute volume-root subpath.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` for an empty, relative, unsafe, or non-normalized spelling.
+    pub fn new(value: impl Into<String>) -> PodmanLensResult<Self> {
+        let value = value.into();
+        if value.len() > MAX_PATH_BYTES
+            || !value.starts_with('/')
+            || value.contains('\\')
+            || value.chars().any(char::is_control)
+            || value
+                .split('/')
+                .skip(1)
+                .any(|component| component.is_empty() || matches!(component, "." | ".."))
+        {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated absolute volume-root subpath.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// One named volume mounted at an exact normalized container destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NamedVolumeMount {
     source: DeploymentResourceId,
     destination: AbsoluteContainerPath,
-    read_only: bool,
+    access: MountAccess,
     copy_mode: NamedVolumeCopyMode,
+    subpath: Option<VolumeSubpath>,
 }
 
 impl NamedVolumeMount {
@@ -410,7 +466,7 @@ impl NamedVolumeMount {
     pub fn new(
         source: DeploymentResourceId,
         destination: AbsoluteContainerPath,
-        read_only: bool,
+        access: MountAccess,
         copy_mode: NamedVolumeCopyMode,
     ) -> PodmanLensResult<Self> {
         if source.kind() != ResourceKind::Volume {
@@ -419,9 +475,26 @@ impl NamedVolumeMount {
         Ok(Self {
             source,
             destination,
-            read_only,
+            access,
             copy_mode,
+            subpath: None,
         })
+    }
+
+    /// Adds one volume-root-relative subpath.
+    ///
+    /// Podman's dual CLI/API representation is exact only with normal copy behavior. `nocopy`
+    /// plus `subpath` is deliberately rejected rather than silently changing initialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` for a repeated subpath or for `NoCopy`.
+    pub fn set_subpath(&mut self, subpath: VolumeSubpath) -> PodmanLensResult<()> {
+        if self.subpath.is_some() || self.copy_mode == NamedVolumeCopyMode::NoCopy {
+            return Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination));
+        }
+        self.subpath = Some(subpath);
+        Ok(())
     }
 
     /// Returns the named-volume prerequisite identity.
@@ -439,7 +512,13 @@ impl NamedVolumeMount {
     /// Returns whether the mount is read-only.
     #[must_use]
     pub const fn is_read_only(&self) -> bool {
-        self.read_only
+        self.access.is_read_only()
+    }
+
+    /// Returns the explicit mount access mode.
+    #[must_use]
+    pub const fn access(&self) -> MountAccess {
+        self.access
     }
 
     /// Returns image-content copy behavior.
@@ -447,6 +526,356 @@ impl NamedVolumeMount {
     pub const fn copy_mode(&self) -> NamedVolumeCopyMode {
         self.copy_mode
     }
+
+    /// Returns the optional volume-root-relative source subpath.
+    #[must_use]
+    pub fn subpath(&self) -> Option<&VolumeSubpath> {
+        self.subpath.as_ref()
+    }
+}
+
+/// One host bind mount at an exact normalized container destination.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BindMount {
+    source: AbsoluteContainerPath,
+    destination: AbsoluteContainerPath,
+    access: MountAccess,
+}
+
+impl BindMount {
+    /// Creates one normalized host-path bind mount.
+    #[must_use]
+    pub const fn new(source: AbsoluteContainerPath, destination: AbsoluteContainerPath, access: MountAccess) -> Self {
+        Self {
+            source,
+            destination,
+            access,
+        }
+    }
+
+    /// Returns the normalized absolute host source path.
+    #[must_use]
+    pub fn source(&self) -> &AbsoluteContainerPath {
+        &self.source
+    }
+
+    /// Returns the normalized container destination path.
+    #[must_use]
+    pub fn destination(&self) -> &AbsoluteContainerPath {
+        &self.destination
+    }
+
+    /// Returns the declared access mode.
+    #[must_use]
+    pub const fn access(&self) -> MountAccess {
+        self.access
+    }
+}
+
+/// One tmpfs mount at an exact normalized container destination.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TmpfsMount {
+    destination: AbsoluteContainerPath,
+    access: MountAccess,
+}
+
+impl TmpfsMount {
+    /// Creates one tmpfs mount.
+    #[must_use]
+    pub const fn new(destination: AbsoluteContainerPath, access: MountAccess) -> Self {
+        Self { destination, access }
+    }
+
+    /// Returns the normalized container destination path.
+    #[must_use]
+    pub fn destination(&self) -> &AbsoluteContainerPath {
+        &self.destination
+    }
+
+    /// Returns the declared access mode.
+    #[must_use]
+    pub const fn access(&self) -> MountAccess {
+        self.access
+    }
+}
+
+/// A typed exact container mount. Raw `--volume` spelling is deliberately not public API.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MountIntent {
+    /// A named Podman volume.
+    NamedVolume(NamedVolumeMount),
+    /// A host filesystem bind mount.
+    Bind(BindMount),
+    /// An in-memory tmpfs mount.
+    Tmpfs(TmpfsMount),
+}
+
+impl From<NamedVolumeMount> for MountIntent {
+    fn from(mount: NamedVolumeMount) -> Self {
+        Self::NamedVolume(mount)
+    }
+}
+
+impl From<BindMount> for MountIntent {
+    fn from(mount: BindMount) -> Self {
+        Self::Bind(mount)
+    }
+}
+
+impl From<TmpfsMount> for MountIntent {
+    fn from(mount: TmpfsMount) -> Self {
+        Self::Tmpfs(mount)
+    }
+}
+
+impl MountIntent {
+    /// Returns the normalized container destination shared by all mount forms.
+    #[must_use]
+    pub fn destination(&self) -> &AbsoluteContainerPath {
+        match self {
+            Self::NamedVolume(mount) => mount.destination(),
+            Self::Bind(mount) => mount.destination(),
+            Self::Tmpfs(mount) => mount.destination(),
+        }
+    }
+
+    /// Returns the named-volume source identity when this is a named-volume mount.
+    #[must_use]
+    pub fn volume_source(&self) -> Option<&DeploymentResourceId> {
+        match self {
+            Self::NamedVolume(mount) => Some(mount.source()),
+            Self::Bind(_) | Self::Tmpfs(_) => None,
+        }
+    }
+}
+
+/// A bounded Unix ownership value for a volume, mount, or secret declaration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnixId(u32);
+
+impl UnixId {
+    /// Creates one ownership value in Podman's conservative signed 32-bit range.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` for values greater than `i32::MAX`.
+    pub fn new(value: u32) -> PodmanLensResult<Self> {
+        if value > i32::MAX as u32 {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the native numeric ownership value.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// A bounded Unix file mode for a mounted secret.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SecretMode(u16);
+
+impl SecretMode {
+    /// Creates an ordinary Unix permission mode (`0o000` through `0o777`).
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` for bits outside the portable permission range.
+    pub fn new(value: u16) -> PodmanLensResult<Self> {
+        if value > 0o777 {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the numeric Unix mode.
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+/// A typed secret attachment to a container mount or environment name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum SecretGrant {
+    /// Mount a secret. An omitted target uses Podman's native secret-name destination.
+    Mount {
+        /// The declared managed or external secret identity.
+        source: DeploymentResourceId,
+        /// The optional target path.
+        target: Option<AbsoluteContainerPath>,
+        /// Optional mount UID.
+        uid: Option<UnixId>,
+        /// Optional mount GID.
+        gid: Option<UnixId>,
+        /// Optional mount mode.
+        mode: Option<SecretMode>,
+    },
+    /// Inject a secret into one exact environment variable name.
+    Environment {
+        /// The declared managed or external secret identity.
+        source: DeploymentResourceId,
+        /// The target environment name.
+        target: EnvironmentName,
+    },
+}
+
+impl SecretGrant {
+    /// Creates one mount-form secret grant with Podman's default target and mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` when `source` is not a secret identity.
+    pub fn mount(source: DeploymentResourceId) -> PodmanLensResult<Self> {
+        if source.kind() != ResourceKind::Secret {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        Ok(Self::Mount {
+            source,
+            target: None,
+            uid: None,
+            gid: None,
+            mode: None,
+        })
+    }
+
+    /// Creates one environment-form secret grant.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` when `source` is not a secret identity.
+    pub fn environment(source: DeploymentResourceId, target: EnvironmentName) -> PodmanLensResult<Self> {
+        if source.kind() != ResourceKind::Secret {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        Ok(Self::Environment { source, target })
+    }
+
+    /// Sets the optional mount target. Environment grants reject this operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` for an environment grant or a repeated mount target.
+    pub fn set_mount_target(&mut self, target: AbsoluteContainerPath) -> PodmanLensResult<()> {
+        match self {
+            Self::Mount { target: slot, .. } if slot.is_none() => {
+                *slot = Some(target);
+                Ok(())
+            }
+            Self::Mount { .. } | Self::Environment { .. } => {
+                Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination))
+            }
+        }
+    }
+
+    /// Sets one optional mount UID. Environment grants reject this operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` for an environment grant or a repeated UID.
+    pub fn set_mount_uid(&mut self, uid: UnixId) -> PodmanLensResult<()> {
+        set_secret_mount_option(self, uid, |grant| match grant {
+            Self::Mount { uid, .. } => uid,
+            Self::Environment { .. } => unreachable!("environment grants are rejected before access"),
+        })
+    }
+
+    /// Sets one optional mount GID. Environment grants reject this operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` for an environment grant or a repeated GID.
+    pub fn set_mount_gid(&mut self, gid: UnixId) -> PodmanLensResult<()> {
+        set_secret_mount_option(self, gid, |grant| match grant {
+            Self::Mount { gid, .. } => gid,
+            Self::Environment { .. } => unreachable!("environment grants are rejected before access"),
+        })
+    }
+
+    /// Sets one optional mount file mode. Environment grants reject this operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` for an environment grant or a repeated mode.
+    pub fn set_mount_mode(&mut self, mode: SecretMode) -> PodmanLensResult<()> {
+        set_secret_mount_option(self, mode, |grant| match grant {
+            Self::Mount { mode, .. } => mode,
+            Self::Environment { .. } => unreachable!("environment grants are rejected before access"),
+        })
+    }
+
+    /// Returns the referenced secret identity.
+    #[must_use]
+    pub fn source(&self) -> &DeploymentResourceId {
+        match self {
+            Self::Mount { source, .. } | Self::Environment { source, .. } => source,
+        }
+    }
+
+    /// Returns the mount target, when this is a mount grant and a target was explicitly set.
+    #[must_use]
+    pub fn mount_target(&self) -> Option<&AbsoluteContainerPath> {
+        match self {
+            Self::Mount { target, .. } => target.as_ref(),
+            Self::Environment { .. } => None,
+        }
+    }
+
+    /// Returns the environment target when this is an environment grant.
+    #[must_use]
+    pub fn environment_target(&self) -> Option<&EnvironmentName> {
+        match self {
+            Self::Environment { target, .. } => Some(target),
+            Self::Mount { .. } => None,
+        }
+    }
+
+    /// Returns optional mount UID.
+    #[must_use]
+    pub fn mount_uid(&self) -> Option<UnixId> {
+        match self {
+            Self::Mount { uid, .. } => *uid,
+            Self::Environment { .. } => None,
+        }
+    }
+
+    /// Returns optional mount GID.
+    #[must_use]
+    pub fn mount_gid(&self) -> Option<UnixId> {
+        match self {
+            Self::Mount { gid, .. } => *gid,
+            Self::Environment { .. } => None,
+        }
+    }
+
+    /// Returns optional mount mode.
+    #[must_use]
+    pub fn mount_mode(&self) -> Option<SecretMode> {
+        match self {
+            Self::Mount { mode, .. } => *mode,
+            Self::Environment { .. } => None,
+        }
+    }
+}
+
+fn set_secret_mount_option<T: Eq>(
+    grant: &mut SecretGrant,
+    value: T,
+    member: impl FnOnce(&mut SecretGrant) -> &mut Option<T>,
+) -> PodmanLensResult<()> {
+    if !matches!(grant, SecretGrant::Mount { .. }) {
+        return Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination));
+    }
+    let slot = member(grant);
+    if slot.is_some() {
+        return Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination));
+    }
+    *slot = Some(value);
+    Ok(())
 }
 
 /// Typed optional container settings retained separately from topology.

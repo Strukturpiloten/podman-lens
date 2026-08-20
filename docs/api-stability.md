@@ -23,6 +23,12 @@ where applicable, reviewed target versions, public access point, diagnostic, and
 `ResourceRecord::unknown_fields_complete()` prevents callers from treating bounded unknown metadata
 as exhaustive after `PLN0021` or a partial inspection.
 
+The packaged ledger currently contains 38 input-observation rows and 50 output-intent rows. M6-B4
+extends the latter beyond container runtime settings to container mounts and secret grants, volume
+ownership, image acquisition policy/source portability, and the explicitly blocked pod-infra mount
+surface. It remains a strict catalogue: each row fixes its resource kind, target applicability,
+planner, CLI/Libpod owners, diagnostic, and focused positive/negative test symbols.
+
 M3 introduced `ResourceSelector`, `LabelSelector`, `DiscoveryRequest`,
 `discover`, and deterministic `ResourceGraph` contracts. The graph exposes requested
 selectors, the `all` choice, resolved roots with redacted origin positions, directed dependencies,
@@ -70,8 +76,9 @@ image; entrypoint uses a JSON-array CLI flag; public labels and environment valu
 CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v5 catalogue
 requires revision-pinned CLI, model, and handler evidence for every emitted field. Inline and
 external environment variants remain all-or-nothing redacted `PLN0046` outcomes. Pod-member
-hostnames fail planning and pod-member restart policies remain `PLN0046`; bind/tmpfs mounts, ports,
-health checks, logging, security, namespace, and secret attachment targets remain later M6 contracts.
+hostnames fail planning and pod-member restart policies remain `PLN0046`. M6-B2 through B4 add the
+bounded networking, runtime, mount, secret-grant, volume-ownership, and image-acquisition contracts
+described below; secret payloads remain external and deferred.
 
 M6-B2 adds provisional typed networking output values: `NetworkAttachment`, `PortMapping`,
 `DnsConfiguration`, `HostAlias`, `NetworkCidr`, `NetworkSubnet`, `NetworkRoute`, and the bounded
@@ -96,6 +103,16 @@ every populated runtime setting blocks rendering with `PLN0046` until per-field 
 is committed. Semantic planning already rejects journald labels before Podman 6.0, unlimited
 rlimits before 5.6, and non-positive or sub-millisecond CPU quota; B3b renderers must repeat
 these target gates defensively.
+
+M6-B4 intentionally replaces the prior narrow mount and raw secret prerequisite contracts.
+`MountIntent` is the only public mount surface and has typed named-volume, bind, and tmpfs forms;
+`VolumeSubpath`, `MountAccess`, and normalized paths prevent raw delimiter construction.
+`VolumeIntent` preserves omitted UID/GID independently from explicit zero through `UnixId`.
+`SecretGrant` replaces `add_secret`, with mount and environment forms, typed targets, and optional
+mount UID/GID/mode; it never carries secret bytes. `ImageIntent::new` now requires both an
+`ImageSource` and explicit `ImagePullPolicy`; no default exists. Source classification is exposed
+without rewriting the spelling, so local, unqualified, and tagless images become explicit manual
+portability findings. These are pre-1.0 breaking changes and have no compatibility aliases.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

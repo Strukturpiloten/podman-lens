@@ -39,8 +39,8 @@ pub use coverage::{
 pub use deployment::{
     ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentOperation, DeploymentOperationId,
     DeploymentPlan, DeploymentResource, DeploymentResourceId, ExternalPrecondition, ImageIntent, ImagePullPolicy,
-    NetworkIntent, PlanningFinding, PlanningOutcome, PodIntent, SecretIntent, SemanticOperationAction,
-    SensitiveInputReference, StartupDependency, VolumeIntent, plan_deployment,
+    ImageSource, ImageSourceClassification, NetworkIntent, PlanningFinding, PlanningOutcome, PodIntent, SecretIntent,
+    SemanticOperationAction, SensitiveInputReference, StartupDependency, VolumeIntent, plan_deployment,
 };
 pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use discovery::{
@@ -75,9 +75,10 @@ pub use runtime::{
     StartupHealthSuccesses,
 };
 pub use settings::{
-    AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerSettings, ContainerUser, ContainerWorkdir,
-    DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, NamedVolumeCopyMode,
-    NamedVolumeMount, PublicEnvironmentValue, PublicLabelValue, RestartPolicy, SensitiveInlineEnvironmentValue,
+    AbsoluteContainerPath, ArgumentArray, BindMount, ContainerHostname, ContainerSettings, ContainerUser,
+    ContainerWorkdir, DeploymentEnvironmentValue, EnvironmentAssignment, EnvironmentName, Label, LabelKey, MountAccess,
+    MountIntent, NamedVolumeCopyMode, NamedVolumeMount, PublicEnvironmentValue, PublicLabelValue, RestartPolicy,
+    SecretGrant, SecretMode, SensitiveInlineEnvironmentValue, TmpfsMount, UnixId, VolumeSubpath,
 };
 pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,

@@ -10,7 +10,7 @@ use crate::networking::{
     DnsConfiguration, HostAlias, NetworkAttachment, NetworkRoute, NetworkSubnet, PortMapping, add_attachment, add_host,
     add_port, add_route, add_subnet,
 };
-use crate::settings::{ContainerSettings, NamedVolumeMount};
+use crate::settings::{ContainerSettings, MountIntent, SecretGrant, UnixId};
 use crate::{
     CgroupController, ContainerRuntimeSettings, Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind,
     TargetExecutionContext, TargetProfile,
@@ -127,17 +127,86 @@ impl std::fmt::Debug for SensitiveInputReference {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageIntent {
     identity: DeploymentResourceId,
-    source: String,
+    source: ImageSource,
     pull_policy: ImagePullPolicy,
 }
 
 /// The explicit image-acquisition policy for a managed image.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ImagePullPolicy {
+    /// Always request a fresh image from the declared source.
+    Always,
     /// Acquire the image only when it is not already available at the target.
-    #[default]
     Missing,
+    /// Never pull; require the exact image to have been made available separately.
+    Never,
+    /// Request a newer image when the target can compare one.
+    Newer,
+}
+
+impl ImagePullPolicy {
+    /// Returns Podman's exact lower-case policy spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::Missing => "missing",
+            Self::Never => "never",
+            Self::Newer => "newer",
+        }
+    }
+}
+
+/// The portable classification of an image source without changing its spelling.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ImageSourceClassification {
+    /// A registry-qualified source with an explicit tag or sha256 digest.
+    Portable,
+    /// An explicitly local source such as `localhost/example:1` or a content ID.
+    Local,
+    /// A repository without an explicit registry hostname.
+    Unqualified,
+    /// A registry-qualified repository without an explicit tag or digest.
+    Tagless,
+}
+
+/// A validated source image spelling retained exactly as provided by the caller.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImageSource {
+    spelling: String,
+    classification: ImageSourceClassification,
+}
+
+impl ImageSource {
+    /// Validates and classifies an image source without rewriting it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0041` for empty, control-containing, credential-bearing, or malformed
+    /// sources.
+    pub fn new(value: impl Into<String>) -> PodmanLensResult<Self> {
+        let spelling = value.into();
+        let classification =
+            classify_image_source(&spelling).ok_or_else(|| Diagnostic::new(DiagnosticCode::InvalidImageReference))?;
+        Ok(Self {
+            spelling,
+            classification,
+        })
+    }
+
+    /// Returns the exact unmodified source spelling.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.spelling
+    }
+
+    /// Returns the portability classification without altering this source.
+    #[must_use]
+    pub const fn classification(&self) -> ImageSourceClassification {
+        self.classification
+    }
 }
 
 impl ImageIntent {
@@ -148,16 +217,19 @@ impl ImageIntent {
     /// # Errors
     ///
     /// Returns `PLN0034` for an image identity mismatch and `PLN0041` for an invalid source spelling.
-    pub fn new(identity: DeploymentResourceId, source: impl Into<String>) -> PodmanLensResult<Self> {
+    ///
+    /// The pull policy is required explicitly. There is no hidden default because image
+    /// acquisition changes target state.
+    pub fn new(
+        identity: DeploymentResourceId,
+        source: ImageSource,
+        pull_policy: ImagePullPolicy,
+    ) -> PodmanLensResult<Self> {
         require_kind(&identity, ResourceKind::Image)?;
-        let source = source.into();
-        if !is_portable_pull_reference(&source) {
-            return Err(Diagnostic::new(DiagnosticCode::InvalidImageReference));
-        }
         Ok(Self {
             identity,
             source,
-            pull_policy: ImagePullPolicy::Missing,
+            pull_policy,
         })
     }
 
@@ -169,7 +241,7 @@ impl ImageIntent {
 
     /// Returns the exact image source reference.
     #[must_use]
-    pub fn source(&self) -> &str {
+    pub fn source(&self) -> &ImageSource {
         &self.source
     }
 
@@ -178,34 +250,6 @@ impl ImageIntent {
     pub const fn pull_policy(&self) -> ImagePullPolicy {
         self.pull_policy
     }
-}
-
-macro_rules! simple_resource {
-    ($name:ident, $kind:expr, $doc:literal) => {
-        #[doc = $doc]
-        #[derive(Clone, Debug, Eq, PartialEq)]
-        pub struct $name {
-            identity: DeploymentResourceId,
-        }
-
-        impl $name {
-            /// Creates this typed target-side resource.
-            ///
-            /// # Errors
-            ///
-            /// Returns `PLN0034` when the identity has the wrong resource kind.
-            pub fn new(identity: DeploymentResourceId) -> PodmanLensResult<Self> {
-                require_kind(&identity, $kind)?;
-                Ok(Self { identity })
-            }
-
-            /// Returns the target-side identity.
-            #[must_use]
-            pub fn identity(&self) -> &DeploymentResourceId {
-                &self.identity
-            }
-        }
-    };
 }
 
 /// One typed network creation intent.
@@ -267,11 +311,73 @@ impl NetworkIntent {
         &self.routes
     }
 }
-simple_resource!(
-    VolumeIntent,
-    ResourceKind::Volume,
-    "One typed named-volume creation intent."
-);
+/// One typed named-volume creation intent with independently optional ownership fields.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VolumeIntent {
+    identity: DeploymentResourceId,
+    uid: Option<UnixId>,
+    gid: Option<UnixId>,
+}
+
+impl VolumeIntent {
+    /// Creates one named-volume creation intent without ownership overrides.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` when the identity is not a volume identity.
+    pub fn new(identity: DeploymentResourceId) -> PodmanLensResult<Self> {
+        require_kind(&identity, ResourceKind::Volume)?;
+        Ok(Self {
+            identity,
+            uid: None,
+            gid: None,
+        })
+    }
+
+    /// Sets an optional volume-creation UID, preserving a present zero value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` when ownership was already declared.
+    pub fn set_uid(&mut self, uid: UnixId) -> PodmanLensResult<()> {
+        set_volume_owner(&mut self.uid, uid)
+    }
+
+    /// Sets an optional volume-creation GID, preserving a present zero value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0038` when ownership was already declared.
+    pub fn set_gid(&mut self, gid: UnixId) -> PodmanLensResult<()> {
+        set_volume_owner(&mut self.gid, gid)
+    }
+
+    /// Returns the named-volume identity.
+    #[must_use]
+    pub fn identity(&self) -> &DeploymentResourceId {
+        &self.identity
+    }
+
+    /// Returns a caller-declared UID, distinct from omitted ownership.
+    #[must_use]
+    pub const fn uid(&self) -> Option<UnixId> {
+        self.uid
+    }
+
+    /// Returns a caller-declared GID, distinct from omitted ownership.
+    #[must_use]
+    pub const fn gid(&self) -> Option<UnixId> {
+        self.gid
+    }
+}
+
+fn set_volume_owner(slot: &mut Option<UnixId>, value: UnixId) -> PodmanLensResult<()> {
+    if slot.is_some() {
+        return Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination));
+    }
+    *slot = Some(value);
+    Ok(())
+}
 
 /// A visible declaration that one exact prerequisite must already exist outside this plan.
 ///
@@ -342,7 +448,7 @@ pub struct PodIntent {
     ports: Vec<PortMapping>,
     dns: DnsConfiguration,
     hosts: Vec<HostAlias>,
-    infra_mounts: Vec<NamedVolumeMount>,
+    infra_mounts: Vec<MountIntent>,
     members: Vec<DeploymentResourceId>,
 }
 
@@ -402,8 +508,8 @@ impl PodIntent {
     ///
     /// The mount is not a declaration for every pod member. Member containers use
     /// [`ContainerIntent::add_mount`] instead.
-    pub fn add_infra_mount(&mut self, mount: NamedVolumeMount) {
-        self.infra_mounts.push(mount);
+    pub fn add_infra_mount(&mut self, mount: impl Into<MountIntent>) {
+        self.infra_mounts.push(mount.into());
     }
 
     /// Adds one container that this pod explicitly owns.
@@ -451,7 +557,7 @@ impl PodIntent {
 
     /// Returns declared infra-container mounts in input order.
     #[must_use]
-    pub fn infra_mounts(&self) -> &[NamedVolumeMount] {
+    pub fn infra_mounts(&self) -> &[MountIntent] {
         &self.infra_mounts
     }
 
@@ -473,8 +579,8 @@ pub struct ContainerIntent {
     ports: Vec<PortMapping>,
     dns: DnsConfiguration,
     hosts: Vec<HostAlias>,
-    mounts: Vec<NamedVolumeMount>,
-    secrets: Vec<DeploymentResourceId>,
+    mounts: Vec<MountIntent>,
+    secret_grants: Vec<SecretGrant>,
     settings: Box<ContainerSettings>,
     runtime: Box<ContainerRuntimeSettings>,
 }
@@ -498,7 +604,7 @@ impl ContainerIntent {
             dns: DnsConfiguration::default(),
             hosts: Vec::new(),
             mounts: Vec::new(),
-            secrets: Vec::new(),
+            secret_grants: Vec::new(),
             settings: Box::default(),
             runtime: Box::default(),
         })
@@ -575,20 +681,14 @@ impl ContainerIntent {
         add_host(&mut self.hosts, host)
     }
 
-    /// Adds one named-volume mount.
-    pub fn add_mount(&mut self, mount: NamedVolumeMount) {
-        self.mounts.push(mount);
+    /// Adds one typed named-volume, bind, or tmpfs mount.
+    pub fn add_mount(&mut self, mount: impl Into<MountIntent>) {
+        self.mounts.push(mount.into());
     }
 
-    /// Adds a secret-metadata prerequisite.
-    ///
-    /// # Errors
-    ///
-    /// Returns `PLN0034` when `secret` is not a secret identity.
-    pub fn add_secret(&mut self, secret: DeploymentResourceId) -> PodmanLensResult<()> {
-        require_kind(&secret, ResourceKind::Secret)?;
-        self.secrets.push(secret);
-        Ok(())
+    /// Adds one typed mounted or environment secret grant.
+    pub fn add_secret_grant(&mut self, grant: SecretGrant) {
+        self.secret_grants.push(grant);
     }
 
     /// Returns the container identity.
@@ -641,14 +741,14 @@ impl ContainerIntent {
 
     /// Returns named-volume mounts.
     #[must_use]
-    pub fn mounts(&self) -> &[NamedVolumeMount] {
+    pub fn mounts(&self) -> &[MountIntent] {
         &self.mounts
     }
 
-    /// Returns secret prerequisites.
+    /// Returns typed secret grants in declared order.
     #[must_use]
-    pub fn secrets(&self) -> &[DeploymentResourceId] {
-        &self.secrets
+    pub fn secret_grants(&self) -> &[SecretGrant] {
+        &self.secret_grants
     }
 
     /// Returns the typed optional container settings.
@@ -1197,16 +1297,8 @@ fn validate_resources(
         match resource {
             DeploymentResource::ExternalPrecondition(_)
             | DeploymentResource::Network(_)
-            | DeploymentResource::Volume(_) => {}
-            DeploymentResource::Image(image) => {
-                if !is_portable_pull_reference(image.source()) {
-                    findings.push(PlanningFinding::new(
-                        DiagnosticCode::InvalidImageReference,
-                        Some(image.identity().clone()),
-                        Some("source"),
-                    ));
-                }
-            }
+            | DeploymentResource::Volume(_)
+            | DeploymentResource::Image(_) => {}
             DeploymentResource::Secret(secret) => {
                 if secret.material().as_str().is_empty() {
                     findings.push(PlanningFinding::new(
@@ -1276,7 +1368,7 @@ fn validate_container(
         findings,
     );
     validate_mounts(resources, container.mounts(), container.identity(), "mounts", findings);
-    validate_distinct(container.secrets(), container.identity(), "secrets", findings);
+    validate_secret_grants(resources, container.secret_grants(), container, findings);
     require_resolved(
         resources,
         container.image(),
@@ -1383,16 +1475,6 @@ fn validate_container(
                 Some("network_order"),
             ));
         }
-    }
-    for secret in container.secrets() {
-        require_resolved(
-            resources,
-            secret,
-            ResourceKind::Secret,
-            container.identity(),
-            "secrets",
-            findings,
-        );
     }
     validate_runtime_settings(container, target, findings);
 }
@@ -1612,7 +1694,7 @@ fn validate_network_attachments(
 
 fn validate_mounts(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
-    mounts: &[NamedVolumeMount],
+    mounts: &[MountIntent],
     owner: &DeploymentResourceId,
     field: &'static str,
     findings: &mut Vec<PlanningFinding>,
@@ -1625,12 +1707,62 @@ fn validate_mounts(
             findings.push(PlanningFinding::detailed(
                 DiagnosticCode::DeploymentDuplicateResource,
                 Some(owner.clone()),
-                vec![mount.source().clone()],
+                mount.volume_source().cloned().into_iter().collect(),
                 Some(field),
                 Some(index + 1),
             ));
         }
-        require_resolved(resources, mount.source(), ResourceKind::Volume, owner, field, findings);
+        if let Some(source) = mount.volume_source() {
+            require_resolved(resources, source, ResourceKind::Volume, owner, field, findings);
+        }
+    }
+}
+
+fn validate_secret_grants(
+    resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
+    grants: &[SecretGrant],
+    container: &ContainerIntent,
+    findings: &mut Vec<PlanningFinding>,
+) {
+    let mut mount_destinations = BTreeSet::new();
+    let mut environment_targets = BTreeSet::new();
+    for (index, grant) in grants.iter().enumerate() {
+        require_resolved(
+            resources,
+            grant.source(),
+            ResourceKind::Secret,
+            container.identity(),
+            "secret_grants",
+            findings,
+        );
+        if let Some(target) = grant.mount_target() {
+            if !mount_destinations.insert(target.as_str()) {
+                findings.push(PlanningFinding::detailed(
+                    DiagnosticCode::DeploymentDuplicateResource,
+                    Some(container.identity().clone()),
+                    vec![grant.source().clone()],
+                    Some("secret_grants.mount_target"),
+                    Some(index + 1),
+                ));
+            }
+        }
+        if let Some(target) = grant.environment_target() {
+            if !environment_targets.insert(target.as_str())
+                || container
+                    .settings()
+                    .environment()
+                    .iter()
+                    .any(|assignment| assignment.name() == target)
+            {
+                findings.push(PlanningFinding::detailed(
+                    DiagnosticCode::DeploymentDuplicateResource,
+                    Some(container.identity().clone()),
+                    vec![grant.source().clone()],
+                    Some("secret_grants.environment_target"),
+                    Some(index + 1),
+                ));
+            }
+        }
     }
 }
 
@@ -1652,8 +1784,8 @@ fn create_dependencies(
                 }
             }
             for mount in pod.infra_mounts() {
-                if is_managed(resources, mount.source()) {
-                    dependencies.insert(create_operation(mount.source()));
+                if let Some(source) = mount.volume_source().filter(|source| is_managed(resources, source)) {
+                    dependencies.insert(create_operation(source));
                 }
             }
         }
@@ -1675,13 +1807,13 @@ fn create_dependencies(
                 }
             }
             for mount in container.mounts() {
-                if is_managed(resources, mount.source()) {
-                    dependencies.insert(create_operation(mount.source()));
+                if let Some(source) = mount.volume_source().filter(|source| is_managed(resources, source)) {
+                    dependencies.insert(create_operation(source));
                 }
             }
-            for secret in container.secrets() {
-                if is_managed(resources, secret) {
-                    dependencies.insert(create_operation(secret));
+            for grant in container.secret_grants() {
+                if is_managed(resources, grant.source()) {
+                    dependencies.insert(create_operation(grant.source()));
                 }
             }
         }
@@ -1948,36 +2080,68 @@ fn is_managed(
     )
 }
 
-fn is_portable_pull_reference(value: &str) -> bool {
-    if value.is_empty() || value.len() > MAX_REFERENCE_BYTES || value.chars().any(char::is_whitespace) {
-        return false;
+fn classify_image_source(value: &str) -> Option<ImageSourceClassification> {
+    if value.is_empty()
+        || value.len() > MAX_REFERENCE_BYTES
+        || value
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+        || value.contains(['@', '\\']) && !value.contains("@sha256:")
+        || value.contains("//")
+        || value.contains('@') && value.matches('@').count() != 1
+    {
+        return None;
+    }
+    if is_image_id(value) {
+        return Some(ImageSourceClassification::Local);
     }
     let (name, digest) = match value.split_once('@') {
-        Some((name, digest)) if !digest.contains('@') => (name, Some(digest)),
-        Some(_) => return false,
+        Some((name, digest)) if !name.is_empty() && is_sha256_digest(digest) => (name, Some(digest)),
+        Some(_) => return None,
         None => (value, None),
     };
-    let (registry, repository) = match name.split_once('/') {
-        Some((registry, repository)) if !repository.is_empty() => (registry, repository),
-        _ => return false,
+    let components = name.split('/').collect::<Vec<_>>();
+    if components.iter().any(|component| component.is_empty()) {
+        return None;
+    }
+    let first = components[0];
+    let registry_qualified =
+        components.len() > 1 && (first == "localhost" || first.contains('.') || first.contains(':'));
+    let (registry, repository) = if registry_qualified {
+        if components.len() < 2 || !is_valid_registry(first) {
+            return None;
+        }
+        (Some(first), &components[1..])
+    } else {
+        (None, &components[..])
     };
-    if !is_portable_registry(registry) {
-        return false;
+    let (last, tag) = split_tag(repository.last()?);
+    if !repository[..repository.len() - 1]
+        .iter()
+        .copied()
+        .chain(std::iter::once(last))
+        .all(is_repository_component)
+    {
+        return None;
     }
-    let (repository, tag) = split_tag(repository);
-    if !repository.split('/').all(is_repository_component) {
-        return false;
+    if tag.is_some_and(|tag| !is_tag(tag)) {
+        return None;
     }
-    match (tag, digest) {
-        (Some(tag), None) => is_tag(tag),
-        (None, Some(digest)) => is_sha256_digest(digest),
-        _ => false,
+    if digest.is_some() && tag.is_some() {
+        return None;
+    }
+    match (registry, tag, digest) {
+        (Some("localhost"), _, _) => Some(ImageSourceClassification::Local),
+        (Some(_), Some(_), None) | (Some(_), None, Some(_)) => Some(ImageSourceClassification::Portable),
+        (Some(_), None, None) => Some(ImageSourceClassification::Tagless),
+        (None, _, _) => Some(ImageSourceClassification::Unqualified),
+        _ => None,
     }
 }
 
-fn is_portable_registry(value: &str) -> bool {
-    if value == "localhost" || !(value.contains('.') || value.contains(':')) {
-        return false;
+fn is_valid_registry(value: &str) -> bool {
+    if value == "localhost" {
+        return true;
     }
     let (host, port) = value.rsplit_once(':').unwrap_or((value, ""));
     !host.is_empty()
@@ -1997,6 +2161,12 @@ fn is_portable_registry(value: &str) -> bool {
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
         })
         && (port.is_empty() || (port.parse::<u16>().is_ok_and(|port| port != 0)))
+}
+
+fn is_image_id(value: &str) -> bool {
+    let hex = value.strip_prefix("sha256:").unwrap_or(value);
+    (hex.len() == 64 || (value.starts_with("sha256:") && hex.len() == 64))
+        && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn split_tag(repository: &str) -> (&str, Option<&str>) {

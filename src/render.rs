@@ -12,10 +12,11 @@ use semver::Version;
 use serde::{Deserialize, de};
 use serde_json::{Map, Value, json};
 
+use crate::settings::{MountIntent, SecretGrant, SecretMode};
 use crate::{
     DeploymentConnectionReference, DeploymentOperation, DeploymentPlan, DeploymentResource, DeploymentResourceId,
-    Diagnostic, DiagnosticCode, ExternalPrecondition, HostAlias, NamedVolumeMount, NetworkAttachment, NetworkIntent,
-    NetworkRoute, PortMapping, PortProtocol, ResourceKind, RestartPolicy, RouteType, SensitiveInputReference,
+    Diagnostic, DiagnosticCode, ExternalPrecondition, HostAlias, NetworkAttachment, NetworkIntent, NetworkRoute,
+    PortMapping, PortProtocol, ResourceKind, RestartPolicy, RouteType, SensitiveInputReference,
 };
 
 const RENDERING_CATALOGUE_JSON: &str = include_str!("../catalogue/v1/podman-deployment-rendering.json");
@@ -46,9 +47,26 @@ struct ReviewedRenderingLine {
     revision: String,
     tag: String,
     common_module: ModulePin,
+    b4_evidence: ReviewedB4Evidence,
     runtime_evidence: ReviewedRuntimeEvidence,
     operations: Vec<ReviewedRenderingOperation>,
     field_evidence: Vec<ReviewedFieldEvidence>,
+}
+
+/// Immutable per-release evidence for the bounded M6-B4 mount, secret, volume, and image
+/// surface.  It deliberately records blocked and manual boundaries beside exact fields so a
+/// future renderer cannot turn a known one-plane-only or portability-sensitive spelling into an
+/// accidental exact claim.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedB4Evidence {
+    exact_fields: Vec<B4RenderedField>,
+    target_gated_fields: Vec<B4RenderedField>,
+    manual_fields: Vec<B4RenderedField>,
+    blocked_fields: Vec<B4RenderedField>,
+    cli_sources: Vec<SourceReference>,
+    model_sources: Vec<SourceReference>,
+    handler_sources: Vec<SourceReference>,
 }
 
 /// Immutable all-fields evidence for the bounded M6-B3 container runtime surface.
@@ -199,7 +217,6 @@ enum RenderedField {
     ContainerEnvironment,
     ContainerRestartPolicy,
     ContainerNamedVolumeMount,
-    PodInfraNamedVolumeMount,
     ContainerNetworkAttachment,
     PodNetworkAttachment,
     ContainerNetworkAlias,
@@ -270,6 +287,29 @@ enum RuntimeRenderedField {
     ContainerPidsLimit,
     ContainerRlimitFinite,
     ContainerRlimitUnlimited,
+}
+
+/// One exact, target-gated, manual, or deliberately blocked M6-B4 output surface.
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+#[allow(clippy::enum_variant_names)] // Stable evidence identifiers retain their resource scope.
+enum B4RenderedField {
+    ContainerNamedVolumeCopyMount,
+    ContainerNamedVolumeSubpathCopyMount,
+    ContainerNamedVolumeNoCopyMount,
+    ContainerNamedVolumeSubpathNoCopyMount,
+    ContainerBindMount,
+    ContainerTmpfsMount,
+    ContainerSecretMountGrant,
+    ContainerSecretEnvironmentGrant,
+    VolumeUid,
+    VolumeGid,
+    ImagePullPolicyAlways,
+    ImagePullPolicyMissing,
+    ImagePullPolicyNever,
+    ImagePullPolicyNewer,
+    ImageSourcePortability,
+    PodInfraMount,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -834,7 +874,11 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
             blocked_resources.insert(operation.id().resource().clone());
             findings.extend(unsupported_fields.into_iter().map(|field| {
                 RenderingFinding::new(
-                    DiagnosticCode::RenderingUnsupported,
+                    if field == "source.portability" {
+                        DiagnosticCode::ImagePortabilityManual
+                    } else {
+                        DiagnosticCode::RenderingUnsupported
+                    },
                     Some(operation.id().resource().clone()),
                     Some(field),
                 )
@@ -900,14 +944,10 @@ fn render_operation(
         }
         DeploymentResource::Volume(volume) => (
             RenderStatus::Exact,
-            vec![
-                "volume".to_owned(),
-                "create".to_owned(),
-                volume.identity().name().to_owned(),
-            ],
+            volume_create_cli_arguments(volume),
             RenderedHttpMethod::Post,
             format!("/v{version}/libpod/volumes/create"),
-            RenderedHttpBody::Json(json!({"Name": volume.identity().name()})),
+            RenderedHttpBody::Json(volume_create_json(volume)),
             None,
         ),
         DeploymentResource::Secret(secret) => (
@@ -931,13 +971,14 @@ fn render_operation(
             vec![
                 "image".to_owned(),
                 "pull".to_owned(),
-                "--policy=missing".to_owned(),
-                image.source().to_owned(),
+                format!("--policy={}", image.pull_policy().as_str()),
+                image.source().as_str().to_owned(),
             ],
             RenderedHttpMethod::Post,
             format!(
-                "/v{version}/libpod/images/pull?reference={}&policy=missing",
-                percent_encode(image.source())
+                "/v{version}/libpod/images/pull?reference={}&policy={}",
+                percent_encode(image.source().as_str()),
+                image.pull_policy().as_str(),
             ),
             RenderedHttpBody::Empty,
             None,
@@ -973,20 +1014,10 @@ fn render_operation(
                 append_port_arguments(&mut cli_suffix, pod.ports());
                 append_dns_arguments(&mut cli_suffix, pod.dns());
                 append_host_alias_arguments(&mut cli_suffix, pod.host_aliases());
-                if !append_named_volume_arguments(&mut cli_suffix, pod.infra_mounts()) {
-                    return Err(RenderingFinding::new(
-                        DiagnosticCode::RenderingUnsupported,
-                        Some(id.clone()),
-                        Some("infra_mounts.cli_ambiguous"),
-                    ));
-                }
                 let mut body = Map::new();
                 body.insert("name".to_owned(), Value::String(pod.identity().name().to_owned()));
                 body.insert("Networks".to_owned(), networks);
                 append_networking_json(&mut body, pod.ports(), pod.dns(), pod.host_aliases(), None);
-                if !pod.infra_mounts().is_empty() {
-                    body.insert("volumes".to_owned(), named_volume_json(pod.infra_mounts()));
-                }
                 (
                     RenderStatus::Exact,
                     cli_suffix,
@@ -1057,11 +1088,18 @@ fn render_operation(
                     );
                     body
                 };
-                if !append_named_volume_arguments(&mut cli_suffix, container.mounts()) {
+                if !append_mount_arguments(&mut cli_suffix, container.mounts()) {
                     return Err(RenderingFinding::new(
                         DiagnosticCode::RenderingUnsupported,
                         Some(id.clone()),
                         Some("mounts.cli_ambiguous"),
+                    ));
+                }
+                if !append_secret_grants_arguments(&mut cli_suffix, container.secret_grants()) {
+                    return Err(RenderingFinding::new(
+                        DiagnosticCode::RenderingUnsupported,
+                        Some(id.clone()),
+                        Some("secret_grants.cli_ambiguous"),
                     ));
                 }
                 append_container_setting_arguments(&mut cli_suffix, container, id)?;
@@ -1074,6 +1112,7 @@ fn render_operation(
                     ));
                 };
                 append_container_setting_json(body_map, container, id)?;
+                append_secret_grants_json(body_map, container.secret_grants());
                 append_container_runtime_json(body_map, container, id, version)?;
                 cli_suffix.push(image.to_owned());
                 if let Some(command) = container.settings().command() {
@@ -1131,7 +1170,7 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
     let capabilities = crate::capability_catalogue().map_err(|_| ())?;
-    if catalogue.schema_version != 7
+    if catalogue.schema_version != 8
         || catalogue.provenance.trim().is_empty()
         || catalogue.reviewed_lines.len() != capabilities.len()
         || !validated_runtime_field_claims(&catalogue.runtime_field_claims)
@@ -1150,6 +1189,7 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
             || !is_lowercase_sha40(&line.revision)
             || !valid_common_module(&line.version, &line.common_module)
             || !validated_renderer_operations(&line, &expected_operations)
+            || !validated_b4_evidence(&line)
             || !validated_field_evidence(&line)
             || !validated_runtime_evidence(&line)
         {
@@ -1158,6 +1198,120 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
         versions.push(line.version);
     }
     Ok(versions)
+}
+
+fn validated_b4_evidence(line: &ReviewedRenderingLine) -> bool {
+    let evidence = &line.b4_evidence;
+    let exact = evidence.exact_fields.iter().copied().collect::<BTreeSet<_>>();
+    let target_gated = evidence.target_gated_fields.iter().copied().collect::<BTreeSet<_>>();
+    let manual = evidence.manual_fields.iter().copied().collect::<BTreeSet<_>>();
+    let blocked = evidence.blocked_fields.iter().copied().collect::<BTreeSet<_>>();
+    let expected_target_gated = expected_b4_target_gated_fields(&line.version);
+    exact.len() == evidence.exact_fields.len()
+        && target_gated.len() == evidence.target_gated_fields.len()
+        && manual.len() == evidence.manual_fields.len()
+        && blocked.len() == evidence.blocked_fields.len()
+        && exact.is_disjoint(&target_gated)
+        && exact.is_disjoint(&manual)
+        && exact.is_disjoint(&blocked)
+        && target_gated.is_disjoint(&manual)
+        && target_gated.is_disjoint(&blocked)
+        && manual.is_disjoint(&blocked)
+        && exact.union(&target_gated).copied().collect::<BTreeSet<_>>() == expected_b4_rendered_fields()
+        && target_gated == expected_target_gated
+        && manual == expected_b4_manual_fields()
+        && blocked == expected_b4_blocked_fields()
+        && evidence.cli_sources.len() == 4
+        && evidence
+            .cli_sources
+            .iter()
+            .zip([
+                "cmd/podman/common/create.go",
+                "cmd/podman/containers/create.go",
+                "cmd/podman/volumes/create.go",
+                "cmd/podman/images/pull.go",
+            ])
+            .all(|(source, path)| source_matches_podman(source, &line.revision, path))
+        && evidence.model_sources.len() == 3
+        && evidence
+            .model_sources
+            .iter()
+            .zip([
+                "pkg/specgenutil/volumes.go",
+                "pkg/specgen/specgen.go",
+                "pkg/specgen/volumes.go",
+            ])
+            .all(|(source, path)| source_matches_podman(source, &line.revision, path))
+        && evidence.handler_sources.len() == 3
+        && evidence
+            .handler_sources
+            .iter()
+            .zip([
+                "pkg/api/handlers/libpod/containers_create.go",
+                "pkg/api/handlers/libpod/volumes.go",
+                "pkg/api/handlers/libpod/images_pull.go",
+            ])
+            .all(|(source, path)| source_matches_podman(source, &line.revision, path))
+}
+
+fn expected_b4_rendered_fields() -> BTreeSet<B4RenderedField> {
+    use B4RenderedField::{
+        ContainerBindMount, ContainerNamedVolumeCopyMount, ContainerNamedVolumeNoCopyMount,
+        ContainerNamedVolumeSubpathCopyMount, ContainerSecretEnvironmentGrant, ContainerSecretMountGrant,
+        ContainerTmpfsMount, ImagePullPolicyAlways, ImagePullPolicyMissing, ImagePullPolicyNever, ImagePullPolicyNewer,
+        VolumeGid, VolumeUid,
+    };
+    [
+        ContainerNamedVolumeCopyMount,
+        ContainerNamedVolumeSubpathCopyMount,
+        ContainerNamedVolumeNoCopyMount,
+        ContainerBindMount,
+        ContainerTmpfsMount,
+        ContainerSecretMountGrant,
+        ContainerSecretEnvironmentGrant,
+        VolumeUid,
+        VolumeGid,
+        ImagePullPolicyAlways,
+        ImagePullPolicyMissing,
+        ImagePullPolicyNever,
+        ImagePullPolicyNewer,
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn expected_b4_target_gated_fields(version: &str) -> BTreeSet<B4RenderedField> {
+    if supports_image_policy(version) {
+        BTreeSet::new()
+    } else {
+        use B4RenderedField::{
+            ImagePullPolicyAlways, ImagePullPolicyMissing, ImagePullPolicyNever, ImagePullPolicyNewer, VolumeGid,
+            VolumeUid,
+        };
+        [
+            VolumeUid,
+            VolumeGid,
+            ImagePullPolicyAlways,
+            ImagePullPolicyMissing,
+            ImagePullPolicyNever,
+            ImagePullPolicyNewer,
+        ]
+        .into_iter()
+        .collect()
+    }
+}
+
+fn expected_b4_manual_fields() -> BTreeSet<B4RenderedField> {
+    [B4RenderedField::ImageSourcePortability].into_iter().collect()
+}
+
+fn expected_b4_blocked_fields() -> BTreeSet<B4RenderedField> {
+    [
+        B4RenderedField::ContainerNamedVolumeSubpathNoCopyMount,
+        B4RenderedField::PodInfraMount,
+    ]
+    .into_iter()
+    .collect()
 }
 
 fn validated_runtime_field_claims(claims: &[RuntimeFieldClaimJson]) -> bool {
@@ -1787,7 +1941,6 @@ fn expected_rendered_fields() -> BTreeSet<RenderedField> {
         RenderedField::ContainerEnvironment,
         RenderedField::ContainerRestartPolicy,
         RenderedField::ContainerNamedVolumeMount,
-        RenderedField::PodInfraNamedVolumeMount,
         RenderedField::ContainerNetworkAttachment,
         RenderedField::PodNetworkAttachment,
         RenderedField::ContainerNetworkAlias,
@@ -1838,7 +1991,6 @@ fn expected_field_claim(
 ) {
     const CONTAINER_MODEL: &[&str] = &["pkg/specgen/specgen.go"];
     const CONTAINER_VOLUME_MODEL: &[&str] = &["pkg/specgen/specgen.go", "pkg/specgen/volumes.go"];
-    const POD_VOLUME_MODEL: &[&str] = &["pkg/specgen/podspecgen.go", "pkg/specgen/volumes.go"];
     const CONTAINER_HANDLER: &str = "pkg/api/handlers/libpod/containers_create.go";
     match field {
         RenderedField::ContainerCommand => (
@@ -1921,15 +2073,6 @@ fn expected_field_claim(
             "cmd/podman/common/create.go",
             CONTAINER_VOLUME_MODEL,
             CONTAINER_HANDLER,
-        ),
-        RenderedField::PodInfraNamedVolumeMount => (
-            RenderingOperationCategory::PodCreate,
-            Some(CliFlag::Volume),
-            CliValueShape::NamedVolumeMount,
-            LibpodBodyMember::Volumes,
-            "cmd/podman/pods/create.go",
-            POD_VOLUME_MODEL,
-            "pkg/api/handlers/libpod/pods.go",
         ),
         _ => unreachable!("networking fields are handled by the dedicated evidence matrix"),
     }
@@ -2267,18 +2410,39 @@ fn managed_image_sources(plan: &DeploymentPlan) -> BTreeMap<DeploymentResourceId
     plan.operations()
         .iter()
         .filter_map(|operation| match operation.resource_intent() {
-            DeploymentResource::Image(image) => Some((image.identity().clone(), image.source().to_owned())),
+            DeploymentResource::Image(image) => Some((image.identity().clone(), image.source().as_str().to_owned())),
             _ => None,
         })
         .collect()
 }
 
+#[allow(clippy::too_many_lines)] // One exhaustive renderer boundary keeps the semantic surface auditable.
 fn unsupported_fields(
     resource: &DeploymentResource,
     version: &str,
     context: crate::TargetExecutionContext,
 ) -> Vec<&'static str> {
     match resource {
+        DeploymentResource::Image(image) => {
+            let mut fields = Vec::new();
+            if !matches!(
+                image.source().classification(),
+                crate::ImageSourceClassification::Portable
+            ) {
+                fields.push("source.portability");
+            }
+            if !supports_image_policy(version) {
+                fields.push("pull_policy.target_version");
+            }
+            fields
+        }
+        DeploymentResource::Volume(volume) => {
+            if !supports_volume_ownership(version) && (volume.uid().is_some() || volume.gid().is_some()) {
+                vec!["owner.target_version"]
+            } else {
+                Vec::new()
+            }
+        }
         DeploymentResource::Network(network) => {
             let mut fields = Vec::new();
             if !supports_network_route_type(version)
@@ -2297,6 +2461,9 @@ fn unsupported_fields(
                 && pod.networks().iter().any(network_attachment_has_static_address)
             {
                 fields.push("networks.static_address_requires_rootful");
+            }
+            if !pod.infra_mounts().is_empty() {
+                fields.push("infra_mounts");
             }
             fields
         }
@@ -2330,8 +2497,11 @@ fn unsupported_fields(
             if container.network_order().is_some() && !supports_network_order(version) {
                 fields.push("network_order");
             }
-            if !container.secrets().is_empty() {
-                fields.push("secrets");
+            if !container.secret_grants().is_empty() && !secret_grants_renderable(container.secret_grants()) {
+                fields.push("secret_grants");
+            }
+            if container.mounts().iter().any(mount_has_unsupported_subpath) {
+                fields.push("mounts.subpath_nocopy");
             }
             let settings = container.settings();
             if settings.environment().iter().any(|assignment| {
@@ -2364,6 +2534,14 @@ fn network_attachment_has_static_address(attachment: &NetworkAttachment) -> bool
 
 fn supports_network_order(version: &str) -> bool {
     matches!(version, "6.0.0" | "6.1.0")
+}
+
+fn supports_image_policy(version: &str) -> bool {
+    !matches!(version, "5.4.0" | "5.5.0")
+}
+
+fn supports_volume_ownership(version: &str) -> bool {
+    supports_image_policy(version)
 }
 
 fn supports_network_route_type(version: &str) -> bool {
@@ -2673,22 +2851,74 @@ fn network_create_configuration(network: &NetworkIntent, supports_route_type: bo
     Value::Object(body)
 }
 
-fn append_named_volume_arguments(arguments: &mut Vec<String>, mounts: &[NamedVolumeMount]) -> bool {
+fn append_mount_arguments(arguments: &mut Vec<String>, mounts: &[MountIntent]) -> bool {
     for mount in mounts {
-        if !cli_safe_mount_component(mount.source().name()) || !cli_safe_mount_component(mount.destination().as_str()) {
-            return false;
+        match mount {
+            MountIntent::NamedVolume(mount) => {
+                if mount.subpath().is_some() {
+                    if !cli_safe_mount_component(mount.source().name())
+                        || !cli_safe_mount_component(mount.destination().as_str())
+                        || mount
+                            .subpath()
+                            .is_some_and(|subpath| !cli_safe_mount_component(subpath.as_str()))
+                    {
+                        return false;
+                    }
+                    arguments.extend([
+                        "--mount".to_owned(),
+                        mount_cli_value(
+                            "volume",
+                            mount.source().name(),
+                            mount.destination().as_str(),
+                            mount.access(),
+                            mount.subpath().map(crate::VolumeSubpath::as_str),
+                        ),
+                    ]);
+                    continue;
+                }
+                if !cli_safe_mount_component(mount.source().name())
+                    || !cli_safe_mount_component(mount.destination().as_str())
+                {
+                    return false;
+                }
+                let access = if mount.is_read_only() { "ro" } else { "rw" };
+                let copy = match mount.copy_mode() {
+                    crate::NamedVolumeCopyMode::Copy => "copy",
+                    crate::NamedVolumeCopyMode::NoCopy => "nocopy",
+                };
+                let options = format!("{access},{copy}");
+                arguments.extend([
+                    "--volume".to_owned(),
+                    format!("{}:{}:{options}", mount.source().name(), mount.destination().as_str()),
+                ]);
+            }
+            MountIntent::Bind(mount) => {
+                if !cli_safe_mount_component(mount.source().as_str())
+                    || !cli_safe_mount_component(mount.destination().as_str())
+                {
+                    return false;
+                }
+                arguments.extend([
+                    "--mount".to_owned(),
+                    mount_cli_value(
+                        "bind",
+                        mount.source().as_str(),
+                        mount.destination().as_str(),
+                        mount.access(),
+                        None,
+                    ),
+                ]);
+            }
+            MountIntent::Tmpfs(mount) => {
+                if !cli_safe_mount_component(mount.destination().as_str()) {
+                    return false;
+                }
+                arguments.extend([
+                    "--mount".to_owned(),
+                    mount_cli_value("tmpfs", "", mount.destination().as_str(), mount.access(), None),
+                ]);
+            }
         }
-        let access = if mount.is_read_only() { "ro" } else { "rw" };
-        let copy = match mount.copy_mode() {
-            crate::NamedVolumeCopyMode::Copy => "copy",
-            crate::NamedVolumeCopyMode::NoCopy => "nocopy",
-        };
-        arguments.push("--volume".to_owned());
-        arguments.push(format!(
-            "{}:{}:{access},{copy}",
-            mount.source().name(),
-            mount.destination().as_str()
-        ));
     }
     true
 }
@@ -2697,24 +2927,184 @@ fn cli_safe_mount_component(value: &str) -> bool {
     !value.contains([':', ','])
 }
 
-fn named_volume_json(mounts: &[NamedVolumeMount]) -> Value {
+fn mount_json(mounts: &[MountIntent]) -> Value {
     Value::Array(
         mounts
             .iter()
-            .map(|mount| {
-                let access = if mount.is_read_only() { "ro" } else { "rw" };
-                let copy = match mount.copy_mode() {
-                    crate::NamedVolumeCopyMode::Copy => "copy",
-                    crate::NamedVolumeCopyMode::NoCopy => "nocopy",
-                };
-                json!({
+            .filter_map(|mount| match mount {
+                MountIntent::NamedVolume(mount) if mount.subpath().is_none() => {
+                    let access = if mount.is_read_only() { "ro" } else { "rw" };
+                    let copy = match mount.copy_mode() {
+                        crate::NamedVolumeCopyMode::Copy => "copy",
+                        crate::NamedVolumeCopyMode::NoCopy => "nocopy",
+                    };
+                    let options = vec![access.to_owned(), copy.to_owned()];
+                    Some(json!({"Name": mount.source().name(), "Dest": mount.destination().as_str(), "Options": options}))
+                }
+                MountIntent::NamedVolume(mount) => Some(json!({
                     "Name": mount.source().name(),
                     "Dest": mount.destination().as_str(),
-                    "Options": [access, copy],
-                })
+                    "Options": if mount.access().is_read_only() { vec!["ro"] } else { Vec::<&str>::new() },
+                    "SubPath": mount.subpath().map(crate::VolumeSubpath::as_str),
+                })),
+                MountIntent::Bind(_) | MountIntent::Tmpfs(_) => None,
             })
             .collect(),
     )
+}
+
+fn mount_cli_value(
+    kind: &str,
+    source: &str,
+    destination: &str,
+    access: crate::MountAccess,
+    subpath: Option<&str>,
+) -> String {
+    let mut value = format!("type={kind}");
+    if !source.is_empty() {
+        let _ = write!(value, ",source={source}");
+    }
+    let _ = write!(value, ",target={destination}");
+    if access.is_read_only() {
+        value.push_str(",readonly");
+    }
+    if let Some(subpath) = subpath {
+        let _ = write!(value, ",subpath={subpath}");
+    }
+    value
+}
+
+fn native_mount_json(mounts: &[MountIntent]) -> Value {
+    Value::Array(
+        mounts
+            .iter()
+            .filter_map(|mount| match mount {
+                MountIntent::Bind(mount) => Some(json!({
+                    "destination": mount.destination().as_str(),
+                    "type": "bind",
+                    "source": mount.source().as_str(),
+                    "options": if mount.access().is_read_only() { ["ro"] } else { ["rw"] },
+                })),
+                MountIntent::Tmpfs(mount) => Some(json!({
+                    "destination": mount.destination().as_str(),
+                    "type": "tmpfs",
+                    "source": "tmpfs",
+                    "options": if mount.access().is_read_only() { ["ro"] } else { ["rw"] },
+                })),
+                MountIntent::NamedVolume(_) => None,
+            })
+            .collect(),
+    )
+}
+
+fn append_secret_grants_arguments(arguments: &mut Vec<String>, grants: &[SecretGrant]) -> bool {
+    for grant in grants {
+        if !cli_safe_mount_component(grant.source().name()) {
+            return false;
+        }
+        let value = match grant {
+            SecretGrant::Mount { .. } => {
+                let mut value = format!("source={},type=mount", grant.source().name());
+                if let Some(target) = grant.mount_target() {
+                    if !cli_safe_mount_component(target.as_str()) {
+                        return false;
+                    }
+                    let _ = write!(value, ",target={}", target.as_str());
+                }
+                if let Some(uid) = grant.mount_uid() {
+                    let _ = write!(value, ",uid={}", uid.get());
+                }
+                if let Some(gid) = grant.mount_gid() {
+                    let _ = write!(value, ",gid={}", gid.get());
+                }
+                if let Some(mode) = grant.mount_mode() {
+                    let _ = write!(value, ",mode={:o}", mode.get());
+                }
+                value
+            }
+            SecretGrant::Environment { target, .. } => {
+                format!("source={},type=env,target={}", grant.source().name(), target.as_str())
+            }
+        };
+        arguments.extend(["--secret".to_owned(), value]);
+    }
+    true
+}
+
+fn append_secret_grants_json(body: &mut Map<String, Value>, grants: &[SecretGrant]) {
+    let mut mounts = Vec::new();
+    let mut environment = Map::new();
+    for grant in grants {
+        match grant {
+            SecretGrant::Mount { .. } => {
+                let mut value = Map::new();
+                value.insert("Source".to_owned(), Value::String(grant.source().name().to_owned()));
+                if let Some(target) = grant.mount_target() {
+                    value.insert("Target".to_owned(), Value::String(target.as_str().to_owned()));
+                }
+                if let Some(uid) = grant.mount_uid() {
+                    value.insert("UID".to_owned(), json!(uid.get()));
+                }
+                if let Some(gid) = grant.mount_gid() {
+                    value.insert("GID".to_owned(), json!(gid.get()));
+                }
+                // `podman --secret` defaults omitted mount modes to 0444, while the Libpod
+                // request model decodes an omitted `Mode` as zero. Emit the CLI default
+                // explicitly in the API representation so both non-executing planes retain
+                // the same declared semantics.
+                value.insert(
+                    "Mode".to_owned(),
+                    json!(grant.mount_mode().map_or(0o444, SecretMode::get)),
+                );
+                mounts.push(Value::Object(value));
+            }
+            SecretGrant::Environment { target, .. } => {
+                environment.insert(
+                    target.as_str().to_owned(),
+                    Value::String(grant.source().name().to_owned()),
+                );
+            }
+        }
+    }
+    if !mounts.is_empty() {
+        body.insert("secrets".to_owned(), Value::Array(mounts));
+    }
+    if !environment.is_empty() {
+        body.insert("secret_env".to_owned(), Value::Object(environment));
+    }
+}
+
+fn volume_create_cli_arguments(volume: &crate::VolumeIntent) -> Vec<String> {
+    let mut arguments = vec!["volume".to_owned(), "create".to_owned()];
+    if let Some(uid) = volume.uid() {
+        arguments.extend(["--uid".to_owned(), uid.get().to_string()]);
+    }
+    if let Some(gid) = volume.gid() {
+        arguments.extend(["--gid".to_owned(), gid.get().to_string()]);
+    }
+    arguments.push(volume.identity().name().to_owned());
+    arguments
+}
+
+fn volume_create_json(volume: &crate::VolumeIntent) -> Value {
+    let mut body = Map::new();
+    body.insert("Name".to_owned(), Value::String(volume.identity().name().to_owned()));
+    if let Some(uid) = volume.uid() {
+        body.insert("UID".to_owned(), json!(uid.get()));
+    }
+    if let Some(gid) = volume.gid() {
+        body.insert("GID".to_owned(), json!(gid.get()));
+    }
+    Value::Object(body)
+}
+
+fn mount_has_unsupported_subpath(mount: &MountIntent) -> bool {
+    matches!(mount, MountIntent::NamedVolume(volume) if volume.subpath().is_some() && volume.copy_mode() == crate::NamedVolumeCopyMode::NoCopy)
+}
+
+fn secret_grants_renderable(grants: &[SecretGrant]) -> bool {
+    let mut arguments = Vec::new();
+    append_secret_grants_arguments(&mut arguments, grants)
 }
 
 fn unsupported_runtime_fields(container: &crate::ContainerIntent, version: &str) -> Vec<&'static str> {
@@ -3434,7 +3824,14 @@ fn append_container_setting_json(
         );
     }
     if !container.mounts().is_empty() {
-        body.insert("volumes".to_owned(), named_volume_json(container.mounts()));
+        let volumes = mount_json(container.mounts());
+        if !volumes.as_array().is_some_and(Vec::is_empty) {
+            body.insert("volumes".to_owned(), volumes);
+        }
+        let mounts = native_mount_json(container.mounts());
+        if !mounts.as_array().is_some_and(Vec::is_empty) {
+            body.insert("mounts".to_owned(), mounts);
+        }
     }
     Ok(())
 }
@@ -3641,9 +4038,9 @@ mod tests {
 
     #[test]
     fn renderer_catalogue_rejects_b2_field_mutations_and_fabricated_pre_six_support() {
-        const FIRST_B2_FIELD: usize = 10;
-        const NETWORK_ORDER_FIELD: usize = 30;
-        const ROUTE_TYPE_BLACKHOLE_FIELD: usize = 38;
+        const FIRST_B2_FIELD: usize = 9;
+        const NETWORK_ORDER_FIELD: usize = 29;
+        const ROUTE_TYPE_BLACKHOLE_FIELD: usize = 37;
 
         let mut missing = decoded_catalogue();
         missing["reviewed_lines"][0]["field_evidence"]
@@ -3814,17 +4211,65 @@ mod tests {
     }
 
     #[test]
+    fn renderer_catalogue_rejects_b4_boundary_and_evidence_mutations() {
+        let mut missing_exact = decoded_catalogue();
+        missing_exact["reviewed_lines"][0]["b4_evidence"]["exact_fields"]
+            .as_array_mut()
+            .expect("B4 exact fields")
+            .pop();
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing_exact)).is_err());
+
+        let mut duplicate_blocked = decoded_catalogue();
+        let blocked = duplicate_blocked["reviewed_lines"][0]["b4_evidence"]["blocked_fields"]
+            .as_array_mut()
+            .expect("B4 blocked fields");
+        blocked.push(blocked[0].clone());
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&duplicate_blocked)).is_err());
+
+        let mut fabricated_pre_five_six = decoded_catalogue();
+        let target_gated = fabricated_pre_five_six["reviewed_lines"][0]["b4_evidence"]["target_gated_fields"]
+            .as_array_mut()
+            .expect("B4 target-gated fields");
+        let volume_uid = target_gated.remove(0);
+        fabricated_pre_five_six["reviewed_lines"][0]["b4_evidence"]["exact_fields"]
+            .as_array_mut()
+            .expect("B4 exact fields")
+            .push(volume_uid);
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&fabricated_pre_five_six)).is_err());
+
+        let mut mutable_source = decoded_catalogue();
+        mutable_source["reviewed_lines"][0]["b4_evidence"]["cli_sources"][0]["revision"] = serde_json::json!("main");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&mutable_source)).is_err());
+
+        let mut incorrect_model = decoded_catalogue();
+        incorrect_model["reviewed_lines"][0]["b4_evidence"]["model_sources"][0]["path"] =
+            serde_json::json!("pkg/specgenutil/specgen.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&incorrect_model)).is_err());
+
+        let mut unsupported_pod_mount = decoded_catalogue();
+        let blocked = unsupported_pod_mount["reviewed_lines"][0]["b4_evidence"]["blocked_fields"]
+            .as_array_mut()
+            .expect("B4 blocked fields");
+        blocked.retain(|field| field != "pod-infra-mount");
+        unsupported_pod_mount["reviewed_lines"][0]["b4_evidence"]["exact_fields"]
+            .as_array_mut()
+            .expect("B4 exact fields")
+            .push(serde_json::json!("pod-infra-mount"));
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&unsupported_pod_mount)).is_err());
+    }
+
+    #[test]
     fn renderer_catalogue_rejects_unknown_and_duplicate_json_keys() {
         let unknown = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 7,",
-            "\"schema_version\": 7, \"unexpected\": true,",
+            "\"schema_version\": 8,",
+            "\"schema_version\": 8, \"unexpected\": true,",
             1,
         );
         assert!(parse_renderer_catalogue(&unknown).is_err());
 
         let duplicate_root = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 7,",
-            "\"schema_version\": 7, \"schema_version\": 7,",
+            "\"schema_version\": 8,",
+            "\"schema_version\": 8, \"schema_version\": 8,",
             1,
         );
         assert!(parse_renderer_catalogue(&duplicate_root).is_err());

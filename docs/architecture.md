@@ -144,8 +144,10 @@ name, never a URI, endpoint, path, credential, or token; CLI arrays carry it as 
 The review script emits deterministic, shell-quoted comments for every external network, volume,
 image, or secret prerequisite, but never a secret-material reference or value. It renders pod
 networks, pod-member assignment, unpodded-container networks, public settings, and named-volume
-mounts. Sensitive environment variants, pod-member restart policy, ambiguous CLI mount spellings,
-and secret attachment targets are not yet part of the semantic model. M6-B2 gives networking a
+mounts. M6-B4 adds typed bind and tmpfs mounts, named-volume subpaths, volume ownership, typed
+mounted/environment secret grants, and explicit image acquisition policy/source classification.
+Sensitive environment variants, pod-member restart policy, and ambiguous CLI mount spellings remain
+explicit boundaries; secret payload material stays external and deferred. M6-B2 gives networking a
 typed declared-output model rather than recovering it from runtime observation: each pod owns its
 network attachments, ports, DNS configuration, and `/etc/hosts` aliases through its infra
 container; an unpodded container owns its corresponding configuration directly. A pod member
@@ -182,7 +184,7 @@ managed operation retains its complete typed resource intent, so an M6 renderer 
 source, resource configuration, or redacted secret-material reference it needs without rebuilding
 meaning from IDs. Omitted references are findings, never an implicit external boundary. Pods and
 containers remain managed in M5. Image acquisition is explicit with migration-safe
-`ImagePullPolicy::Missing` and a bounded portable pull-reference grammar; container creation must
+an explicit `ImagePullPolicy` and typed `ImageSource`; container creation must
 not hide a pull.
 
 Pods with members have one `StartPod` after all member create operations. Unpodded containers have

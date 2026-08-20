@@ -128,7 +128,7 @@ Exit: one typed intent produces one deterministic, transport-neutral semantic pl
 
 M5 is complete. `DeploymentIntent` uses a reviewed `TargetProfile`, typed target-side resources,
 and intent-level `StartupDependency` edges. A managed image has a bounded portable pull-reference
-grammar and the migration-safe `ImagePullPolicy::Missing`; a plan never hides an image pull inside container
+grammar and an explicit `ImagePullPolicy`; a plan never hides an image pull inside container
 creation. Pod members are created before exactly one `StartPod`; unpodded containers get their own
 `StartContainer`. Cross-pod start edges are lifted to those pod starts, while same-pod ordering is
 rejected. `PlanningOutcome` returns a plan only when its sorted findings are empty.
@@ -171,18 +171,33 @@ remain external; only a redacted external material reference is available to M6.
 - [x] M6-B3b: Render the bounded public runtime surface exactly to CLI and Libpod descriptions;
       preserve all-or-nothing redaction for sensitive health commands and repeat runtime target
       gates during rendering.
-- [ ] Generate exact CLI program and argument arrays.
-- [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
-- [ ] Prove CLI and API equivalence for every dual-representation operation.
-- [ ] Cover pods, containers, networks, named volumes, images, and secrets in dependency order.
-- [ ] Preserve explicit pod membership and validate unpodded output intent.
-- [ ] Add evidence-backed renderings for remaining mount and container settings.
-- [ ] Cover ports, health, security, namespace, logging, bind/tmpfs mounts, and resource settings.
-- [ ] Add positive and negative tests for every supported value and version boundary.
-- [ ] Emit structured outcomes for every approximation, omission, and manual action.
-- [ ] Render `deployment.sh` and `deployment-plan.json` from the same plan.
+- [x] M6-B4: Add typed named-volume, bind, and tmpfs mounts; named-volume subpaths; optional
+      volume UID/GID ownership; typed mounted and environment secret grants; and explicit image
+      pull policy/source classification. Pod infra mounts block because `pod create` has no dual
+      CLI mount form. UID/GID ownership and image policy require Podman 5.6+; local,
+      unqualified, and tagless managed image sources remain structured manual portability work.
+- [x] Generate deterministic CLI program/argument arrays and native Libpod HTTP method, path, and
+      typed-body descriptions for the bounded ledger-backed B1–B4 surface.
+- [x] Assert revision-pinned two-plane evidence and byte-exact regression renderings for every
+      supported bounded field and reviewed target/version gate; reject an unsupported field rather
+      than claiming CLI/API equivalence.
+- [x] Preserve dependency order, explicit pod membership, and validated unpodded output intent.
+- [x] Emit sorted structured outcomes for every bounded approximation, omission, manual action,
+      and target boundary.
+- [x] Render `deployment.sh` and `deployment-plan.json` from the same semantic plan.
 
-Exit: supported Podman intent round-trips through CLI and API representations without silent loss.
+M6 is complete for the B1–B4 bounded, strict-ledger-backed surface. It does not claim exhaustive
+Podman output coverage.
+
+## Post-M6 bounded output batches
+
+- [ ] Add another reviewed, evidence-backed batch for selected remaining native container or pod
+      fields only after its planner, CLI, Libpod, diagnostic, and focused boundary tests are defined.
+- [ ] Extend the strict output ledger one bounded field family at a time; do not claim universal
+      coverage of future native fields or values.
+
+Exit: the bounded B1–B4 Podman intent surface renders to its reviewed CLI and Libpod descriptions
+without silent loss; all other native output remains explicitly outside that contract.
 
 ## M7: BoxFerry integration readiness
 

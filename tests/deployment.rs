@@ -6,11 +6,12 @@ use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
     DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
-    ImageIntent, ImagePullPolicy, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment,
-    NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
-    PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue, ResourceKind, RestartPolicy, RouteType,
-    SecretIntent, SemanticOperationAction, SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency,
-    StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
+    ImageIntent, ImagePullPolicy, ImageSource, Label, LabelKey, MountAccess, MountIntent, NamedVolumeCopyMode,
+    NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion,
+    ObservedPodmanVersion, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue,
+    ResourceKind, RestartPolicy, RouteType, SecretGrant, SecretIntent, SemanticOperationAction,
+    SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency, StaticMacAddress,
+    TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
 };
 
 fn target(version: &str) -> TargetProfile {
@@ -48,7 +49,12 @@ fn pod_members_cannot_own_network_namespace_configuration() {
     pod_intent.add_member(container).expect("member");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/team/member:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/team/member:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Network(
         NetworkIntent::new(network).expect("network"),
@@ -454,7 +460,12 @@ fn plan_with_all_static_network_values(context: TargetExecutionContext) -> podma
         NetworkIntent::new(network).expect("network"),
     ));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/team/application:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(container));
     plan_deployment(&intent)
@@ -468,7 +479,7 @@ fn mount(volume: DeploymentResourceId, destination: &str) -> NamedVolumeMount {
     NamedVolumeMount::new(
         volume,
         AbsoluteContainerPath::new(destination).expect("destination"),
-        false,
+        MountAccess::ReadWrite,
         NamedVolumeCopyMode::Copy,
     )
     .expect("mount")
@@ -586,7 +597,12 @@ fn pod_members_reject_explicit_hostname_before_rendering() {
         .expect("hostname");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/web:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/web:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(container_intent));
@@ -687,7 +703,7 @@ fn named_volume_mounts_keep_both_mode_values_and_reject_non_volume_sources() {
     let copy = NamedVolumeMount::new(
         volume.clone(),
         AbsoluteContainerPath::new("/data").expect("path"),
-        false,
+        MountAccess::ReadWrite,
         NamedVolumeCopyMode::Copy,
     )
     .expect("copy mount");
@@ -699,7 +715,7 @@ fn named_volume_mounts_keep_both_mode_values_and_reject_non_volume_sources() {
     let no_copy = NamedVolumeMount::new(
         volume,
         AbsoluteContainerPath::new("/readonly").expect("path"),
-        true,
+        MountAccess::ReadOnly,
         NamedVolumeCopyMode::NoCopy,
     )
     .expect("no-copy mount");
@@ -709,7 +725,7 @@ fn named_volume_mounts_keep_both_mode_values_and_reject_non_volume_sources() {
         NamedVolumeMount::new(
             id(ResourceKind::Network, "not-a-volume"),
             AbsoluteContainerPath::new("/data").expect("path"),
-            false,
+            MountAccess::ReadWrite,
             NamedVolumeCopyMode::Copy,
         )
         .is_err()
@@ -856,7 +872,12 @@ fn mounts_resolve_volume_dependencies_and_reject_duplicate_destinations() {
         VolumeIntent::new(volume.clone()).expect("volume"),
     ));
     managed.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/web:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/web:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     managed.add_resource(DeploymentResource::Container(managed_container));
     let managed_outcome = plan_deployment(&managed);
@@ -874,7 +895,7 @@ fn mounts_resolve_volume_dependencies_and_reject_duplicate_destinations() {
         NamedVolumeMount::new(
             volume.clone(),
             AbsoluteContainerPath::new("/data").expect("destination"),
-            true,
+            MountAccess::ReadOnly,
             NamedVolumeCopyMode::NoCopy,
         )
         .expect("mount"),
@@ -913,13 +934,18 @@ fn complete_pod_intent(version: &str) -> DeploymentIntent {
         .set_pod(pod_intent.identity().clone())
         .expect("pod identity");
     container_intent.add_mount(mount(volume.clone(), "/var/lib/application"));
-    container_intent.add_secret(secret.clone()).expect("secret identity");
+    container_intent.add_secret_grant(SecretGrant::mount(secret.clone()).expect("secret identity"));
 
     let mut intent = DeploymentIntent::new(target(version));
     intent.add_resource(DeploymentResource::Container(container_intent));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/application:1.0").expect("strict image reference"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/application:1.0").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("strict image reference"),
     ));
     intent.add_resource(DeploymentResource::Secret(
         SecretIntent::new(
@@ -1016,7 +1042,12 @@ fn semantic_plan_retains_managed_intent_and_every_external_precondition_without_
     let secret = id(ResourceKind::Secret, "managed-secret");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(managed_image, source).expect("managed image"),
+        ImageIntent::new(
+            managed_image,
+            ImageSource::new(source).expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("managed image"),
     ));
     intent.add_resource(DeploymentResource::Secret(
         SecretIntent::new(
@@ -1057,7 +1088,7 @@ fn semantic_plan_retains_managed_intent_and_every_external_precondition_without_
             _ => None,
         })
         .expect("managed image operation");
-    assert_eq!(image.source(), source);
+    assert_eq!(image.source().as_str(), source);
     let secret = plan
         .operations()
         .iter()
@@ -1121,7 +1152,12 @@ fn pod_members_start_once_and_cross_pod_dependencies_are_lifted() {
     second_container.set_pod(second_pod.clone()).expect("pod");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(first_pod_intent));
     intent.add_resource(DeploymentResource::Pod(second_pod_intent));
@@ -1171,7 +1207,12 @@ fn same_pod_order_and_start_cycles_are_rejected() {
     let right = id(ResourceKind::Container, "right");
     let mut cycle = DeploymentIntent::new(target("6.1.0"));
     cycle.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image.clone(), "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image.clone(),
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     cycle.add_resource(DeploymentResource::Container(
         ContainerIntent::new(left.clone(), image.clone()).expect("left"),
@@ -1194,7 +1235,12 @@ fn incomplete_pod_membership_is_rejected_before_operation_ordering() {
     member.set_pod(pod.clone()).expect("pod");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(PodIntent::new(pod.clone()).expect("pod")));
     intent.add_resource(DeploymentResource::Container(member));
@@ -1270,7 +1316,8 @@ fn constructors_reject_wrong_kinds_invalid_images_and_sensitive_payload_spelling
     assert_eq!(
         ImageIntent::new(
             id(ResourceKind::Network, "not-an-image"),
-            "registry.example.invalid/team/image:1",
+            ImageSource::new("registry.example.invalid/team/image:1").expect("source"),
+            ImagePullPolicy::Missing,
         )
         .expect_err("wrong image kind")
         .code()
@@ -1285,13 +1332,10 @@ fn constructors_reject_wrong_kinds_invalid_images_and_sensitive_payload_spelling
         "PLN0040"
     );
     assert_eq!(
-        ImageIntent::new(
-            id(ResourceKind::Image, "bad"),
-            "registry.example.invalid/app:1 $(whoami)"
-        )
-        .expect_err("shell syntax is not an image reference")
-        .code()
-        .as_str(),
+        ImageSource::new("registry.example.invalid/app:1 $(whoami)")
+            .expect_err("shell syntax is not an image reference")
+            .code()
+            .as_str(),
         "PLN0041"
     );
     let sensitive = SensitiveInputReference::new("vault/test-value").expect("reference");
@@ -1313,7 +1357,7 @@ fn validation_collects_independent_missing_resources_and_startup_errors() {
         .add_network(NetworkAttachment::new(network).expect("network attachment"))
         .expect("network identity");
     broken.add_mount(mount(volume, "/var/lib/application"));
-    broken.add_secret(secret).expect("secret identity");
+    broken.add_secret_grant(SecretGrant::mount(secret).expect("secret identity"));
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Container(broken));
     intent.add_startup_dependency(StartupDependency::new(container.clone(), missing_container).expect("edge"));
@@ -1436,7 +1480,12 @@ fn two_distinct_members_of_one_pod_cannot_have_a_startup_order() {
     right_intent.set_pod(pod).expect("pod");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Pod(pod_intent));
     intent.add_resource(DeploymentResource::Container(left_intent));
@@ -1454,19 +1503,22 @@ fn two_distinct_members_of_one_pod_cannot_have_a_startup_order() {
 }
 
 #[test]
-fn portable_pull_reference_grammar_accepts_host_qualified_tag_and_digest_only() {
+fn image_source_grammar_classifies_safe_spellings_without_rewriting() {
     let digest = format!("registry.example.invalid/team/app@sha256:{}", "a".repeat(64));
     for source in [
         "registry.example.invalid/team/app:1.2.3".to_owned(),
         "registry.example.invalid:5000/team/app:stable".to_owned(),
         digest,
     ] {
-        assert!(ImageIntent::new(id(ResourceKind::Image, &source), source).is_ok());
+        let image = ImageIntent::new(
+            id(ResourceKind::Image, &source),
+            ImageSource::new(&source).expect("portable source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image");
+        assert_eq!(image.source().as_str(), source);
     }
     for source in [
-        "app:1",
-        "localhost/app:1",
-        "registry.example.invalid/team/app",
         "registry.example.invalid/team/app:-tag",
         "Registry.example.invalid/team/app:1",
         "registry_example.invalid/team/app:1",
@@ -1474,12 +1526,120 @@ fn portable_pull_reference_grammar_accepts_host_qualified_tag_and_digest_only() 
         "registry.example.invalid/team/app@sha256:abc",
         "registry.example.invalid/team/app:tag@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     ] {
-        assert_eq!(
-            ImageIntent::new(id(ResourceKind::Image, "invalid"), source)
-                .expect_err(source)
-                .code()
-                .as_str(),
-            "PLN0041"
+        assert_eq!(ImageSource::new(source).expect_err(source).code().as_str(), "PLN0041");
+    }
+}
+
+#[test]
+fn b4_typed_mounts_volume_ownership_and_secret_grants_preserve_all_optional_states() {
+    use podman_lens::{BindMount, EnvironmentName, SecretGrant, SecretMode, TmpfsMount, UnixId, VolumeSubpath};
+
+    let volume = id(ResourceKind::Volume, "data");
+    let secret = id(ResourceKind::Secret, "credential");
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let container = id(ResourceKind::Container, "app");
+    let mut volume_intent = VolumeIntent::new(volume.clone()).expect("volume");
+    volume_intent.set_uid(UnixId::new(0).expect("zero uid")).expect("uid");
+    volume_intent
+        .set_gid(UnixId::new(i32::MAX as u32).expect("max gid"))
+        .expect("gid");
+    assert_eq!(volume_intent.uid().expect("uid").get(), 0);
+    assert_eq!(volume_intent.gid().expect("gid").get(), i32::MAX as u32);
+    assert!(UnixId::new(i32::MAX as u32 + 1).is_err());
+
+    let mut named = NamedVolumeMount::new(
+        volume.clone(),
+        AbsoluteContainerPath::new("/data").expect("destination"),
+        MountAccess::ReadOnly,
+        NamedVolumeCopyMode::Copy,
+    )
+    .expect("named mount");
+    named
+        .set_subpath(VolumeSubpath::new("/application/state").expect("subpath"))
+        .expect("subpath");
+    assert!(VolumeSubpath::new("relative").is_err());
+    assert!(VolumeSubpath::new("/state/../escape").is_err());
+    let mut no_copy = NamedVolumeMount::new(
+        volume.clone(),
+        AbsoluteContainerPath::new("/other").expect("destination"),
+        MountAccess::ReadWrite,
+        NamedVolumeCopyMode::NoCopy,
+    )
+    .expect("named mount");
+    assert!(
+        no_copy
+            .set_subpath(VolumeSubpath::new("/state").expect("subpath"))
+            .is_err()
+    );
+
+    let mut mount_grant = SecretGrant::mount(secret.clone()).expect("secret mount");
+    mount_grant
+        .set_mount_target(AbsoluteContainerPath::new("/run/secrets/credential").expect("target"))
+        .expect("target");
+    mount_grant.set_mount_uid(UnixId::new(0).expect("uid")).expect("uid");
+    mount_grant.set_mount_gid(UnixId::new(1).expect("gid")).expect("gid");
+    mount_grant
+        .set_mount_mode(SecretMode::new(0o440).expect("mode"))
+        .expect("mode");
+    assert!(SecretMode::new(0o1000).is_err());
+    let env_grant = SecretGrant::environment(secret.clone(), EnvironmentName::new("DATABASE_PASSWORD").expect("name"))
+        .expect("secret environment");
+    assert!(env_grant.mount_target().is_none());
+
+    let mut intent = ContainerIntent::new(container.clone(), image).expect("container");
+    intent.add_mount(MountIntent::NamedVolume(named));
+    intent.add_mount(BindMount::new(
+        AbsoluteContainerPath::new("/srv/application").expect("source"),
+        AbsoluteContainerPath::new("/application").expect("destination"),
+        MountAccess::ReadWrite,
+    ));
+    intent.add_mount(TmpfsMount::new(
+        AbsoluteContainerPath::new("/run/cache").expect("destination"),
+        MountAccess::ReadOnly,
+    ));
+    intent.add_secret_grant(mount_grant);
+    intent.add_secret_grant(env_grant);
+    assert_eq!(intent.mounts().len(), 3);
+    assert_eq!(intent.secret_grants().len(), 2);
+}
+
+#[test]
+fn image_source_classification_requires_explicit_policy_and_preserves_manual_boundaries() {
+    use podman_lens::ImageSourceClassification;
+
+    assert_eq!(
+        ImageSource::new("registry.example.invalid/app:1")
+            .expect("portable")
+            .classification(),
+        ImageSourceClassification::Portable
+    );
+    assert_eq!(
+        ImageSource::new("localhost/app:1").expect("local").classification(),
+        ImageSourceClassification::Local
+    );
+    assert_eq!(
+        ImageSource::new("app:1").expect("unqualified").classification(),
+        ImageSourceClassification::Unqualified
+    );
+    assert_eq!(
+        ImageSource::new("registry.example.invalid/app")
+            .expect("tagless")
+            .classification(),
+        ImageSourceClassification::Tagless
+    );
+    for policy in [
+        ImagePullPolicy::Always,
+        ImagePullPolicy::Missing,
+        ImagePullPolicy::Never,
+        ImagePullPolicy::Newer,
+    ] {
+        assert!(
+            ImageIntent::new(
+                id(ResourceKind::Image, "registry.example.invalid/app:1"),
+                ImageSource::new("registry.example.invalid/app:1").expect("source"),
+                policy,
+            )
+            .is_ok()
         );
     }
 }
@@ -1550,19 +1710,14 @@ fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references()
         NamedVolumeMount::new(
             id(ResourceKind::Network, "wrong"),
             AbsoluteContainerPath::new("/data").expect("path"),
-            false,
+            MountAccess::ReadWrite,
             NamedVolumeCopyMode::Copy,
         )
         .is_err()
     );
     assert!(pod.add_member(id(ResourceKind::Pod, "wrong")).is_err());
-    let mut container = ContainerIntent::new(
-        id(ResourceKind::Container, "container"),
-        id(ResourceKind::Image, "registry.example.invalid/image:1"),
-    )
-    .expect("container");
     assert!(NetworkAttachment::new(id(ResourceKind::Volume, "wrong")).is_err());
-    assert!(container.add_secret(id(ResourceKind::Volume, "wrong")).is_err());
+    assert!(SecretGrant::mount(id(ResourceKind::Volume, "wrong")).is_err());
     assert!(StartupDependency::new(id(ResourceKind::Pod, "wrong"), id(ResourceKind::Container, "container")).is_err());
 }
 
@@ -1574,7 +1729,12 @@ fn duplicate_startup_dependencies_report_the_second_edge_position() {
     let dependency = StartupDependency::new(first.clone(), second.clone()).expect("dependency");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
     intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image.clone(), "registry.example.invalid/team/app:1").expect("image"),
+        ImageIntent::new(
+            image.clone(),
+            ImageSource::new("registry.example.invalid/team/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
     ));
     intent.add_resource(DeploymentResource::Container(
         ContainerIntent::new(first, image.clone()).expect("first container"),

@@ -8,12 +8,13 @@ use podman_lens::{
     ConfiguredHealthCheck, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentPlan, DeploymentResource,
     DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HealthCheck,
-    HealthCommand, HostAlias, ImageIntent, ImagePullPolicy, Label, LabelKey, LinuxCapability, LogDriver, LogSize,
-    NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet,
-    ObservedApiVersion, ObservedPodmanVersion, PlanningFinding, PlanningOutcome, PodIntent, PortMapping, PortProtocol,
-    PublicEnvironmentValue, PublicHealthArgumentArray, PublicHealthCommand, PublicLabelValue, RestartPolicy, Rlimit,
-    RlimitKind, RlimitValue, RouteType, SemanticOperationAction, SensitiveInlineEnvironmentValue, StartupDependency,
-    StartupHealthCheck, StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
+    HealthCommand, HostAlias, ImageIntent, ImagePullPolicy, ImageSource, Label, LabelKey, LinuxCapability, LogDriver,
+    LogSize, MountAccess, MountIntent, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment, NetworkCidr,
+    NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion, PlanningFinding,
+    PlanningOutcome, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicHealthArgumentArray,
+    PublicHealthCommand, PublicLabelValue, RestartPolicy, Rlimit, RlimitKind, RlimitValue, RouteType,
+    SemanticOperationAction, SensitiveInlineEnvironmentValue, StartupDependency, StartupHealthCheck, StaticMacAddress,
+    TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
@@ -138,6 +139,23 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.public_contract() == "HealthCommand"
             && entry.target_versions().len() == 7
     }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-OUT-0048"
+            && entry.resource_kind() == "image"
+            && entry.field_path() == "pull_policy.newer"
+            && entry.classification() == NativeFieldCoverageClassification::TargetGated
+            && entry.planner() == "deployment::validate_image_policy"
+            && entry.cli_renderer() == "render::render_operation"
+            && entry.libpod_renderer() == "render::render_operation"
+            && entry.target_versions() == ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"]
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-OUT-0050"
+            && entry.resource_kind() == "pod"
+            && entry.field_path() == "infra_mounts"
+            && entry.classification() == NativeFieldCoverageClassification::Manual
+            && entry.finding() == "PLN0046"
+    }));
     Ok(())
 }
 
@@ -227,20 +245,20 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
     let container = DeploymentResourceId::new(ResourceKind::Container, "web")?;
     let volume = DeploymentResourceId::new(ResourceKind::Volume, "web-data")?;
     let mut pod_intent = PodIntent::new(DeploymentResourceId::new(ResourceKind::Pod, "web-pod")?)?;
-    pod_intent.add_infra_mount(NamedVolumeMount::new(
+    pod_intent.add_infra_mount(MountIntent::NamedVolume(NamedVolumeMount::new(
         volume.clone(),
         AbsoluteContainerPath::new("/var/lib/infra")?,
-        false,
+        MountAccess::ReadWrite,
         NamedVolumeCopyMode::Copy,
-    )?);
+    )?));
     assert_eq!(pod_intent.infra_mounts().len(), 1);
     let mut container_intent = ContainerIntent::new(container.clone(), image.clone())?;
-    container_intent.add_mount(NamedVolumeMount::new(
+    container_intent.add_mount(MountIntent::NamedVolume(NamedVolumeMount::new(
         volume.clone(),
         AbsoluteContainerPath::new("/var/lib/web")?,
-        false,
+        MountAccess::ReadWrite,
         NamedVolumeCopyMode::NoCopy,
-    )?);
+    )?));
     {
         let settings = container_intent.settings_mut();
         settings.set_command(ArgumentArray::new(["serve"])?)?;
@@ -297,10 +315,10 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
             drop(serde_json::to_string(&artifact));
         }
     }
-    assert_eq!(ImagePullPolicy::Missing, ImagePullPolicy::default());
     let _ = ImageIntent::new(
         DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/managed:1")?,
-        "registry.example.invalid/managed:1",
+        ImageSource::new("registry.example.invalid/managed:1")?,
+        ImagePullPolicy::Missing,
     )?;
     let _ = SemanticOperationAction::StartPod;
     let _ = SemanticOperationAction::StartContainer;

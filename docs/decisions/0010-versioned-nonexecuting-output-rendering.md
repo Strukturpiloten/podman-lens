@@ -38,6 +38,16 @@ network order and non-unicast routes are gated to Podman 6.0 and newer. This con
 does not infer runtime addresses, invent a pod network ordering API, or model multi-IP attachments,
 port ranges, interface names, arbitrary network drivers/options, or unmanaged namespace modes.
 
+M6-B3b renders bounded public health, logging, security, CPU/memory/PID, and rlimit settings for
+containers, including pod members; the namespace subset is limited to unpodded containers. Health
+command arrays are compact canonical JSON for the CLI and `healthconfig`/`startupHealthConfig`
+bodies for Libpod; disabled health uses `--no-healthcheck` and
+`Test: [NONE]`. Health failure actions use CLI names and Podman's native integer Libpod enum.
+Sensitive or externally supplied health commands block the affected resource with a redacted
+finding and no partial artifact. Journald labels are exact only from 6.0 and unlimited
+rlimits only from 5.6; rendering repeats those planner gates. Pod-member namespace settings remain
+rejected rather than moved to a pod.
+
 ## Consequences
 
 - Committed renderer evidence covers eight semantic operation categories and the M6-B1b field matrix

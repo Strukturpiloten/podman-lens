@@ -1523,10 +1523,22 @@ fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // This is the integration-level evidence contract audit.
 fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Result<(), Box<dyn std::error::Error>> {
     let evidence: serde_json::Value =
         serde_json::from_str(include_str!("../catalogue/v1/podman-deployment-rendering.json"))?;
-    assert_eq!(evidence["schema_version"], 5);
+    assert_eq!(evidence["schema_version"], 7);
+    let runtime_claims = evidence["runtime_field_claims"]
+        .as_array()
+        .expect("runtime field claims");
+    assert_eq!(runtime_claims.len(), 32);
+    assert!(runtime_claims.iter().all(|claim| {
+        claim["field"].is_string()
+            && claim["cli"]["flag"].as_str().is_some_and(|flag| flag.starts_with("--"))
+            && claim["cli"]["value_shape"].is_string()
+            && claim["libpod"]["json_member"].is_string()
+            && claim["libpod"]["value_shape"].is_string()
+    }));
     let lines = evidence["reviewed_lines"].as_array().expect("lines");
     assert_eq!(lines.len(), 7);
     assert_eq!(
@@ -1545,8 +1557,50 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
         let revision = line["revision"].as_str().expect("revision");
         let operations = line["operations"].as_array().expect("operations");
         let fields = line["field_evidence"].as_array().expect("field evidence");
+        let runtime = &line["runtime_evidence"];
         assert_eq!(operations.len(), 8);
         assert_eq!(fields.len(), 41);
+        let exact_runtime = runtime["exact_fields"].as_array().expect("exact runtime fields");
+        let target_gated_runtime = runtime["target_gated_fields"]
+            .as_array()
+            .expect("target-gated runtime fields");
+        assert_eq!(exact_runtime.len() + target_gated_runtime.len(), runtime_claims.len());
+        assert_eq!(runtime["cli_flag_source"]["path"], "cmd/podman/common/create.go");
+        assert_eq!(runtime["cli_transform_source"]["path"], "pkg/specgenutil/specgen.go");
+        assert_eq!(
+            runtime["command_route_source"]["path"],
+            "cmd/podman/containers/create.go"
+        );
+        assert_eq!(runtime["route_source"]["path"], "pkg/api/server/register_containers.go");
+        assert_eq!(
+            runtime["handler_source"]["path"],
+            "pkg/api/handlers/libpod/containers_create.go"
+        );
+        for source in [
+            &runtime["cli_flag_source"],
+            &runtime["cli_transform_source"],
+            &runtime["command_route_source"],
+            &runtime["route_source"],
+            &runtime["handler_source"],
+        ] {
+            assert_eq!(source["repository"], "containers-podman");
+            assert_eq!(source["revision"], revision);
+            assert!(source["module"].is_null());
+        }
+        assert_eq!(runtime["model_sources"].as_array().map(Vec::len), Some(3));
+        assert_eq!(
+            runtime["model_sources"]
+                .as_array()
+                .expect("runtime model sources")
+                .iter()
+                .map(|source| source["path"].as_str().expect("model path"))
+                .collect::<Vec<_>>(),
+            vec![
+                "pkg/specgen/specgen.go",
+                "pkg/specgen/namespaces.go",
+                "libpod/define/healthchecks.go",
+            ]
+        );
         for operation in operations {
             for source in ["cli_source", "libpod_endpoint_source"] {
                 assert_eq!(operation[source]["repository"], "containers-podman");

@@ -13,13 +13,16 @@ acquire_inventory → DiscoveryRequest → discover → ResourceGraph
 containers, pods, networks, volumes, images, and secret metadata, then inspects stable resource IDs.
 The result preserves partial and malformed observations as evidence or structured findings.
 
-## Inspect native-field coverage
+## Inspect coverage
 
-`native_field_coverage_catalogue()` returns the packaged, strict ledger for the currently accepted
-M2 input fields. Each row links one native path to its decoder, output applicability, public
-accessor, diagnostic rule, and focused positive and negative tests. `not_applicable` in the planner
-and renderer references means only that the observed field has no native deployment-output contract
-yet; it does not authorize a conversion.
+`native_field_coverage_catalogue()` returns a packaged strict two-plane ledger. An
+`InputObservation` row links an accepted native field to its observation owner and has no output
+renderers. An `OutputIntent` row links a declared field to its planner, exact CLI renderer, exact
+Libpod renderer, reviewed target versions, public accessor, diagnostic rule, and focused tests.
+`not_applicable` means no contract exists in that plane; it never authorizes a conversion. The B3b
+runtime rows name all seven reviewed targets except journald labels (6.0+) and unlimited rlimits
+(5.6+). Sensitive and external health commands are manual redacted boundaries that apply to all
+reviewed targets and block the complete resource artifact with `PLN0046`.
 
 `ResourceRecord::unknown_fields()` retains bounded metadata for unmodeled native fields without raw
 values. Call `ResourceRecord::unknown_fields_complete()` before treating that metadata as an
@@ -90,8 +93,9 @@ never discovers either locally. Journald labels require Podman 6.0 or newer, unl
 require 5.6 or newer, and CPU quota is positive and at least one millisecond; semantic planning
 enforces these target gates. `namespaces_mut()` retains only unpodded private/host PID, IPC, UTS,
 and cgroup modes plus IPC `shareable`/`none`; cgroup private requires v2 evidence and a pod member
-gets `PLN0038`. These settings are semantic-only and make rendering return `PLN0046` until exact
-renderer evidence is added; B3b must repeat the planner's target gates defensively.
+gets `PLN0038`. B3b renders this bounded public subset exactly and repeats the planner's target
+gates defensively. Sensitive and external health commands remain redacted `PLN0046` boundaries;
+they prevent an artifact for the affected resource rather than creating a partial representation.
 
 Create one `DeploymentIntent` with an explicit reviewed `TargetProfile`, then add fully resolved
 target-side `DeploymentResource` values. `DeploymentResourceId` is deliberately separate from an

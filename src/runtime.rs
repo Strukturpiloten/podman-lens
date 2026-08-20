@@ -541,10 +541,6 @@ impl LoggingSettings {
     pub fn journald_labels(&self) -> &[Label] {
         &self.journald_labels
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self == &Self::default()
-    }
 }
 
 /// A bounded Linux capability name.
@@ -689,9 +685,6 @@ impl SecuritySettings {
     #[must_use]
     pub const fn read_write_tmpfs(&self) -> Option<bool> {
         self.read_write_tmpfs
-    }
-    pub(crate) fn is_empty(&self) -> bool {
-        self == &Self::default()
     }
 }
 
@@ -846,10 +839,6 @@ impl ContainerResourceControls {
     pub fn rlimits(&self) -> &[Rlimit] {
         &self.rlimits
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self == &Self::default()
-    }
 }
 
 /// One private or host namespace mode.
@@ -928,7 +917,7 @@ impl ContainerNamespaceSettings {
     }
 }
 
-/// Container-only M6-B3a runtime settings. No renderer consumes these settings yet.
+/// Container-only bounded runtime intent consumed by version-aware renderers.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContainerRuntimeSettings {
     health: Option<HealthCheck>,
@@ -998,14 +987,6 @@ impl ContainerRuntimeSettings {
     #[must_use]
     pub fn namespaces_mut(&mut self) -> &mut ContainerNamespaceSettings {
         &mut self.namespaces
-    }
-    pub(crate) fn is_empty(&self) -> bool {
-        self.health.is_none()
-            && self.startup_health.is_none()
-            && self.logging.is_empty()
-            && self.security.is_empty()
-            && self.resources.is_empty()
-            && self.namespaces.is_empty()
     }
 }
 

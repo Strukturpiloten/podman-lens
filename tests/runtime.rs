@@ -4,12 +4,12 @@
 use podman_lens::{
     CgroupCapabilityEvidence, CgroupController, CgroupVersion, ConfiguredHealthCheck, ContainerHostname,
     ContainerIntent, DeploymentIntent, DeploymentResource, DeploymentResourceId, ExternalPrecondition, HealthCheck,
-    HealthCommand, HealthDuration, HealthInterval, HealthRetries, HealthStartPeriod, HealthTimeout, ImageIntent,
-    IpcNamespaceMode, Label, LabelKey, LinuxCapability, LogDriver, LogSize, NamespaceMode, ObservedApiVersion,
-    ObservedPodmanVersion, PublicHealthArgumentArray, PublicHealthCommand, PublicLabelValue, ResourceKind, Rlimit,
-    RlimitKind, RlimitValue, SensitiveInlineHealthArgumentArray, SensitiveInlineHealthCommand, SensitiveInputReference,
-    StartupHealthCheck, StartupHealthRetries, StartupHealthSuccesses, TargetExecutionContext, TargetProfile,
-    plan_deployment, render_deployment,
+    HealthCommand, HealthDuration, HealthInterval, HealthOnFailure, HealthRetries, HealthStartPeriod, HealthTimeout,
+    ImageIntent, IpcNamespaceMode, Label, LabelKey, LinuxCapability, LogDriver, LogSize, NamespaceMode,
+    ObservedApiVersion, ObservedPodmanVersion, PublicHealthArgumentArray, PublicHealthCommand, PublicLabelValue,
+    RenderedHttpBody, ResourceKind, Rlimit, RlimitKind, RlimitValue, SensitiveInlineHealthArgumentArray,
+    SensitiveInlineHealthCommand, SensitiveInputReference, StartupHealthCheck, StartupHealthRetries,
+    StartupHealthSuccesses, TargetExecutionContext, TargetProfile, plan_deployment, render_deployment,
 };
 
 fn target_for(version: &str) -> TargetProfile {
@@ -29,25 +29,86 @@ fn target() -> TargetProfile {
     target
 }
 
+fn runtime_render_target(version: &str) -> TargetProfile {
+    let mut target = target_for(version);
+    target.set_cgroup_capabilities(CgroupCapabilityEvidence::new(
+        CgroupVersion::V2,
+        [CgroupController::Cpu, CgroupController::Memory, CgroupController::Pids],
+    ));
+    target
+}
+
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
     DeploymentResourceId::new(kind, name).expect("identity")
+}
+
+fn protected_health_commands() -> [(HealthCommand, &'static str); 4] {
+    [
+        (
+            HealthCommand::SensitiveInlineShell(
+                SensitiveInlineHealthCommand::new("DISTINCTIVE_SHELL_SECRET").expect("shell secret"),
+            ),
+            "DISTINCTIVE_SHELL_SECRET",
+        ),
+        (
+            HealthCommand::SensitiveInlineExec(
+                SensitiveInlineHealthArgumentArray::new(["DISTINCTIVE_EXEC_SECRET"]).expect("exec secret"),
+            ),
+            "DISTINCTIVE_EXEC_SECRET",
+        ),
+        (
+            HealthCommand::ExternalShell(
+                SensitiveInputReference::new("vault/external-shell-secret").expect("external shell"),
+            ),
+            "vault/external-shell-secret",
+        ),
+        (
+            HealthCommand::ExternalExec(
+                SensitiveInputReference::new("vault/external-exec-secret").expect("external exec"),
+            ),
+            "vault/external-exec-secret",
+        ),
+    ]
 }
 
 fn complete_intent() -> (DeploymentIntent, DeploymentResourceId) {
     let image = id(ResourceKind::Image, "registry.example.invalid/web:1");
     let container_id = id(ResourceKind::Container, "web");
     let mut container = ContainerIntent::new(container_id.clone(), image.clone()).expect("container");
+    let mut health = ConfiguredHealthCheck::new(HealthCommand::Shell(
+        PublicHealthCommand::new("curl -f http://127.0.0.1/health").expect("health"),
+    ));
+    health.set_interval(HealthInterval::Disabled).expect("interval");
+    health
+        .set_timeout(HealthTimeout::new(2_000_000_000).expect("timeout"))
+        .expect("timeout");
+    health
+        .set_retries(HealthRetries::new(3).expect("retries"))
+        .expect("retries");
+    health
+        .set_start_period(HealthStartPeriod::new(4_000_000_000).expect("start period"))
+        .expect("start period");
+    health.set_on_failure(HealthOnFailure::Restart).expect("failure action");
     container
         .runtime_mut()
-        .set_health(HealthCheck::Command(ConfiguredHealthCheck::new(HealthCommand::Shell(
-            PublicHealthCommand::new("curl -f http://127.0.0.1/health").expect("health"),
-        ))))
+        .set_health(HealthCheck::Command(health))
         .expect("health");
+    let mut startup = StartupHealthCheck::new(HealthCommand::Exec(
+        PublicHealthArgumentArray::new(["/usr/local/bin/wait-ready"]).expect("exec"),
+    ));
+    startup.set_interval(HealthInterval::Disabled).expect("interval");
+    startup
+        .set_timeout(HealthTimeout::new(5_000_000_000).expect("timeout"))
+        .expect("timeout");
+    startup
+        .set_retries(StartupHealthRetries::new(0).expect("retries"))
+        .expect("retries");
+    startup
+        .set_successes(StartupHealthSuccesses::new(2).expect("successes"))
+        .expect("successes");
     container
         .runtime_mut()
-        .set_startup_health(StartupHealthCheck::new(HealthCommand::Exec(
-            PublicHealthArgumentArray::new(["/usr/local/bin/wait-ready"]).expect("exec"),
-        )))
+        .set_startup_health(startup)
         .expect("startup health");
     let runtime = container.runtime_mut();
     runtime.logging_mut().set_driver(LogDriver::Journald).expect("driver");
@@ -91,17 +152,255 @@ fn complete_intent() -> (DeploymentIntent, DeploymentResourceId) {
 }
 
 #[test]
-fn bounded_runtime_intent_plans_but_rendering_remains_blocked() {
+fn bounded_runtime_intent_plans_and_renders_exactly() {
     let (intent, container) = complete_intent();
     let plan = plan_deployment(&intent).plan().cloned().expect("semantic plan");
     let rendering = render_deployment(&plan);
-    assert!(!rendering.is_success());
+    assert!(rendering.is_success());
+    let rendering = rendering.rendering().expect("rendering");
+    let operation = rendering
+        .operations()
+        .iter()
+        .find(|operation| operation.operation().id().resource() == &container)
+        .expect("container operation");
     assert!(
-        rendering
-            .findings()
-            .iter()
-            .any(|finding| { finding.subject() == Some(&container) && finding.field() == Some("runtime") })
+        operation
+            .cli()
+            .argv()
+            .windows(2)
+            .any(|pair| pair == ["--health-cmd", "[\"CMD-SHELL\",\"curl -f http://127.0.0.1/health\"]"])
     );
+    assert!(operation.cli().argv().contains(&"--health-interval".to_owned()));
+    assert!(operation.cli().argv().contains(&"disable".to_owned()));
+    assert!(operation.cli().argv().contains(&"--health-startup-cmd".to_owned()));
+    assert!(operation.cli().argv().contains(&"--health-startup-interval".to_owned()));
+    assert!(operation.cli().argv().contains(&"--privileged=false".to_owned()));
+    assert!(operation.cli().argv().contains(&"--read-only-tmpfs=true".to_owned()));
+    let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+        unreachable!("container creation requires a JSON body");
+    };
+    assert_eq!(
+        body["healthconfig"]["Test"],
+        serde_json::json!(["CMD-SHELL", "curl -f http://127.0.0.1/health"])
+    );
+    assert_eq!(body["health_check_on_failure_action"], serde_json::json!(3));
+    assert_eq!(body["resource_limits"]["cpu"]["quota"], serde_json::json!(50_000));
+}
+
+#[test]
+fn every_health_failure_action_uses_the_native_integer_enum_on_every_reviewed_target() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        for (action, cli_name, native_code) in [
+            (HealthOnFailure::None, "none", 0),
+            (HealthOnFailure::Kill, "kill", 2),
+            (HealthOnFailure::Restart, "restart", 3),
+            (HealthOnFailure::Stop, "stop", 4),
+        ] {
+            let image = id(ResourceKind::Image, "registry.example.invalid/health-action:1");
+            let container_id = id(ResourceKind::Container, "health-action");
+            let mut container = ContainerIntent::new(container_id.clone(), image.clone()).expect("container");
+            let mut health = ConfiguredHealthCheck::new(HealthCommand::Exec(
+                PublicHealthArgumentArray::new(["/usr/bin/true"]).expect("command"),
+            ));
+            health
+                .set_interval(HealthInterval::Every(
+                    HealthDuration::new(2_000_000_000).expect("interval"),
+                ))
+                .expect("interval");
+            health.set_on_failure(action).expect("failure action");
+            container
+                .runtime_mut()
+                .set_health(HealthCheck::Command(health))
+                .expect("health");
+            let mut intent = DeploymentIntent::new(target_for(version));
+            intent.add_resource(DeploymentResource::ExternalPrecondition(
+                ExternalPrecondition::new(image).expect("image"),
+            ));
+            intent.add_resource(DeploymentResource::Container(container));
+            let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+            let rendering = render_deployment(&plan);
+            let operation = rendering
+                .rendering()
+                .expect("rendering")
+                .operations()
+                .iter()
+                .find(|operation| operation.operation().id().resource() == &container_id)
+                .expect("container operation");
+            assert!(
+                operation
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|pair| pair == ["--health-on-failure", cli_name])
+            );
+            let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+                unreachable!("container creation requires a JSON body");
+            };
+            assert_eq!(body["health_check_on_failure_action"], serde_json::json!(native_code));
+            assert!(!body["health_check_on_failure_action"].is_string());
+            assert_eq!(body["healthconfig"]["Interval"], serde_json::json!(2_000_000_000_i64));
+        }
+    }
+}
+
+#[test]
+fn disabled_health_uses_the_native_none_test_on_every_reviewed_target() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let image = id(ResourceKind::Image, "registry.example.invalid/disabled-health:1");
+        let container_id = id(ResourceKind::Container, "disabled-health");
+        let mut container = ContainerIntent::new(container_id.clone(), image.clone()).expect("container");
+        container
+            .runtime_mut()
+            .set_health(HealthCheck::Disabled)
+            .expect("disabled health");
+        let mut intent = DeploymentIntent::new(target_for(version));
+        intent.add_resource(DeploymentResource::ExternalPrecondition(
+            ExternalPrecondition::new(image).expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Container(container));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let rendering = render_deployment(&plan);
+        let operation = rendering
+            .rendering()
+            .expect("rendering")
+            .operations()
+            .iter()
+            .find(|operation| operation.operation().id().resource() == &container_id)
+            .expect("container operation");
+        assert!(operation.cli().argv().contains(&"--no-healthcheck".to_owned()));
+        let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+            unreachable!("container creation requires a JSON body");
+        };
+        assert_eq!(body["healthconfig"]["Test"], serde_json::json!(["NONE"]));
+    }
+}
+
+#[test]
+fn finite_bounded_runtime_fields_render_for_every_reviewed_target() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let image = id(ResourceKind::Image, "registry.example.invalid/runtime-matrix:1");
+        let container_id = id(ResourceKind::Container, "runtime-matrix");
+        let mut container = ContainerIntent::new(container_id.clone(), image.clone()).expect("container");
+        let runtime = container.runtime_mut();
+        runtime
+            .set_health(HealthCheck::Command(ConfiguredHealthCheck::new(HealthCommand::Exec(
+                PublicHealthArgumentArray::new(["/usr/bin/true", "--check"]).expect("command"),
+            ))))
+            .expect("health");
+        runtime.logging_mut().set_driver(LogDriver::K8sFile).expect("driver");
+        runtime
+            .logging_mut()
+            .set_max_size(LogSize::new(1024).expect("size"))
+            .expect("size");
+        runtime.security_mut().set_privileged(false).expect("privileged");
+        runtime.security_mut().set_no_new_privileges(false).expect("nnp");
+        runtime
+            .security_mut()
+            .set_read_only_filesystem(false)
+            .expect("read only");
+        runtime
+            .security_mut()
+            .add_capability(LinuxCapability::new("CHOWN").expect("capability"))
+            .expect("capability");
+        runtime.resources_mut().set_cpu_shares(2).expect("shares");
+        runtime.resources_mut().set_cpu_period(1_000).expect("period");
+        runtime.resources_mut().set_cpu_quota(1_000).expect("quota");
+        runtime.resources_mut().set_memory_bytes(1).expect("memory");
+        runtime.resources_mut().set_pids(1).expect("pids");
+        runtime
+            .resources_mut()
+            .add_rlimit(
+                Rlimit::new(RlimitKind::NoFile, RlimitValue::finite(1), RlimitValue::finite(2)).expect("rlimit"),
+            )
+            .expect("rlimit");
+        runtime.namespaces_mut().set_pid(NamespaceMode::Private).expect("pid");
+        runtime.namespaces_mut().set_ipc(IpcNamespaceMode::None).expect("ipc");
+        runtime.namespaces_mut().set_uts(NamespaceMode::Private).expect("uts");
+        runtime
+            .namespaces_mut()
+            .set_cgroup(NamespaceMode::Host)
+            .expect("cgroup");
+
+        let mut intent = DeploymentIntent::new(runtime_render_target(version));
+        intent.add_resource(DeploymentResource::ExternalPrecondition(
+            ExternalPrecondition::new(image).expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Container(container));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let rendering = render_deployment(&plan);
+        assert!(rendering.is_success(), "Podman {version}: {rendering:?}");
+        let operation = rendering
+            .rendering()
+            .expect("rendering")
+            .operations()
+            .iter()
+            .find(|operation| operation.operation().id().resource() == &container_id)
+            .expect("container");
+        assert!(
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|pair| pair == ["--cpu-quota", "1000"])
+        );
+        let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+            unreachable!("container creation requires a JSON body");
+        };
+        assert_eq!(body["r_limits"][0]["type"], serde_json::json!("RLIMIT_NOFILE"));
+        assert_eq!(body["log_configuration"]["driver"], serde_json::json!("k8s-file"));
+        assert_eq!(body["log_configuration"]["size"], serde_json::json!(1024));
+        assert_eq!(body["privileged"], serde_json::json!(false));
+        assert_eq!(body["no_new_privileges"], serde_json::json!(false));
+        assert_eq!(body["read_only_filesystem"], serde_json::json!(false));
+        assert_eq!(body["pidns"], serde_json::json!({"nsmode": "private"}));
+        assert_eq!(body["ipcns"], serde_json::json!({"nsmode": "none"}));
+        assert_eq!(body["resource_limits"]["memory"]["limit"], serde_json::json!(1));
+        assert_eq!(body["resource_limits"]["pids"]["limit"], serde_json::json!(1));
+    }
+}
+
+#[test]
+fn sensitive_health_command_blocks_the_resource_without_leaking_an_artifact() {
+    for (startup, expected_field) in [
+        (false, "runtime.health.command"),
+        (true, "runtime.startup_health.command"),
+    ] {
+        for (command, secret_sentinel) in protected_health_commands() {
+            let image = id(ResourceKind::Image, "registry.example.invalid/sensitive-health:1");
+            let container_id = id(ResourceKind::Container, "sensitive-health");
+            let mut container = ContainerIntent::new(container_id.clone(), image.clone()).expect("container");
+            if startup {
+                container
+                    .runtime_mut()
+                    .set_health(HealthCheck::Command(ConfiguredHealthCheck::new(HealthCommand::Exec(
+                        PublicHealthArgumentArray::new(["/usr/bin/true"]).expect("public health"),
+                    ))))
+                    .expect("health");
+                container
+                    .runtime_mut()
+                    .set_startup_health(StartupHealthCheck::new(command))
+                    .expect("startup health");
+            } else {
+                container
+                    .runtime_mut()
+                    .set_health(HealthCheck::Command(ConfiguredHealthCheck::new(command)))
+                    .expect("health");
+            }
+            let mut intent = DeploymentIntent::new(runtime_render_target("6.1.0"));
+            intent.add_resource(DeploymentResource::ExternalPrecondition(
+                ExternalPrecondition::new(image).expect("image"),
+            ));
+            intent.add_resource(DeploymentResource::Container(container));
+            let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+            let rendering = render_deployment(&plan);
+            assert!(!rendering.is_success());
+            assert!(rendering.rendering().is_none());
+            assert!(rendering.findings().iter().any(|finding| {
+                finding.subject() == Some(&container_id) && finding.field() == Some(expected_field)
+            }));
+            assert!(!format!("{rendering:?}").contains(secret_sentinel));
+        }
+    }
 }
 
 #[test]
@@ -629,6 +928,22 @@ fn pod_members_accept_runtime_but_reject_namespace_intent() {
 
     let outcome = plan_deployment(&intent);
     assert!(outcome.plan().is_some());
+    let rendering = render_deployment(outcome.plan().expect("member plan"));
+    assert!(rendering.is_success());
+    let operation = rendering
+        .rendering()
+        .expect("member rendering")
+        .operations()
+        .iter()
+        .find(|operation| operation.operation().id().resource() == &container_id)
+        .expect("member create operation");
+    assert!(operation.cli().argv().contains(&"--pod".to_owned()));
+    assert!(operation.cli().argv().contains(&"--health-cmd".to_owned()));
+    let RenderedHttpBody::Json(body) = operation.libpod().body() else {
+        unreachable!("container creation requires a JSON body");
+    };
+    assert_eq!(body["pod"], serde_json::json!("application"));
+    assert_eq!(body["healthconfig"]["Test"], serde_json::json!(["CMD-SHELL", "true"]));
     let mut member = match intent.resources().last().expect("member") {
         DeploymentResource::Container(container) => container.clone(),
         _ => unreachable!(),

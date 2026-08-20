@@ -12,13 +12,15 @@ after overflow.
 
 ## Decision
 
-`catalogue/v1/native-field-coverage.json` is a strict, packaged ledger for every M2 native input
-field currently accepted by the inventory decoder. It is not an M6 output coverage claim. Each deterministic row states its native path,
-coverage classification, decoder owner, planner and renderer applicability, public API contract,
-diagnostic, and focused positive and negative test identifiers. The embedded parser rejects an
-unknown JSON key, altered semantic link, reordered or missing expected row, duplicate identifier,
-or an unsupported coverage classification. Every row is compared to complete compiled expected
-metadata; syntactically plausible substitutions are not accepted.
+`catalogue/v1/native-field-coverage.json` is a strict, packaged two-plane ledger. Its input-
+observation rows cover every M2 native field accepted by the inventory decoder. Its output-intent
+rows cover only B3b fields with exact planner, CLI, and Libpod rendering evidence. Each deterministic
+row states its field path, coverage classification, observation owner, planner owner, separate CLI
+and Libpod renderer owners, reviewed target applicability, public API contract, diagnostic, and
+focused positive and negative test identifiers. The embedded parser rejects an unknown JSON key,
+altered semantic link, reordered or missing expected row, duplicate identifier, fabricated target
+availability, or an unsupported coverage classification. Every row is compared to complete compiled
+expected metadata; syntactically plausible substitutions are not accepted.
 
 An accepted object is never a blanket acceptance for its descendants. A typed member is modeled;
 every other direct member is retained as `UnknownNativeField` metadata and receives `PLN0023`.
@@ -36,8 +38,9 @@ slice for complete native configuration in either case.
   request.
 - Inventory fields with no output mapping are visible as observation-only rather than implied
   conversion support.
-- Future output work can replace `not_applicable` planner or renderer references only when exact
-  semantic and rendering evidence exists.
-- M6-B3 semantic intent does not create ledger output rows. Those rows are added only with the
-  B3b exact per-version renderer evidence.
+- Future output work adds output-intent rows only when exact semantic, CLI, Libpod, and
+  per-target rendering evidence exists.
+- M6-B3b adds 32 exact public runtime rows plus two manual, redacted health-command boundaries.
+  Sensitive or externally supplied health commands have no payload rendering claim and block the
+  complete resource artifact with `PLN0046` on every reviewed target.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

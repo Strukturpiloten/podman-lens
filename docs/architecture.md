@@ -168,7 +168,9 @@ ID maps, paths, and reference modes remain deferred pending independent pod-crea
 Cgroup support and root context are explicit caller evidence, never host detection.
 Planning accepts journald labels only from Podman 6.0 and unlimited rlimits only from 5.6. CPU
 quota is limited to positive values of at least one millisecond because lower or non-positive
-values are not dual-exact. B3b rendering must defensively repeat these semantic target gates.
+values are not dual-exact. B3b rendering repeats these semantic target gates defensively and emits
+the bounded public surface as CLI and Libpod descriptions; sensitive health inputs block the whole
+resource artifact before any representation can contain them.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.

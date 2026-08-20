@@ -17,8 +17,9 @@ PodSpecGenerator and handler evidence.
 Cgroup CPU, memory, and PID controls require caller-supplied hierarchy/controller evidence and an
 explicit root context; rlimits do not. PodmanLens does not infer either from the local host.
 Rootless or unknown-root-mode cgroup v1 controls fail planning, while private cgroup namespace
-requires v2 evidence. Renderer output remains blocked with `PLN0046` until per-field,
-per-version evidence exists. Semantic planning rejects journald labels before Podman 6.0 and an
+requires v2 evidence. M6-B3b renders only the bounded public forms after immutable per-field,
+per-version evidence is present, and blocks sensitive/external health inputs with `PLN0046` before
+an artifact can be created. Semantic planning rejects journald labels before Podman 6.0 and an
 unlimited rlimit before Podman 5.6. CPU quota is accepted only as a positive value of at least one
 millisecond because non-positive values are not dual-exact. B3b renderers must repeat these target
 gates defensively before claiming exact output.

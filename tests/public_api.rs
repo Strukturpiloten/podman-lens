@@ -17,9 +17,10 @@ use podman_lens::{
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
-    LibpodResponse, LibpodTransport, LibpodTransportFuture, NativeFieldCoverageClassification, OpaqueReference,
-    ResourceInventory, ResourceKind, ResourceSelector, SshConnection, TransportError, UnixConnection,
-    acquire_inventory, artifact::deployment_v1, discover, probe_libpod_service, snapshot::v1,
+    LibpodResponse, LibpodTransport, LibpodTransportFuture, NativeFieldCoverageClassification,
+    NativeFieldCoveragePlane, OpaqueReference, ResourceInventory, ResourceKind, ResourceSelector, SshConnection,
+    TransportError, UnixConnection, acquire_inventory, artifact::deployment_v1, discover, probe_libpod_service,
+    snapshot::v1,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -103,17 +104,39 @@ fn external_consumer_can_select_the_redacted_inventory_contract() {
 }
 
 #[test]
-fn external_consumer_can_inspect_the_strict_native_field_coverage_ledger() -> Result<(), Box<dyn std::error::Error>> {
+fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Result<(), Box<dyn std::error::Error>> {
     let entries = podman_lens::native_field_coverage_catalogue()?;
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0035"
-            && entry.native_path() == "$.Spec.Driver"
+            && entry.plane() == NativeFieldCoveragePlane::InputObservation
+            && entry.field_path() == "$.Spec.Driver"
             && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+            && entry.observation() == "inventory::decode_secret"
+            && entry.cli_renderer() == "not_applicable"
+            && entry.libpod_renderer() == "not_applicable"
+            && entry.target_versions().is_empty()
     }));
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0038"
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ResourceRecord::unknown_fields_complete"
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-OUT-0015"
+            && entry.plane() == NativeFieldCoveragePlane::OutputIntent
+            && entry.field_path() == "runtime.logging.journald_labels"
+            && entry.classification() == NativeFieldCoverageClassification::TargetGated
+            && entry.planner() == "deployment::validate_runtime_settings"
+            && entry.cli_renderer() == "render::append_container_runtime_arguments"
+            && entry.libpod_renderer() == "render::append_container_runtime_json"
+            && entry.target_versions() == ["6.0.0", "6.1.0"]
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-OUT-0034"
+            && entry.classification() == NativeFieldCoverageClassification::Manual
+            && entry.field_path() == "runtime.startup_health.command.sensitive"
+            && entry.public_contract() == "HealthCommand"
+            && entry.target_versions().len() == 7
     }));
     Ok(())
 }

@@ -35,6 +35,7 @@ const RENDERED_OPERATION_CATEGORIES: [&str; 8] = [
 struct RenderingCatalogue {
     schema_version: u8,
     provenance: String,
+    runtime_field_claims: Vec<RuntimeFieldClaimJson>,
     reviewed_lines: Vec<ReviewedRenderingLine>,
 }
 
@@ -45,8 +46,42 @@ struct ReviewedRenderingLine {
     revision: String,
     tag: String,
     common_module: ModulePin,
+    runtime_evidence: ReviewedRuntimeEvidence,
     operations: Vec<ReviewedRenderingOperation>,
     field_evidence: Vec<ReviewedFieldEvidence>,
+}
+
+/// Immutable all-fields evidence for the bounded M6-B3 container runtime surface.
+///
+/// The fields share the native container-create route and handler, while the explicit source
+/// bundle retains the CLI flag declaration, CLI-to-SpecGenerator transform, body model,
+/// namespace grammar, and health semantics for the exact reviewed Podman revision.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedRuntimeEvidence {
+    exact_fields: Vec<RuntimeRenderedField>,
+    target_gated_fields: Vec<RuntimeRenderedField>,
+    cli_flag_source: SourceReference,
+    cli_transform_source: SourceReference,
+    command_route_source: SourceReference,
+    model_sources: Vec<SourceReference>,
+    route_source: SourceReference,
+    handler_source: SourceReference,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeFieldClaimJson {
+    field: RuntimeRenderedField,
+    cli: CliFieldClaim,
+    libpod: RuntimeLibpodFieldClaim,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeLibpodFieldClaim {
+    json_member: LibpodBodyMember,
+    value_shape: RuntimeLibpodValueShape,
 }
 
 #[derive(Deserialize)]
@@ -198,6 +233,45 @@ enum RenderedField {
     NetworkRouteTypeProhibit,
 }
 
+/// A field rendered by the bounded M6-B3 container-runtime surface.
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+#[allow(clippy::enum_variant_names)] // Stable public catalogue identifiers retain the resource kind.
+enum RuntimeRenderedField {
+    ContainerHealthDisabled,
+    ContainerHealthCommand,
+    ContainerHealthInterval,
+    ContainerHealthTimeout,
+    ContainerHealthRetries,
+    ContainerHealthStartPeriod,
+    ContainerHealthOnFailure,
+    ContainerStartupHealthCommand,
+    ContainerStartupHealthInterval,
+    ContainerStartupHealthTimeout,
+    ContainerStartupHealthRetries,
+    ContainerStartupHealthSuccesses,
+    ContainerLogDriver,
+    ContainerLogMaxSize,
+    ContainerLogJournaldLabels,
+    ContainerPrivileged,
+    ContainerCapabilityAdd,
+    ContainerCapabilityDrop,
+    ContainerNoNewPrivileges,
+    ContainerReadOnlyFilesystem,
+    ContainerReadWriteTmpfs,
+    ContainerPidNamespace,
+    ContainerIpcNamespace,
+    ContainerUtsNamespace,
+    ContainerCgroupNamespace,
+    ContainerCpuShares,
+    ContainerCpuPeriod,
+    ContainerCpuQuota,
+    ContainerMemoryLimit,
+    ContainerPidsLimit,
+    ContainerRlimitFinite,
+    ContainerRlimitUnlimited,
+}
+
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 enum CliFlag {
     #[serde(rename = "--entrypoint")]
@@ -244,6 +318,66 @@ enum CliFlag {
     IpRange,
     #[serde(rename = "--route")]
     Route,
+    #[serde(rename = "--no-healthcheck")]
+    NoHealthcheck,
+    #[serde(rename = "--health-cmd")]
+    HealthCommand,
+    #[serde(rename = "--health-interval")]
+    HealthInterval,
+    #[serde(rename = "--health-timeout")]
+    HealthTimeout,
+    #[serde(rename = "--health-retries")]
+    HealthRetries,
+    #[serde(rename = "--health-start-period")]
+    HealthStartPeriod,
+    #[serde(rename = "--health-on-failure")]
+    HealthOnFailure,
+    #[serde(rename = "--health-startup-cmd")]
+    HealthStartupCommand,
+    #[serde(rename = "--health-startup-interval")]
+    HealthStartupInterval,
+    #[serde(rename = "--health-startup-timeout")]
+    HealthStartupTimeout,
+    #[serde(rename = "--health-startup-retries")]
+    HealthStartupRetries,
+    #[serde(rename = "--health-startup-success")]
+    HealthStartupSuccess,
+    #[serde(rename = "--log-driver")]
+    LogDriver,
+    #[serde(rename = "--log-opt")]
+    LogOption,
+    #[serde(rename = "--privileged")]
+    Privileged,
+    #[serde(rename = "--cap-add")]
+    CapabilityAdd,
+    #[serde(rename = "--cap-drop")]
+    CapabilityDrop,
+    #[serde(rename = "--security-opt")]
+    SecurityOption,
+    #[serde(rename = "--read-only")]
+    ReadOnly,
+    #[serde(rename = "--read-only-tmpfs")]
+    ReadOnlyTmpfs,
+    #[serde(rename = "--pid")]
+    PidNamespace,
+    #[serde(rename = "--ipc")]
+    IpcNamespace,
+    #[serde(rename = "--uts")]
+    UtsNamespace,
+    #[serde(rename = "--cgroupns")]
+    CgroupNamespace,
+    #[serde(rename = "--cpu-shares")]
+    CpuShares,
+    #[serde(rename = "--cpu-period")]
+    CpuPeriod,
+    #[serde(rename = "--cpu-quota")]
+    CpuQuota,
+    #[serde(rename = "--memory")]
+    Memory,
+    #[serde(rename = "--pids-limit")]
+    PidsLimit,
+    #[serde(rename = "--ulimit")]
+    Ulimit,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -271,6 +405,26 @@ enum CliValueShape {
     NetworkGateway,
     NetworkIpRange,
     NetworkRoute,
+    FlagOnly,
+    Boolean,
+    HealthCommand,
+    HealthInterval,
+    HealthDuration,
+    HealthRetries,
+    HealthOnFailure,
+    StartupHealthSuccesses,
+    LogDriver,
+    LogMaxSize,
+    JournaldLabel,
+    Capability,
+    NoNewPrivileges,
+    NamespaceMode,
+    CpuShares,
+    CpuPeriod,
+    CpuQuota,
+    MemoryBytes,
+    PidsLimit,
+    Rlimit,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -296,6 +450,53 @@ enum LibpodBodyMember {
     NetworkOrder,
     Subnets,
     Routes,
+    Healthconfig,
+    HealthCheckOnFailureAction,
+    #[serde(rename = "startupHealthConfig")]
+    StartupHealthConfig,
+    #[serde(rename = "log_configuration.driver")]
+    LogConfigurationDriver,
+    #[serde(rename = "log_configuration.size")]
+    LogConfigurationSize,
+    #[serde(rename = "log_configuration.labels")]
+    LogConfigurationLabels,
+    Privileged,
+    CapAdd,
+    CapDrop,
+    NoNewPrivileges,
+    ReadOnlyFilesystem,
+    ReadWriteTmpfs,
+    Pidns,
+    Ipcns,
+    Utsns,
+    Cgroupns,
+    #[serde(rename = "resource_limits.cpu.shares")]
+    ResourceLimitsCpuShares,
+    #[serde(rename = "resource_limits.cpu.period")]
+    ResourceLimitsCpuPeriod,
+    #[serde(rename = "resource_limits.cpu.quota")]
+    ResourceLimitsCpuQuota,
+    #[serde(rename = "resource_limits.memory.limit")]
+    ResourceLimitsMemoryLimit,
+    #[serde(rename = "resource_limits.pids.limit")]
+    ResourceLimitsPidsLimit,
+    RLimits,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum RuntimeLibpodValueShape {
+    HealthConfiguration,
+    HealthOnFailureAction,
+    StartupHealthConfiguration,
+    String,
+    Integer,
+    StringMap,
+    Boolean,
+    StringArray,
+    Namespace,
+    ResourceLimitInteger,
+    RlimitArray,
 }
 
 /// Exactness of a rendered operation or plan.
@@ -864,6 +1065,7 @@ fn render_operation(
                     ));
                 }
                 append_container_setting_arguments(&mut cli_suffix, container, id)?;
+                append_container_runtime_arguments(&mut cli_suffix, container, id, version)?;
                 let Some(body_map) = body.as_object_mut() else {
                     return Err(RenderingFinding::new(
                         DiagnosticCode::RenderingUnsupported,
@@ -872,6 +1074,7 @@ fn render_operation(
                     ));
                 };
                 append_container_setting_json(body_map, container, id)?;
+                append_container_runtime_json(body_map, container, id, version)?;
                 cli_suffix.push(image.to_owned());
                 if let Some(command) = container.settings().command() {
                     cli_suffix.extend(command.values().iter().cloned());
@@ -928,9 +1131,10 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
     let capabilities = crate::capability_catalogue().map_err(|_| ())?;
-    if catalogue.schema_version != 5
+    if catalogue.schema_version != 7
         || catalogue.provenance.trim().is_empty()
         || catalogue.reviewed_lines.len() != capabilities.len()
+        || !validated_runtime_field_claims(&catalogue.runtime_field_claims)
     {
         return Err(());
     }
@@ -947,12 +1151,441 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
             || !valid_common_module(&line.version, &line.common_module)
             || !validated_renderer_operations(&line, &expected_operations)
             || !validated_field_evidence(&line)
+            || !validated_runtime_evidence(&line)
         {
             return Err(());
         }
         versions.push(line.version);
     }
     Ok(versions)
+}
+
+fn validated_runtime_field_claims(claims: &[RuntimeFieldClaimJson]) -> bool {
+    let expected = expected_runtime_field_claims();
+    let observed = claims.iter().map(|claim| claim.field).collect::<BTreeSet<_>>();
+    claims.len() == expected.len()
+        && observed.len() == claims.len()
+        && observed == expected.keys().copied().collect()
+        && claims.iter().all(|claim| {
+            expected.get(&claim.field).is_some_and(|expected| {
+                claim.cli.flag == Some(expected.0)
+                    && claim.cli.value_shape == expected.1
+                    && claim.libpod.json_member == expected.2
+                    && claim.libpod.value_shape == expected_runtime_libpod_value_shape(claim.field)
+            })
+        })
+}
+
+fn validated_runtime_evidence(line: &ReviewedRenderingLine) -> bool {
+    let evidence = &line.runtime_evidence;
+    let exact = evidence.exact_fields.iter().copied().collect::<BTreeSet<_>>();
+    let target_gated = evidence.target_gated_fields.iter().copied().collect::<BTreeSet<_>>();
+    let expected_target_gated = expected_runtime_target_gated_fields(&line.version);
+    exact.len() == evidence.exact_fields.len()
+        && target_gated.len() == evidence.target_gated_fields.len()
+        && exact.is_disjoint(&target_gated)
+        && exact.union(&target_gated).copied().collect::<BTreeSet<_>>() == expected_runtime_fields()
+        && target_gated == expected_target_gated
+        && source_matches_podman(&evidence.cli_flag_source, &line.revision, "cmd/podman/common/create.go")
+        && source_matches_podman(
+            &evidence.cli_transform_source,
+            &line.revision,
+            "pkg/specgenutil/specgen.go",
+        )
+        && source_matches_podman(
+            &evidence.command_route_source,
+            &line.revision,
+            "cmd/podman/containers/create.go",
+        )
+        && source_matches_podman(
+            &evidence.route_source,
+            &line.revision,
+            "pkg/api/server/register_containers.go",
+        )
+        && source_matches_podman(
+            &evidence.handler_source,
+            &line.revision,
+            "pkg/api/handlers/libpod/containers_create.go",
+        )
+        && evidence.model_sources.len() == 3
+        && evidence
+            .model_sources
+            .iter()
+            .zip([
+                "pkg/specgen/specgen.go",
+                "pkg/specgen/namespaces.go",
+                "libpod/define/healthchecks.go",
+            ])
+            .all(|(source, path)| source_matches_podman(source, &line.revision, path))
+        && target_gated.iter().all(|field| {
+            matches!(
+                field,
+                RuntimeRenderedField::ContainerLogJournaldLabels | RuntimeRenderedField::ContainerRlimitUnlimited
+            )
+        })
+}
+
+fn expected_runtime_fields() -> BTreeSet<RuntimeRenderedField> {
+    [
+        RuntimeRenderedField::ContainerHealthDisabled,
+        RuntimeRenderedField::ContainerHealthCommand,
+        RuntimeRenderedField::ContainerHealthInterval,
+        RuntimeRenderedField::ContainerHealthTimeout,
+        RuntimeRenderedField::ContainerHealthRetries,
+        RuntimeRenderedField::ContainerHealthStartPeriod,
+        RuntimeRenderedField::ContainerHealthOnFailure,
+        RuntimeRenderedField::ContainerStartupHealthCommand,
+        RuntimeRenderedField::ContainerStartupHealthInterval,
+        RuntimeRenderedField::ContainerStartupHealthTimeout,
+        RuntimeRenderedField::ContainerStartupHealthRetries,
+        RuntimeRenderedField::ContainerStartupHealthSuccesses,
+        RuntimeRenderedField::ContainerLogDriver,
+        RuntimeRenderedField::ContainerLogMaxSize,
+        RuntimeRenderedField::ContainerLogJournaldLabels,
+        RuntimeRenderedField::ContainerPrivileged,
+        RuntimeRenderedField::ContainerCapabilityAdd,
+        RuntimeRenderedField::ContainerCapabilityDrop,
+        RuntimeRenderedField::ContainerNoNewPrivileges,
+        RuntimeRenderedField::ContainerReadOnlyFilesystem,
+        RuntimeRenderedField::ContainerReadWriteTmpfs,
+        RuntimeRenderedField::ContainerPidNamespace,
+        RuntimeRenderedField::ContainerIpcNamespace,
+        RuntimeRenderedField::ContainerUtsNamespace,
+        RuntimeRenderedField::ContainerCgroupNamespace,
+        RuntimeRenderedField::ContainerCpuShares,
+        RuntimeRenderedField::ContainerCpuPeriod,
+        RuntimeRenderedField::ContainerCpuQuota,
+        RuntimeRenderedField::ContainerMemoryLimit,
+        RuntimeRenderedField::ContainerPidsLimit,
+        RuntimeRenderedField::ContainerRlimitFinite,
+        RuntimeRenderedField::ContainerRlimitUnlimited,
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn expected_runtime_target_gated_fields(version: &str) -> BTreeSet<RuntimeRenderedField> {
+    let mut fields = BTreeSet::new();
+    if !supports_journald_labels(version) {
+        fields.insert(RuntimeRenderedField::ContainerLogJournaldLabels);
+    }
+    if !supports_unlimited_rlimit(version) {
+        fields.insert(RuntimeRenderedField::ContainerRlimitUnlimited);
+    }
+    fields
+}
+
+type RuntimeFieldClaim = (CliFlag, CliValueShape, LibpodBodyMember);
+
+const fn expected_runtime_libpod_value_shape(field: RuntimeRenderedField) -> RuntimeLibpodValueShape {
+    use RuntimeLibpodValueShape::{
+        Boolean, HealthConfiguration, HealthOnFailureAction, Integer, Namespace, ResourceLimitInteger, RlimitArray,
+        StartupHealthConfiguration, String, StringArray, StringMap,
+    };
+    use RuntimeRenderedField::{
+        ContainerCapabilityAdd, ContainerCapabilityDrop, ContainerCgroupNamespace, ContainerCpuPeriod,
+        ContainerCpuQuota, ContainerCpuShares, ContainerHealthCommand, ContainerHealthDisabled,
+        ContainerHealthInterval, ContainerHealthOnFailure, ContainerHealthRetries, ContainerHealthStartPeriod,
+        ContainerHealthTimeout, ContainerIpcNamespace, ContainerLogDriver, ContainerLogJournaldLabels,
+        ContainerLogMaxSize, ContainerMemoryLimit, ContainerNoNewPrivileges, ContainerPidNamespace, ContainerPidsLimit,
+        ContainerPrivileged, ContainerReadOnlyFilesystem, ContainerReadWriteTmpfs, ContainerRlimitFinite,
+        ContainerRlimitUnlimited, ContainerStartupHealthCommand, ContainerStartupHealthInterval,
+        ContainerStartupHealthRetries, ContainerStartupHealthSuccesses, ContainerStartupHealthTimeout,
+        ContainerUtsNamespace,
+    };
+    match field {
+        ContainerHealthDisabled
+        | ContainerHealthCommand
+        | ContainerHealthInterval
+        | ContainerHealthTimeout
+        | ContainerHealthRetries
+        | ContainerHealthStartPeriod => HealthConfiguration,
+        ContainerHealthOnFailure => HealthOnFailureAction,
+        ContainerStartupHealthCommand
+        | ContainerStartupHealthInterval
+        | ContainerStartupHealthTimeout
+        | ContainerStartupHealthRetries
+        | ContainerStartupHealthSuccesses => StartupHealthConfiguration,
+        ContainerLogDriver => String,
+        ContainerLogMaxSize => Integer,
+        ContainerLogJournaldLabels => StringMap,
+        ContainerPrivileged | ContainerNoNewPrivileges | ContainerReadOnlyFilesystem | ContainerReadWriteTmpfs => {
+            Boolean
+        }
+        ContainerCapabilityAdd | ContainerCapabilityDrop => StringArray,
+        ContainerPidNamespace | ContainerIpcNamespace | ContainerUtsNamespace | ContainerCgroupNamespace => Namespace,
+        ContainerCpuShares | ContainerCpuPeriod | ContainerCpuQuota | ContainerMemoryLimit | ContainerPidsLimit => {
+            ResourceLimitInteger
+        }
+        ContainerRlimitFinite | ContainerRlimitUnlimited => RlimitArray,
+    }
+}
+
+#[allow(clippy::too_many_lines)] // The finite B3 claim matrix is intentionally audit-friendly.
+fn expected_runtime_field_claims() -> BTreeMap<RuntimeRenderedField, RuntimeFieldClaim> {
+    use RuntimeRenderedField::{
+        ContainerCapabilityAdd, ContainerCapabilityDrop, ContainerCgroupNamespace, ContainerCpuPeriod,
+        ContainerCpuQuota, ContainerCpuShares, ContainerHealthCommand, ContainerHealthDisabled,
+        ContainerHealthInterval, ContainerHealthOnFailure, ContainerHealthRetries, ContainerHealthStartPeriod,
+        ContainerHealthTimeout, ContainerIpcNamespace, ContainerLogDriver, ContainerLogJournaldLabels,
+        ContainerLogMaxSize, ContainerMemoryLimit, ContainerNoNewPrivileges, ContainerPidNamespace, ContainerPidsLimit,
+        ContainerPrivileged, ContainerReadOnlyFilesystem, ContainerReadWriteTmpfs, ContainerRlimitFinite,
+        ContainerRlimitUnlimited, ContainerStartupHealthCommand, ContainerStartupHealthInterval,
+        ContainerStartupHealthRetries, ContainerStartupHealthSuccesses, ContainerStartupHealthTimeout,
+        ContainerUtsNamespace,
+    };
+    [
+        (
+            ContainerHealthDisabled,
+            (
+                CliFlag::NoHealthcheck,
+                CliValueShape::FlagOnly,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthCommand,
+            (
+                CliFlag::HealthCommand,
+                CliValueShape::HealthCommand,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthInterval,
+            (
+                CliFlag::HealthInterval,
+                CliValueShape::HealthInterval,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthTimeout,
+            (
+                CliFlag::HealthTimeout,
+                CliValueShape::HealthDuration,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthRetries,
+            (
+                CliFlag::HealthRetries,
+                CliValueShape::HealthRetries,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthStartPeriod,
+            (
+                CliFlag::HealthStartPeriod,
+                CliValueShape::HealthDuration,
+                LibpodBodyMember::Healthconfig,
+            ),
+        ),
+        (
+            ContainerHealthOnFailure,
+            (
+                CliFlag::HealthOnFailure,
+                CliValueShape::HealthOnFailure,
+                LibpodBodyMember::HealthCheckOnFailureAction,
+            ),
+        ),
+        (
+            ContainerStartupHealthCommand,
+            (
+                CliFlag::HealthStartupCommand,
+                CliValueShape::HealthCommand,
+                LibpodBodyMember::StartupHealthConfig,
+            ),
+        ),
+        (
+            ContainerStartupHealthInterval,
+            (
+                CliFlag::HealthStartupInterval,
+                CliValueShape::HealthInterval,
+                LibpodBodyMember::StartupHealthConfig,
+            ),
+        ),
+        (
+            ContainerStartupHealthTimeout,
+            (
+                CliFlag::HealthStartupTimeout,
+                CliValueShape::HealthDuration,
+                LibpodBodyMember::StartupHealthConfig,
+            ),
+        ),
+        (
+            ContainerStartupHealthRetries,
+            (
+                CliFlag::HealthStartupRetries,
+                CliValueShape::HealthRetries,
+                LibpodBodyMember::StartupHealthConfig,
+            ),
+        ),
+        (
+            ContainerStartupHealthSuccesses,
+            (
+                CliFlag::HealthStartupSuccess,
+                CliValueShape::StartupHealthSuccesses,
+                LibpodBodyMember::StartupHealthConfig,
+            ),
+        ),
+        (
+            ContainerLogDriver,
+            (
+                CliFlag::LogDriver,
+                CliValueShape::LogDriver,
+                LibpodBodyMember::LogConfigurationDriver,
+            ),
+        ),
+        (
+            ContainerLogMaxSize,
+            (
+                CliFlag::LogOption,
+                CliValueShape::LogMaxSize,
+                LibpodBodyMember::LogConfigurationSize,
+            ),
+        ),
+        (
+            ContainerLogJournaldLabels,
+            (
+                CliFlag::LogOption,
+                CliValueShape::JournaldLabel,
+                LibpodBodyMember::LogConfigurationLabels,
+            ),
+        ),
+        (
+            ContainerPrivileged,
+            (
+                CliFlag::Privileged,
+                CliValueShape::Boolean,
+                LibpodBodyMember::Privileged,
+            ),
+        ),
+        (
+            ContainerCapabilityAdd,
+            (
+                CliFlag::CapabilityAdd,
+                CliValueShape::Capability,
+                LibpodBodyMember::CapAdd,
+            ),
+        ),
+        (
+            ContainerCapabilityDrop,
+            (
+                CliFlag::CapabilityDrop,
+                CliValueShape::Capability,
+                LibpodBodyMember::CapDrop,
+            ),
+        ),
+        (
+            ContainerNoNewPrivileges,
+            (
+                CliFlag::SecurityOption,
+                CliValueShape::NoNewPrivileges,
+                LibpodBodyMember::NoNewPrivileges,
+            ),
+        ),
+        (
+            ContainerReadOnlyFilesystem,
+            (
+                CliFlag::ReadOnly,
+                CliValueShape::Boolean,
+                LibpodBodyMember::ReadOnlyFilesystem,
+            ),
+        ),
+        (
+            ContainerReadWriteTmpfs,
+            (
+                CliFlag::ReadOnlyTmpfs,
+                CliValueShape::Boolean,
+                LibpodBodyMember::ReadWriteTmpfs,
+            ),
+        ),
+        (
+            ContainerPidNamespace,
+            (
+                CliFlag::PidNamespace,
+                CliValueShape::NamespaceMode,
+                LibpodBodyMember::Pidns,
+            ),
+        ),
+        (
+            ContainerIpcNamespace,
+            (
+                CliFlag::IpcNamespace,
+                CliValueShape::NamespaceMode,
+                LibpodBodyMember::Ipcns,
+            ),
+        ),
+        (
+            ContainerUtsNamespace,
+            (
+                CliFlag::UtsNamespace,
+                CliValueShape::NamespaceMode,
+                LibpodBodyMember::Utsns,
+            ),
+        ),
+        (
+            ContainerCgroupNamespace,
+            (
+                CliFlag::CgroupNamespace,
+                CliValueShape::NamespaceMode,
+                LibpodBodyMember::Cgroupns,
+            ),
+        ),
+        (
+            ContainerCpuShares,
+            (
+                CliFlag::CpuShares,
+                CliValueShape::CpuShares,
+                LibpodBodyMember::ResourceLimitsCpuShares,
+            ),
+        ),
+        (
+            ContainerCpuPeriod,
+            (
+                CliFlag::CpuPeriod,
+                CliValueShape::CpuPeriod,
+                LibpodBodyMember::ResourceLimitsCpuPeriod,
+            ),
+        ),
+        (
+            ContainerCpuQuota,
+            (
+                CliFlag::CpuQuota,
+                CliValueShape::CpuQuota,
+                LibpodBodyMember::ResourceLimitsCpuQuota,
+            ),
+        ),
+        (
+            ContainerMemoryLimit,
+            (
+                CliFlag::Memory,
+                CliValueShape::MemoryBytes,
+                LibpodBodyMember::ResourceLimitsMemoryLimit,
+            ),
+        ),
+        (
+            ContainerPidsLimit,
+            (
+                CliFlag::PidsLimit,
+                CliValueShape::PidsLimit,
+                LibpodBodyMember::ResourceLimitsPidsLimit,
+            ),
+        ),
+        (
+            ContainerRlimitFinite,
+            (CliFlag::Ulimit, CliValueShape::Rlimit, LibpodBodyMember::RLimits),
+        ),
+        (
+            ContainerRlimitUnlimited,
+            (CliFlag::Ulimit, CliValueShape::Rlimit, LibpodBodyMember::RLimits),
+        ),
+    ]
+    .into_iter()
+    .collect()
 }
 
 fn reject_duplicate_json_keys(source: &str) -> Result<(), ()> {
@@ -1669,9 +2302,7 @@ fn unsupported_fields(
         }
         DeploymentResource::Container(container) => {
             let mut fields = Vec::new();
-            if !container.runtime().is_empty() {
-                fields.push("runtime");
-            }
+            fields.extend(unsupported_runtime_fields(container, version));
             if container.pod().is_some() && !container.networks().is_empty() {
                 fields.push("networks");
             }
@@ -2086,6 +2717,610 @@ fn named_volume_json(mounts: &[NamedVolumeMount]) -> Value {
     )
 }
 
+fn unsupported_runtime_fields(container: &crate::ContainerIntent, version: &str) -> Vec<&'static str> {
+    let runtime = container.runtime();
+    let mut fields = Vec::new();
+    if runtime.startup_health().is_some() && !matches!(runtime.health(), Some(crate::HealthCheck::Command(_))) {
+        fields.push("runtime.startup_health_requires_health");
+    }
+    for (health, field) in [
+        (
+            runtime.health().and_then(|health| match health {
+                crate::HealthCheck::Command(configured) => Some(configured.command()),
+                crate::HealthCheck::Disabled => None,
+            }),
+            "runtime.health.command",
+        ),
+        (
+            runtime.startup_health().map(crate::StartupHealthCheck::command),
+            "runtime.startup_health.command",
+        ),
+    ] {
+        if health.is_some_and(health_command_is_sensitive) {
+            fields.push(field);
+        }
+    }
+    if !runtime.logging().journald_labels().is_empty() && !supports_journald_labels(version) {
+        fields.push("runtime.logging.journald_labels.target_version");
+    }
+    if runtime.logging().driver().is_none()
+        && (runtime.logging().max_size().is_some() || !runtime.logging().journald_labels().is_empty())
+    {
+        fields.push("runtime.logging.driver");
+    }
+    if !runtime.logging().journald_labels().is_empty() && runtime.logging().driver() != Some(crate::LogDriver::Journald)
+    {
+        fields.push("runtime.logging.journald_labels");
+    }
+    if runtime.logging().max_size().is_some() && runtime.logging().driver() != Some(crate::LogDriver::K8sFile) {
+        fields.push("runtime.logging.max_size");
+    }
+    if runtime.resources().rlimits().iter().any(rlimit_is_unlimited) && !supports_unlimited_rlimit(version) {
+        fields.push("runtime.resources.rlimits.unlimited.target_version");
+    }
+    if runtime.security().privileged() == Some(true)
+        && (!runtime.security().cap_add().is_empty() || !runtime.security().cap_drop().is_empty())
+    {
+        fields.push("runtime.security.privileged_capabilities");
+    }
+    if runtime
+        .security()
+        .cap_add()
+        .iter()
+        .any(|capability| runtime.security().cap_drop().contains(capability))
+    {
+        fields.push("runtime.security.capability_overlap");
+    }
+    if runtime.security().read_write_tmpfs() == Some(true) && runtime.security().read_only_filesystem() != Some(true) {
+        fields.push("runtime.security.read_write_tmpfs");
+    }
+    if container.pod().is_some() && !runtime.namespaces().is_empty() {
+        fields.push("runtime.namespaces.pod_member");
+    }
+    fields
+}
+
+fn health_command_is_sensitive(command: &crate::HealthCommand) -> bool {
+    matches!(
+        command,
+        crate::HealthCommand::SensitiveInlineShell(_)
+            | crate::HealthCommand::SensitiveInlineExec(_)
+            | crate::HealthCommand::ExternalShell(_)
+            | crate::HealthCommand::ExternalExec(_)
+    )
+}
+
+fn rlimit_is_unlimited(limit: &crate::Rlimit) -> bool {
+    matches!(limit.soft(), crate::RlimitValue::Unlimited) || matches!(limit.hard(), crate::RlimitValue::Unlimited)
+}
+
+fn supports_journald_labels(version: &str) -> bool {
+    matches!(version, "6.0.0" | "6.1.0")
+}
+
+fn supports_unlimited_rlimit(version: &str) -> bool {
+    !matches!(version, "5.4.0" | "5.5.0")
+}
+
+fn append_container_runtime_arguments(
+    arguments: &mut Vec<String>,
+    container: &crate::ContainerIntent,
+    identity: &DeploymentResourceId,
+    version: &str,
+) -> Result<(), RenderingFinding> {
+    let runtime = container.runtime();
+    if let Some(health) = runtime.health() {
+        match health {
+            crate::HealthCheck::Disabled => arguments.push("--no-healthcheck".to_owned()),
+            crate::HealthCheck::Command(configured) => {
+                arguments.extend([
+                    "--health-cmd".to_owned(),
+                    health_command_cli(configured.command(), identity, "runtime.health.command")?,
+                ]);
+                append_health_arguments(arguments, configured);
+            }
+        }
+    }
+    if let Some(startup) = runtime.startup_health() {
+        arguments.extend([
+            "--health-startup-cmd".to_owned(),
+            health_command_cli(startup.command(), identity, "runtime.startup_health.command")?,
+        ]);
+        if let Some(interval) = startup.interval() {
+            arguments.extend(["--health-startup-interval".to_owned(), health_interval_cli(interval)]);
+        }
+        if let Some(timeout) = startup.timeout() {
+            arguments.extend([
+                "--health-startup-timeout".to_owned(),
+                health_duration_cli(timeout.nanoseconds()),
+            ]);
+        }
+        if let Some(retries) = startup.retries() {
+            arguments.extend(["--health-startup-retries".to_owned(), retries.value().to_string()]);
+        }
+        if let Some(successes) = startup.successes() {
+            arguments.extend(["--health-startup-success".to_owned(), successes.value().to_string()]);
+        }
+    }
+    let logging = runtime.logging();
+    if let Some(driver) = logging.driver() {
+        arguments.extend(["--log-driver".to_owned(), log_driver_name(driver).to_owned()]);
+    }
+    if let Some(size) = logging.max_size() {
+        arguments.extend(["--log-opt".to_owned(), format!("max-size={}", size.bytes())]);
+    }
+    if !logging.journald_labels().is_empty() && !supports_journald_labels(version) {
+        return Err(rendering_runtime_finding(
+            identity,
+            "runtime.logging.journald_labels.target_version",
+        ));
+    }
+    for label in logging.journald_labels() {
+        arguments.extend([
+            "--log-opt".to_owned(),
+            format!("label={}={}", label.key().as_str(), label.value().as_str()),
+        ]);
+    }
+    append_security_arguments(arguments, runtime.security());
+    append_namespace_arguments(arguments, runtime.namespaces());
+    append_resource_arguments(arguments, runtime.resources(), identity, version)?;
+    Ok(())
+}
+
+fn append_health_arguments(arguments: &mut Vec<String>, health: &crate::ConfiguredHealthCheck) {
+    if let Some(interval) = health.interval() {
+        arguments.extend(["--health-interval".to_owned(), health_interval_cli(interval)]);
+    }
+    if let Some(timeout) = health.timeout() {
+        arguments.extend([
+            "--health-timeout".to_owned(),
+            health_duration_cli(timeout.nanoseconds()),
+        ]);
+    }
+    if let Some(retries) = health.retries() {
+        arguments.extend(["--health-retries".to_owned(), retries.value().to_string()]);
+    }
+    if let Some(period) = health.start_period() {
+        arguments.extend([
+            "--health-start-period".to_owned(),
+            health_duration_cli(period.nanoseconds()),
+        ]);
+    }
+    if let Some(on_failure) = health.on_failure() {
+        arguments.extend([
+            "--health-on-failure".to_owned(),
+            health_on_failure_name(on_failure).to_owned(),
+        ]);
+    }
+}
+
+fn append_security_arguments(arguments: &mut Vec<String>, security: &crate::SecuritySettings) {
+    if let Some(value) = security.privileged() {
+        arguments.push(format!("--privileged={value}"));
+    }
+    if let Some(value) = security.no_new_privileges() {
+        arguments.extend(["--security-opt".to_owned(), format!("no-new-privileges={value}")]);
+    }
+    if let Some(value) = security.read_only_filesystem() {
+        arguments.push(format!("--read-only={value}"));
+    }
+    if let Some(value) = security.read_write_tmpfs() {
+        arguments.push(format!("--read-only-tmpfs={value}"));
+    }
+    for capability in security.cap_add() {
+        arguments.extend(["--cap-add".to_owned(), capability.as_str().to_owned()]);
+    }
+    for capability in security.cap_drop() {
+        arguments.extend(["--cap-drop".to_owned(), capability.as_str().to_owned()]);
+    }
+}
+
+fn append_namespace_arguments(arguments: &mut Vec<String>, namespaces: &crate::ContainerNamespaceSettings) {
+    if let Some(pid) = namespaces.pid() {
+        arguments.extend(["--pid".to_owned(), namespace_mode_name(pid).to_owned()]);
+    }
+    if let Some(ipc) = namespaces.ipc() {
+        arguments.extend(["--ipc".to_owned(), ipc_namespace_mode_name(ipc).to_owned()]);
+    }
+    if let Some(uts) = namespaces.uts() {
+        arguments.extend(["--uts".to_owned(), namespace_mode_name(uts).to_owned()]);
+    }
+    if let Some(cgroup) = namespaces.cgroup() {
+        arguments.extend(["--cgroupns".to_owned(), namespace_mode_name(cgroup).to_owned()]);
+    }
+}
+
+fn append_resource_arguments(
+    arguments: &mut Vec<String>,
+    resources: &crate::ContainerResourceControls,
+    identity: &DeploymentResourceId,
+    version: &str,
+) -> Result<(), RenderingFinding> {
+    for (flag, value) in [
+        ("--cpu-shares", resources.cpu_shares()),
+        ("--cpu-period", resources.cpu_period()),
+        ("--cpu-quota", resources.cpu_quota()),
+        ("--memory", resources.memory_bytes()),
+        ("--pids-limit", resources.pids()),
+    ] {
+        if let Some(value) = value {
+            arguments.extend([flag.to_owned(), value.to_string()]);
+        }
+    }
+    for rlimit in resources.rlimits() {
+        if rlimit_is_unlimited(rlimit) && !supports_unlimited_rlimit(version) {
+            return Err(rendering_runtime_finding(
+                identity,
+                "runtime.resources.rlimits.unlimited.target_version",
+            ));
+        }
+        arguments.extend(["--ulimit".to_owned(), rlimit_cli_value(rlimit)]);
+    }
+    Ok(())
+}
+
+fn append_container_runtime_json(
+    body: &mut Map<String, Value>,
+    container: &crate::ContainerIntent,
+    identity: &DeploymentResourceId,
+    version: &str,
+) -> Result<(), RenderingFinding> {
+    let runtime = container.runtime();
+    if let Some(health) = runtime.health() {
+        body.insert(
+            "healthconfig".to_owned(),
+            health_json(health, identity, "runtime.health.command")?,
+        );
+        if let crate::HealthCheck::Command(configured) = health {
+            if let Some(on_failure) = configured.on_failure() {
+                body.insert(
+                    "health_check_on_failure_action".to_owned(),
+                    json!(health_on_failure_code(on_failure)),
+                );
+            }
+        }
+    }
+    if let Some(startup) = runtime.startup_health() {
+        let mut configuration = Map::new();
+        configuration.insert(
+            "Test".to_owned(),
+            health_command_json(startup.command(), identity, "runtime.startup_health.command")?,
+        );
+        append_startup_health_json(&mut configuration, startup);
+        body.insert("startupHealthConfig".to_owned(), Value::Object(configuration));
+    }
+    append_logging_json(body, runtime.logging(), identity, version)?;
+    append_security_json(body, runtime.security());
+    append_namespace_json(body, runtime.namespaces());
+    append_resource_json(body, runtime.resources(), identity, version)?;
+    Ok(())
+}
+
+fn health_command_cli(
+    command: &crate::HealthCommand,
+    identity: &DeploymentResourceId,
+    field: &'static str,
+) -> Result<String, RenderingFinding> {
+    serde_json::to_string(&health_command_json(command, identity, field)?)
+        .map_err(|_| rendering_runtime_finding(identity, field))
+}
+
+fn health_command_json(
+    command: &crate::HealthCommand,
+    identity: &DeploymentResourceId,
+    field: &'static str,
+) -> Result<Value, RenderingFinding> {
+    match command {
+        crate::HealthCommand::Shell(command) => Ok(json!(["CMD-SHELL", command.as_str()])),
+        crate::HealthCommand::Exec(arguments) => Ok(Value::Array(
+            std::iter::once(Value::String("CMD".to_owned()))
+                .chain(arguments.values().iter().cloned().map(Value::String))
+                .collect(),
+        )),
+        crate::HealthCommand::SensitiveInlineShell(_)
+        | crate::HealthCommand::SensitiveInlineExec(_)
+        | crate::HealthCommand::ExternalShell(_)
+        | crate::HealthCommand::ExternalExec(_) => Err(rendering_runtime_finding(identity, field)),
+    }
+}
+
+fn health_json(
+    health: &crate::HealthCheck,
+    identity: &DeploymentResourceId,
+    field: &'static str,
+) -> Result<Value, RenderingFinding> {
+    match health {
+        crate::HealthCheck::Disabled => Ok(json!({"Test": ["NONE"]})),
+        crate::HealthCheck::Command(configured) => {
+            let mut configuration = Map::new();
+            configuration.insert(
+                "Test".to_owned(),
+                health_command_json(configured.command(), identity, field)?,
+            );
+            append_configured_health_json(&mut configuration, configured);
+            Ok(Value::Object(configuration))
+        }
+    }
+}
+
+fn append_configured_health_json(configuration: &mut Map<String, Value>, health: &crate::ConfiguredHealthCheck) {
+    if let Some(interval) = health.interval() {
+        configuration.insert("Interval".to_owned(), json!(health_interval_nanoseconds(interval)));
+    }
+    if let Some(timeout) = health.timeout() {
+        configuration.insert("Timeout".to_owned(), json!(timeout.nanoseconds()));
+    }
+    if let Some(retries) = health.retries() {
+        configuration.insert("Retries".to_owned(), json!(retries.value()));
+    }
+    if let Some(period) = health.start_period() {
+        configuration.insert("StartPeriod".to_owned(), json!(period.nanoseconds()));
+    }
+}
+
+fn append_startup_health_json(configuration: &mut Map<String, Value>, health: &crate::StartupHealthCheck) {
+    if let Some(interval) = health.interval() {
+        configuration.insert("Interval".to_owned(), json!(health_interval_nanoseconds(interval)));
+    }
+    if let Some(timeout) = health.timeout() {
+        configuration.insert("Timeout".to_owned(), json!(timeout.nanoseconds()));
+    }
+    if let Some(retries) = health.retries() {
+        configuration.insert("Retries".to_owned(), json!(retries.value()));
+    }
+    if let Some(successes) = health.successes() {
+        configuration.insert("Successes".to_owned(), json!(successes.value()));
+    }
+}
+
+fn health_interval_cli(interval: crate::HealthInterval) -> String {
+    match interval {
+        crate::HealthInterval::Disabled => "disable".to_owned(),
+        crate::HealthInterval::Every(duration) => health_duration_cli(duration.nanoseconds()),
+    }
+}
+
+fn health_interval_nanoseconds(interval: crate::HealthInterval) -> i64 {
+    match interval {
+        crate::HealthInterval::Disabled => 0,
+        crate::HealthInterval::Every(duration) => duration.nanoseconds(),
+    }
+}
+
+fn health_duration_cli(nanoseconds: i64) -> String {
+    format!("{nanoseconds}ns")
+}
+
+fn health_on_failure_name(value: crate::HealthOnFailure) -> &'static str {
+    match value {
+        crate::HealthOnFailure::None => "none",
+        crate::HealthOnFailure::Kill => "kill",
+        crate::HealthOnFailure::Restart => "restart",
+        crate::HealthOnFailure::Stop => "stop",
+    }
+}
+
+const fn health_on_failure_code(value: crate::HealthOnFailure) -> u8 {
+    match value {
+        crate::HealthOnFailure::None => 0,
+        crate::HealthOnFailure::Kill => 2,
+        crate::HealthOnFailure::Restart => 3,
+        crate::HealthOnFailure::Stop => 4,
+    }
+}
+
+fn log_driver_name(value: crate::LogDriver) -> &'static str {
+    match value {
+        crate::LogDriver::Journald => "journald",
+        crate::LogDriver::K8sFile => "k8s-file",
+    }
+}
+
+fn append_logging_json(
+    body: &mut Map<String, Value>,
+    logging: &crate::LoggingSettings,
+    identity: &DeploymentResourceId,
+    version: &str,
+) -> Result<(), RenderingFinding> {
+    if logging.driver().is_none() && logging.max_size().is_none() && logging.journald_labels().is_empty() {
+        return Ok(());
+    }
+    if !logging.journald_labels().is_empty() && !supports_journald_labels(version) {
+        return Err(rendering_runtime_finding(
+            identity,
+            "runtime.logging.journald_labels.target_version",
+        ));
+    }
+    let mut configuration = Map::new();
+    if let Some(driver) = logging.driver() {
+        configuration.insert("driver".to_owned(), Value::String(log_driver_name(driver).to_owned()));
+    }
+    if let Some(size) = logging.max_size() {
+        configuration.insert("size".to_owned(), json!(size.bytes()));
+    }
+    if !logging.journald_labels().is_empty() {
+        configuration.insert(
+            "labels".to_owned(),
+            Value::Object(
+                logging
+                    .journald_labels()
+                    .iter()
+                    .map(|label| {
+                        (
+                            label.key().as_str().to_owned(),
+                            Value::String(label.value().as_str().to_owned()),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    body.insert("log_configuration".to_owned(), Value::Object(configuration));
+    Ok(())
+}
+
+fn append_security_json(body: &mut Map<String, Value>, security: &crate::SecuritySettings) {
+    if let Some(value) = security.privileged() {
+        body.insert("privileged".to_owned(), json!(value));
+    }
+    if let Some(value) = security.no_new_privileges() {
+        body.insert("no_new_privileges".to_owned(), json!(value));
+    }
+    if let Some(value) = security.read_only_filesystem() {
+        body.insert("read_only_filesystem".to_owned(), json!(value));
+    }
+    if let Some(value) = security.read_write_tmpfs() {
+        body.insert("read_write_tmpfs".to_owned(), json!(value));
+    }
+    if !security.cap_add().is_empty() {
+        body.insert(
+            "cap_add".to_owned(),
+            Value::Array(
+                security
+                    .cap_add()
+                    .iter()
+                    .map(|value| Value::String(value.as_str().to_owned()))
+                    .collect(),
+            ),
+        );
+    }
+    if !security.cap_drop().is_empty() {
+        body.insert(
+            "cap_drop".to_owned(),
+            Value::Array(
+                security
+                    .cap_drop()
+                    .iter()
+                    .map(|value| Value::String(value.as_str().to_owned()))
+                    .collect(),
+            ),
+        );
+    }
+}
+
+fn append_namespace_json(body: &mut Map<String, Value>, namespaces: &crate::ContainerNamespaceSettings) {
+    for (member, mode) in [
+        ("pidns", namespaces.pid().map(namespace_mode_name)),
+        ("ipcns", namespaces.ipc().map(ipc_namespace_mode_name)),
+        ("utsns", namespaces.uts().map(namespace_mode_name)),
+        ("cgroupns", namespaces.cgroup().map(namespace_mode_name)),
+    ] {
+        if let Some(mode) = mode {
+            body.insert(member.to_owned(), json!({"nsmode": mode}));
+        }
+    }
+}
+
+fn namespace_mode_name(value: crate::NamespaceMode) -> &'static str {
+    match value {
+        crate::NamespaceMode::Private => "private",
+        crate::NamespaceMode::Host => "host",
+    }
+}
+
+fn ipc_namespace_mode_name(value: crate::IpcNamespaceMode) -> &'static str {
+    match value {
+        crate::IpcNamespaceMode::Private => "private",
+        crate::IpcNamespaceMode::Host => "host",
+        crate::IpcNamespaceMode::Shareable => "shareable",
+        crate::IpcNamespaceMode::None => "none",
+    }
+}
+
+fn append_resource_json(
+    body: &mut Map<String, Value>,
+    resources: &crate::ContainerResourceControls,
+    identity: &DeploymentResourceId,
+    version: &str,
+) -> Result<(), RenderingFinding> {
+    let mut limits = Map::new();
+    let mut cpu = Map::new();
+    if let Some(value) = resources.cpu_shares() {
+        cpu.insert("shares".to_owned(), json!(value));
+    }
+    if let Some(value) = resources.cpu_period() {
+        cpu.insert("period".to_owned(), json!(value));
+    }
+    if let Some(value) = resources.cpu_quota() {
+        cpu.insert("quota".to_owned(), json!(value));
+    }
+    if !cpu.is_empty() {
+        limits.insert("cpu".to_owned(), Value::Object(cpu));
+    }
+    if let Some(value) = resources.memory_bytes() {
+        limits.insert("memory".to_owned(), json!({"limit": value}));
+    }
+    if let Some(value) = resources.pids() {
+        limits.insert("pids".to_owned(), json!({"limit": value}));
+    }
+    if !limits.is_empty() {
+        body.insert("resource_limits".to_owned(), Value::Object(limits));
+    }
+    if !resources.rlimits().is_empty() {
+        let mut limits = Vec::with_capacity(resources.rlimits().len());
+        for rlimit in resources.rlimits() {
+            if rlimit_is_unlimited(rlimit) && !supports_unlimited_rlimit(version) {
+                return Err(rendering_runtime_finding(
+                    identity,
+                    "runtime.resources.rlimits.unlimited.target_version",
+                ));
+            }
+            limits.push(json!({
+                "type": rlimit_kind_name(rlimit.kind()),
+                "soft": rlimit_value_json(rlimit.soft()),
+                "hard": rlimit_value_json(rlimit.hard()),
+            }));
+        }
+        body.insert("r_limits".to_owned(), Value::Array(limits));
+    }
+    Ok(())
+}
+
+fn rlimit_cli_value(rlimit: &crate::Rlimit) -> String {
+    format!(
+        "{}={}:{}",
+        rlimit_kind_cli_name(rlimit.kind()),
+        rlimit_value_cli(rlimit.soft()),
+        rlimit_value_cli(rlimit.hard())
+    )
+}
+
+fn rlimit_kind_cli_name(kind: crate::RlimitKind) -> &'static str {
+    match kind {
+        crate::RlimitKind::NoFile => "nofile",
+        crate::RlimitKind::NProc => "nproc",
+    }
+}
+
+fn rlimit_kind_name(kind: crate::RlimitKind) -> &'static str {
+    match kind {
+        crate::RlimitKind::NoFile => "RLIMIT_NOFILE",
+        crate::RlimitKind::NProc => "RLIMIT_NPROC",
+    }
+}
+
+fn rlimit_value_cli(value: crate::RlimitValue) -> String {
+    match value {
+        crate::RlimitValue::Finite(value) => value.to_string(),
+        crate::RlimitValue::Unlimited => "-1".to_owned(),
+    }
+}
+
+fn rlimit_value_json(value: crate::RlimitValue) -> Value {
+    match value {
+        crate::RlimitValue::Finite(value) => json!(value),
+        crate::RlimitValue::Unlimited => json!(-1),
+    }
+}
+
+fn rendering_runtime_finding(identity: &DeploymentResourceId, field: &'static str) -> RenderingFinding {
+    RenderingFinding::new(
+        DiagnosticCode::RenderingUnsupported,
+        Some(identity.clone()),
+        Some(field),
+    )
+}
+
 fn append_container_setting_arguments(
     arguments: &mut Vec<String>,
     container: &crate::ContainerIntent,
@@ -2490,17 +3725,106 @@ mod tests {
     }
 
     #[test]
+    fn renderer_catalogue_rejects_b3_claim_and_per_release_evidence_mutations() {
+        let mut missing_claim = decoded_catalogue();
+        missing_claim["runtime_field_claims"]
+            .as_array_mut()
+            .expect("runtime claims")
+            .pop();
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing_claim)).is_err());
+
+        let mut duplicate_claim = decoded_catalogue();
+        let claims = duplicate_claim["runtime_field_claims"]
+            .as_array_mut()
+            .expect("runtime claims");
+        claims.push(claims[0].clone());
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&duplicate_claim)).is_err());
+
+        for (path, value) in [
+            (["cli", "flag"], serde_json::json!("--health-timeout")),
+            (["cli", "value_shape"], serde_json::json!("health-duration")),
+            (["libpod", "json_member"], serde_json::json!("healthconfig_timeout")),
+        ] {
+            let mut substituted = decoded_catalogue();
+            substituted["runtime_field_claims"][1][path[0]][path[1]] = value;
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&substituted)).is_err());
+        }
+
+        for (claim_index, wrong_shape) in [
+            (0, "boolean"),
+            (6, "boolean"),
+            (7, "boolean"),
+            (12, "boolean"),
+            (13, "boolean"),
+            (14, "boolean"),
+            (15, "string"),
+            (16, "boolean"),
+            (21, "boolean"),
+            (25, "boolean"),
+            (30, "boolean"),
+        ] {
+            let mut substituted = decoded_catalogue();
+            substituted["runtime_field_claims"][claim_index]["libpod"]["value_shape"] = serde_json::json!(wrong_shape);
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&substituted)).is_err());
+        }
+
+        let mut fabricated_journald = decoded_catalogue();
+        let fields = fabricated_journald["reviewed_lines"][0]["runtime_evidence"]["exact_fields"]
+            .as_array_mut()
+            .expect("exact runtime fields");
+        fields.push(serde_json::json!("container-log-journald-labels"));
+        let gated = fabricated_journald["reviewed_lines"][0]["runtime_evidence"]["target_gated_fields"]
+            .as_array_mut()
+            .expect("target-gated runtime fields");
+        gated.retain(|field| field != "container-log-journald-labels");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&fabricated_journald)).is_err());
+
+        let mut fabricated_unlimited = decoded_catalogue();
+        let fields = fabricated_unlimited["reviewed_lines"][1]["runtime_evidence"]["exact_fields"]
+            .as_array_mut()
+            .expect("exact runtime fields");
+        fields.push(serde_json::json!("container-rlimit-unlimited"));
+        let gated = fabricated_unlimited["reviewed_lines"][1]["runtime_evidence"]["target_gated_fields"]
+            .as_array_mut()
+            .expect("target-gated runtime fields");
+        gated.retain(|field| field != "container-rlimit-unlimited");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&fabricated_unlimited)).is_err());
+
+        for (member, source) in [
+            ("cli_flag_source", "cmd/podman/common/unknown.go"),
+            ("cli_transform_source", "pkg/specgenutil/unknown.go"),
+            ("command_route_source", "cmd/podman/containers/unknown.go"),
+            ("route_source", "pkg/api/server/register_unknown.go"),
+            ("handler_source", "pkg/api/handlers/libpod/unknown.go"),
+        ] {
+            let mut substituted = decoded_catalogue();
+            substituted["reviewed_lines"][0]["runtime_evidence"][member]["path"] = serde_json::json!(source);
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&substituted)).is_err());
+        }
+
+        let mut wrong_model = decoded_catalogue();
+        wrong_model["reviewed_lines"][2]["runtime_evidence"]["model_sources"][1]["path"] =
+            serde_json::json!("pkg/specgen/specgen.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_model)).is_err());
+
+        let mut wrong_revision = decoded_catalogue();
+        wrong_revision["reviewed_lines"][6]["runtime_evidence"]["handler_source"]["revision"] =
+            serde_json::json!("0000000000000000000000000000000000000000");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_revision)).is_err());
+    }
+
+    #[test]
     fn renderer_catalogue_rejects_unknown_and_duplicate_json_keys() {
         let unknown = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 5,",
-            "\"schema_version\": 5, \"unexpected\": true,",
+            "\"schema_version\": 7,",
+            "\"schema_version\": 7, \"unexpected\": true,",
             1,
         );
         assert!(parse_renderer_catalogue(&unknown).is_err());
 
         let duplicate_root = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 5,",
-            "\"schema_version\": 5, \"schema_version\": 5,",
+            "\"schema_version\": 7,",
+            "\"schema_version\": 7, \"schema_version\": 7,",
             1,
         );
         assert!(parse_renderer_catalogue(&duplicate_root).is_err());

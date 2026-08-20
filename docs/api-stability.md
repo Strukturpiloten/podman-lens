@@ -17,8 +17,9 @@ remain private. The inventory carries all six fixed sections, per-section availa
 records for non-atomic races, labels, relationships, source/version evidence, field-path and JSON
 kind metadata for unsupported fields, and structured findings. `SensitiveEnvironmentValue` may be
 used only through its callback accessor; it does not serialize or print its plaintext value.
-`native_field_coverage_catalogue()` exposes the strict, packaged M2 native-field ledger. Its rows
-name decoder, planner/renderer applicability, public access point, diagnostic, and focused tests.
+`native_field_coverage_catalogue()` exposes the strict, packaged two-plane coverage ledger. Its
+rows name their input observation or output intent plane, planner, distinct CLI and Libpod renderer
+where applicable, reviewed target versions, public access point, diagnostic, and focused tests.
 `ResourceRecord::unknown_fields_complete()` prevents callers from treating bounded unknown metadata
 as exhaustive after `PLN0021` or a partial inspection.
 

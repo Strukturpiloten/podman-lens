@@ -35,17 +35,21 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The native-field coverage ledger is parsed as a strict public catalogue. Its unit tests reject
-schema, identifier, diagnostic, decoder-reference, planner/renderer applicability, and expected-row
-mutations. Inventory tests prove that unmodeled `HostConfig` members become bounded unsupported
-metadata, `Secret.Spec.Driver` does not become unknown metadata, and overflow or partial inspection
-makes `ResourceRecord::unknown_fields_complete()` false.
+The coverage ledger is parsed as a strict public two-plane catalogue. Its unit tests reject schema,
+identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
+target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
+become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
+overflow or partial inspection makes `ResourceRecord::unknown_fields_complete()` false.
 
 M6-B3a tests cover public and redacted shell/direct health-command forms, timing and startup-health
 dependency, logging driver/label rules, explicit security false values and conflicts, bounded CPU,
 memory, PID, and rlimit controls, cgroup/root-context boundaries, pod-member runtime acceptance,
 the namespace-only member boundary, all-seven reviewed-target matrices for journald labels and
 unlimited rlimits, CPU-quota boundaries, and renderer blocking.
+M6-B3b adds exact CLI/Libpod assertions for public health and runtime resource fields across every
+reviewed target, every health failure action's distinct CLI/native-integer form, and all sensitive
+or external health command variants in both normal and startup positions. The strict renderer
+catalogue records and mutation-tests the Libpod member value shape, not only its spelling.
 
 M3 discovery tests use fixture transports only. They cover all six exact resource-root kinds;
 label-presence, label-value, empty-value, and rejected selectors; dependent-to-prerequisite closure;

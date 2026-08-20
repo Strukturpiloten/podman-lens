@@ -168,6 +168,9 @@ remain external; only a redacted external material reference is available to M6.
       containers; retain bounded namespace intent only for unpodded containers; require explicit
       cgroup/root-context evidence; enforce the reviewed journald-label, unlimited-rlimit, and
       CPU-quota planning boundaries; and block rendering until exact per-field evidence exists.
+- [x] M6-B3b: Render the bounded public runtime surface exactly to CLI and Libpod descriptions;
+      preserve all-or-nothing redaction for sensitive health commands and repeat runtime target
+      gates during rendering.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.

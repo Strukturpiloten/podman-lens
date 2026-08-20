@@ -132,7 +132,10 @@ remain external; only a redacted external material reference is available to M6.
 
 ## M6: Podman output coverage
 
-- [ ] Define the versioned deployment-plan JSON schema.
+- [x] M6-A: Define the versioned, serialization-only deployment-plan JSON schema and render
+      evidence-backed basic topology into review-only CLI/Libpod representations; preserve the
+      explicit output connection, safely disclose external prerequisites in review scripts, and
+      reject fields without sufficient semantics rather than marking a lossy rendering exact.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.

@@ -14,3 +14,4 @@ do not let code silently change it.
 | [0007: Explicit endpoints and read-only acquisition transport](0007-explicit-endpoints-and-caller-owned-transport.md) | Accepted |
 | [0008: Versioned snapshots are serialization-only and always redacted](0008-versioned-redacted-snapshots.md)          | Accepted |
 | [0009: Explicit image acquisition and pod-start lifting](0009-explicit-image-acquisition-and-pod-start-lifting.md)    | Accepted |
+| [0010: Versioned non-executing output rendering](0010-versioned-nonexecuting-output-rendering.md)                     | Accepted |

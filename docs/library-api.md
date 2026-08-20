@@ -89,6 +89,20 @@ managed-resource intent, and `DeploymentPlan::external_preconditions` preserves 
 network, volume, image, and secret boundaries in deterministic order. M6 will add CLI, Libpod
 HTTP, JSON, and shell representations.
 
+M6-A exposes `render_deployment`, producing deterministic CLI argument arrays and versioned Libpod
+request descriptions without opening a connection. `DeploymentRendering::connection` preserves the
+optional non-sensitive output-connection name; `snapshot::deployment_v1` exports it as an explicit
+validated string or `null` while always redacting secret material. The accepted name is 1–64 ASCII
+bytes, begins with an ASCII alphanumeric character, and otherwise uses only ASCII alphanumeric
+characters, dots, underscores, or hyphens. URI, endpoint, socket-path, credential, token, and
+whitespace spellings are rejected with `PLN0034` before rendering or serialization.
+`DeploymentRendering::shell_script` is generated solely from those argument arrays, requires
+explicit secret file paths, and safely names every external prerequisite in a review comment.
+Rendering accepts only an identical engine/API version listed in its committed per-operation renderer
+evidence. Pod networks, pod membership, and unpodded-container networks are exact. Pod volumes and
+container volumes or secrets are rejected with `PLN0046` until the semantic model carries their
+mount/target/mode data.
+
 `PlanningFinding::occurrence` is a one-based list position for a duplicate prerequisite or
 startup edge. Grouped duplicate or conflicting resource declarations have no single position;
 their `PlanningFinding::count` reports the number of declarations instead.

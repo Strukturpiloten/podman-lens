@@ -3,3 +3,6 @@
 
 # serde_json owns the exact snapshot-v1 golden representation.
 /fixtures/snapshots/
+
+# serde_json owns the exact deployment-plan-v1 golden representation.
+/fixtures/deployment/deployment-plan-v1.json

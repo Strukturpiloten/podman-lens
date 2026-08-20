@@ -45,6 +45,16 @@ syntax nor Libpod HTTP DTOs. Planning
 returns all sorted structured findings and no partial plan on an error. Exact output renderings,
 serialized plan schemas, and shell artifacts remain M6 contracts and are not implied by M5.
 
+M6-A introduces `render_deployment`, `DeploymentRendering`, including its optional non-sensitive,
+strictly validated Podman connection-name `connection`, typed CLI and Libpod invocation descriptions,
+rendering findings, and `snapshot::deployment_v1`. The JSON export is
+serialization-only, uses a committed Draft 2020-12 schema, and remains redacted even when a
+semantic operation references caller-supplied secret material. URI, endpoint, path, credential, and
+token spellings cannot construct this connection type or reach its JSON schema. `shell_script`
+derives solely from the stored CLI argument arrays and preserved external preconditions; neither it
+nor any M6-A type opens a connection or executes Podman.
+Broader native setting coverage remains an explicit later M6 contract.
+
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate
 pre-1.0 minor release. Private Libpod wire types never become public compatibility commitments.

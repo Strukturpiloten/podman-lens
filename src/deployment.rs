@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind, TargetProfile};
 
 const MAX_REFERENCE_BYTES: usize = 256;
+const MAX_CONNECTION_NAME_BYTES: usize = 64;
 
 /// Stable target-side identity for one explicitly declared Podman resource.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -45,21 +46,26 @@ impl DeploymentResourceId {
     }
 }
 
-/// A non-sensitive, caller-owned name for the connection represented by a plan.
+/// A non-sensitive, caller-owned Podman connection name for a deployment plan.
 ///
-/// It is metadata only. Planning does not discover, open, or validate a connection.
+/// It is metadata only. Planning does not discover, open, or validate a connection. A connection
+/// name is deliberately narrower than a connection URI: it is 1–64 ASCII bytes, starts with an
+/// ASCII alphanumeric character, and otherwise contains only ASCII alphanumeric characters,
+/// dots, underscores, or hyphens. Endpoint, path, credential, and token-like spellings therefore
+/// cannot enter a rendered artifact.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeploymentConnectionReference(String);
 
 impl DeploymentConnectionReference {
-    /// Creates a non-sensitive connection reference.
+    /// Creates a non-sensitive Podman connection name.
     ///
     /// # Errors
     ///
-    /// Returns `PLN0034` for an empty, control-containing, or oversized reference.
+    /// Returns `PLN0034` when the name is empty, oversized, or outside the safe connection-name
+    /// grammar.
     pub fn new(value: impl Into<String>) -> PodmanLensResult<Self> {
         let value = value.into();
-        validate_identifier(&value)?;
+        validate_connection_name(&value)?;
         Ok(Self(value))
     }
 
@@ -1531,6 +1537,21 @@ fn sort_findings(findings: &mut Vec<PlanningFinding>) {
 
 fn validate_identifier(value: &str) -> PodmanLensResult<()> {
     if value.is_empty() || value.len() > MAX_REFERENCE_BYTES || value.chars().any(char::is_control) {
+        Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_connection_name(value: &str) -> PodmanLensResult<()> {
+    let mut bytes = value.bytes();
+    let Some(first) = bytes.next() else {
+        return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+    };
+    if value.len() > MAX_CONNECTION_NAME_BYTES
+        || !first.is_ascii_alphanumeric()
+        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
         Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent))
     } else {
         Ok(())

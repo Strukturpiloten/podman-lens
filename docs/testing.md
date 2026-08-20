@@ -62,3 +62,14 @@ conflicting declarations, missing prerequisites, cycles, and protected secret re
 public API test compiles this contract as an external consumer. It also proves that managed
 operation intent and all deterministic external preconditions survive planning, while plan `Debug`
 output never exposes an external secret-material reference.
+
+M6-A renderer tests cover every evidence-listed operation over every reviewed Podman release. The
+catalogue records an immutable CLI source, Libpod route source, and body source when a body exists
+for every operation/release pair. Byte-exact CLI/API and artifact goldens prove the emitted argv
+semantics that a JSON Schema cannot express; the local Draft 2020-12 schema validates operation
+kind/action/method/path/body/input-flag pairings and the explicit output-connection field. Tests
+reject unlisted, build-metadata, and non-identical API/engine targets; prove that external network,
+volume, image, and secret prerequisites are safely disclosed in the review script; and prove the
+sensitive external-input reference sentinel never reaches an artifact. They also prove pod and
+unpodded network topology is emitted while volumes or secret attachments return `PLN0046` instead
+of a lossy rendering. They use no live connection and never execute generated commands.

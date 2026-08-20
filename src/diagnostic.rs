@@ -94,6 +94,10 @@ pub enum DiagnosticCode {
     DeploymentPodMembership,
     /// A requested startup order cannot be represented inside one Podman pod.
     SamePodStartupDependency,
+    /// The selected Libpod API lacks exact renderer evidence for the target engine.
+    RenderingTargetMismatch,
+    /// A semantic operation has no reviewed renderer representation.
+    RenderingUnsupported,
 }
 
 impl DiagnosticCode {
@@ -145,6 +149,8 @@ impl DiagnosticCode {
             Self::InvalidExternalPrecondition => "PLN0042",
             Self::DeploymentPodMembership => "PLN0043",
             Self::SamePodStartupDependency => "PLN0044",
+            Self::RenderingTargetMismatch => "PLN0045",
+            Self::RenderingUnsupported => "PLN0046",
         }
     }
 }
@@ -254,6 +260,10 @@ impl Diagnostic {
                 DiagnosticCode::SamePodStartupDependency => {
                     "a startup dependency cannot order containers within one Podman pod"
                 }
+                DiagnosticCode::RenderingTargetMismatch => {
+                    "the selected Libpod API version lacks exact renderer evidence for the target engine"
+                }
+                DiagnosticCode::RenderingUnsupported => "a semantic operation has no reviewed renderer representation",
             },
         }
     }

@@ -13,6 +13,10 @@ goldens. Version 0.49.9 supports the repository's Rust 1.85 MSRV. Default featur
 schema validation does not add file or network retrieval; tests validate only the committed local
 schema and fixtures. It does not shape runtime or public Rust types.
 
+M6-A uses the existing runtime `serde_json` dependency for deterministic, serialization-only
+deployment-plan exports. Rendering itself adds no process, HTTP-client, shell, or execution
+dependency: it produces data and text that callers may review, but never runs Podman.
+
 Cargo dependencies are locked in `Cargo.lock`, audited by `cargo deny`, and updated through
 Renovate. Git dependencies and unknown registries are denied. Any dependency that shapes public
 types, wire decoding, serialization, async runtime choice, or security posture requires an ADR.

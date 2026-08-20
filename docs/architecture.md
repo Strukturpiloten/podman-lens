@@ -127,8 +127,16 @@ snapshots or treat them as trusted input.
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a
 consumer to validate or safely parallelize independent work. The semantic resource action is the
-source of truth. M5 owns only this semantic plan; M6 adds CLI, HTTP, JSON, and shell
-representations.
+source of truth. M5 owns only this semantic plan. M6-A renders evidence-backed basic topology into
+argument arrays, Libpod request descriptions, a versioned JSON export, and a POSIX review script;
+it never opens a connection or executes either representation. The caller-selected non-sensitive
+output connection survives in the rendering and JSON export only as a validated Podman connection
+name, never a URI, endpoint, path, credential, or token; CLI arrays carry it as `--connection`.
+The review script emits deterministic, shell-quoted comments for every external network, volume,
+image, or secret prerequisite, but never a secret-material reference or value. It renders pod
+networks, pod-member assignment, and unpodded-container networks. Pod volumes and container volumes
+or secrets lack the target/mode data required for exact output, so they return structured `PLN0046`
+findings.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.
@@ -160,10 +168,11 @@ contracts:
   exceptional crossing.
 - `--pod-layout` is a BoxFerry mapping policy applied before Podman output intent reaches
   PodmanLens.
-- `--output-connection` is recorded as non-sensitive plan metadata. M6 will render it into CLI/API
-  forms; M5 never connects to that destination.
-- M6 will provide `deployment-plan.json` and `deployment.sh`; BoxFerry will own their output
-  directory lifecycle and reporting.
+- `--output-connection` is recorded only as a validated Podman connection name and rendered into
+  CLI/API descriptions. PodmanLens never accepts a destination URI here or connects to it.
+- `snapshot::deployment_v1` and `DeploymentRendering::shell_script` provide review-only
+  `deployment-plan.json` and `deployment.sh` content; BoxFerry will own output-directory lifecycle
+  and reporting.
 
 PodmanLens returns structured data and, from M6, rendered artifacts. BoxFerry remains responsible
 for output-directory safety, diagnostic presentation, and loss-policy authorization.

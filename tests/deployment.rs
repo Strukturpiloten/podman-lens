@@ -607,20 +607,38 @@ fn portable_pull_reference_grammar_accepts_host_qualified_tag_and_digest_only() 
 
 #[test]
 fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references() {
-    assert_eq!(
-        DeploymentConnectionReference::new("")
-            .expect_err("empty")
-            .code()
-            .as_str(),
-        "PLN0034"
-    );
-    assert_eq!(
-        DeploymentConnectionReference::new("bad\nconnection")
-            .expect_err("control")
-            .code()
-            .as_str(),
-        "PLN0034"
-    );
+    for name in ["production", "remote-one", "edge_2.1", "7"] {
+        assert_eq!(
+            DeploymentConnectionReference::new(name)
+                .expect("safe connection name")
+                .as_str(),
+            name
+        );
+    }
+    for name in [
+        "",
+        "-leading-hyphen",
+        "remote one",
+        "bad\nconnection",
+        "ssh://user@example.invalid/run/user/1000/podman/podman.sock",
+        "unix:///run/user/1000/podman/podman.sock",
+        "tcp://example.invalid:8080",
+        "remote:5000",
+        "/run/user/1000/podman/podman.sock",
+        r"C:\\podman\\podman.sock",
+        "user@example.invalid",
+        "credential=secret-token",
+        &"a".repeat(65),
+    ] {
+        assert_eq!(
+            DeploymentConnectionReference::new(name)
+                .expect_err("unsafe connection detail")
+                .code()
+                .as_str(),
+            "PLN0034",
+            "{name}"
+        );
+    }
     for reference in [
         "",
         "bad\nreference",

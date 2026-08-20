@@ -15,6 +15,9 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/SECURITY.md",
         "/docs/**",
         "/docs/schemas/podman-lens-snapshot-v1.schema.json",
+        "/docs/schemas/podman-lens-deployment-v1.schema.json",
+        "/catalogue/v1/podman-deployment-rendering.json",
+        "/fixtures/deployment/**",
         "/fixtures/corpus/**",
         "/fixtures/snapshots/**",
         "/src/**",
@@ -73,6 +76,34 @@ fn snapshot_schema_and_exact_golden_fixtures_exist() {
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }
+}
+
+#[test]
+fn deployment_renderer_evidence_schema_and_exact_goldens_exist() {
+    for file in [
+        "catalogue/v1/podman-deployment-rendering.json",
+        "docs/schemas/podman-lens-deployment-v1.schema.json",
+        "fixtures/deployment/deployment-plan-v1.json",
+        "fixtures/deployment/deployment.sh",
+    ] {
+        assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+#[test]
+fn checked_in_deployment_artifacts_do_not_contain_the_sensitive_reference_sentinel() -> Result<(), std::io::Error> {
+    for file in [
+        "fixtures/deployment/deployment-plan-v1.json",
+        "fixtures/deployment/deployment.sh",
+    ] {
+        let contents = fs::read_to_string(file)?;
+        assert!(
+            !contents.contains("vault/app-password"),
+            "{file} contains the sensitive external-input reference sentinel"
+        );
+    }
+
+    Ok(())
 }
 
 #[test]

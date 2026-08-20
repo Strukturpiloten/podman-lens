@@ -17,6 +17,7 @@ pub mod inventory;
 pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
+pub mod render;
 pub mod snapshot;
 pub mod transport;
 pub mod version;
@@ -47,6 +48,10 @@ pub use inventory::{
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]
 pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts};
+pub use render::{
+    CliInvocation, DeploymentRendering, LibpodInvocation, RenderStatus, RenderedHttpBody, RenderedHttpMethod,
+    RenderedOperation, RenderingFinding, RenderingOutcome, render_deployment,
+};
 pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,
     LibpodTransportFuture, MAX_PATH_AND_QUERY_BYTES, TransportError, TransportLimits,

@@ -63,16 +63,18 @@ public API test compiles this contract as an external consumer. It also proves t
 operation intent and all deterministic external preconditions survive planning, while plan `Debug`
 output never exposes an external secret-material reference.
 
-M6-A renderer tests cover every evidence-listed operation over every reviewed Podman release. The
-catalogue records an immutable CLI source, Libpod route source, and body source when a body exists
-for every operation/release pair. Byte-exact CLI/API and artifact goldens prove the emitted argv
+M6 renderer tests cover every evidence-listed operation over every reviewed Podman release. The v3
+catalogue records immutable CLI, model, and handler sources for every rendered setting as well as
+the operation route/body evidence. Parser mutation tests reject omitted, duplicate, unknown,
+wrong-claim, mutable-source, and substituted-release evidence. Byte-exact CLI/API and artifact goldens prove the emitted argv
 semantics that a JSON Schema cannot express; the local Draft 2020-12 schema validates operation
 kind/action/method/path/body/input-flag pairings and the explicit output-connection field. Tests
 reject unlisted, build-metadata, and non-identical API/engine targets; prove that external network,
 volume, image, and secret prerequisites are safely disclosed in the review script; and prove the
 sensitive external-input reference sentinel never reaches an artifact. They also prove pod and
-unpodded network topology is emitted while every typed mount and container setting returns its own
-`PLN0046` finding instead of a lossy rendering. Tests exercise valid and invalid boundaries,
+unpodded network topology, typed named-volume mounts, and bounded public settings are emitted
+exactly. A table-driven matrix proves the CLI and Libpod JSON spelling of all four restart policies
+for every reviewed target. Tests exercise valid and invalid boundaries,
 ordering, duplicate and conflicting settings, every restart policy, public-consumer compilation,
 and sentinel redaction for inline and external environment values. They use no live connection and
 never execute generated commands.

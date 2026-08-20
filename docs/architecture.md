@@ -132,17 +132,16 @@ argument arrays, Libpod request descriptions, a versioned JSON export, and a POS
 it never opens a connection or executes either representation. M6-B1a retains typed named-volume
 mounts for containers and explicitly infra-container-scoped mounts for pods, plus bounded container
 settings (command, entrypoint, user, workdir, hostname, labels, environment, restart policy), while
-preserving their declared order where relevant. The renderer
-does not yet have per-field target-version evidence, so each populated setting or mount yields
-`PLN0046` rather than being omitted. Sensitive inline environment values and external references
+preserving their declared order where relevant. M6-B1b adds per-field target-version evidence and
+exact CLI/Libpod rendering for public settings and named-volume mounts. Sensitive inline environment values and external references
 are redacted in plan diagnostics, debug output, observational snapshots, and deployment artifacts. The caller-selected non-sensitive
 output connection survives in the rendering and JSON export only as a validated Podman connection
 name, never a URI, endpoint, path, credential, or token; CLI arrays carry it as `--connection`.
 The review script emits deterministic, shell-quoted comments for every external network, volume,
 image, or secret prerequisite, but never a secret-material reference or value. It renders pod
-networks, pod-member assignment, and unpodded-container networks. Container mounts, infra-container
-mounts, and every typed container
-setting remain structured `PLN0046` findings until exact renderer coverage exists; secret attachment
+networks, pod-member assignment, unpodded-container networks, public settings, and named-volume
+mounts. Sensitive environment variants, pod-member restart policy, ambiguous CLI mount spellings,
+and secret attachment
 targets are not yet part of the semantic model.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is

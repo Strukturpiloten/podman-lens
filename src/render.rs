@@ -4,17 +4,18 @@
 //! descriptions. It never opens a connection, sends a request, or serializes secret material.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fmt::Write as _,
 };
 
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, de};
 use serde_json::{Map, Value, json};
 
 use crate::{
     DeploymentConnectionReference, DeploymentOperation, DeploymentPlan, DeploymentResource, DeploymentResourceId,
-    Diagnostic, DiagnosticCode, ExternalPrecondition, ResourceKind, SensitiveInputReference,
+    Diagnostic, DiagnosticCode, ExternalPrecondition, NamedVolumeMount, ResourceKind, RestartPolicy,
+    SensitiveInputReference,
 };
 
 const RENDERING_CATALOGUE_JSON: &str = include_str!("../catalogue/v1/podman-deployment-rendering.json");
@@ -30,6 +31,7 @@ const RENDERED_OPERATION_CATEGORIES: [&str; 8] = [
 ];
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RenderingCatalogue {
     schema_version: u8,
     provenance: String,
@@ -37,19 +39,137 @@ struct RenderingCatalogue {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ReviewedRenderingLine {
     version: String,
     revision: String,
     tag: String,
     operations: Vec<ReviewedRenderingOperation>,
+    field_evidence: Vec<ReviewedFieldEvidence>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ReviewedRenderingOperation {
-    category: String,
+    category: RenderingOperationCategory,
     cli_source: String,
     libpod_endpoint_source: String,
-    body_source: Value,
+    body_source: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedFieldEvidence {
+    field: RenderedField,
+    operation: RenderingOperationCategory,
+    cli: CliFieldClaim,
+    libpod: LibpodFieldClaim,
+    cli_source: String,
+    model_sources: Vec<String>,
+    handler_source: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CliFieldClaim {
+    flag: Option<CliFlag>,
+    value_shape: CliValueShape,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LibpodFieldClaim {
+    json_member: LibpodBodyMember,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+enum RenderingOperationCategory {
+    NetworkCreate,
+    VolumeCreate,
+    SecretCreate,
+    ImagePull,
+    PodCreate,
+    ContainerCreate,
+    PodStart,
+    ContainerStart,
+}
+
+impl RenderingOperationCategory {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::NetworkCreate => "network-create",
+            Self::VolumeCreate => "volume-create",
+            Self::SecretCreate => "secret-create",
+            Self::ImagePull => "image-pull",
+            Self::PodCreate => "pod-create",
+            Self::ContainerCreate => "container-create",
+            Self::PodStart => "pod-start",
+            Self::ContainerStart => "container-start",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+enum RenderedField {
+    ContainerCommand,
+    ContainerEntrypoint,
+    ContainerUser,
+    ContainerWorkdir,
+    ContainerHostname,
+    ContainerLabel,
+    ContainerEnvironment,
+    ContainerRestartPolicy,
+    ContainerNamedVolumeMount,
+    PodInfraNamedVolumeMount,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+enum CliFlag {
+    #[serde(rename = "--entrypoint")]
+    Entrypoint,
+    #[serde(rename = "--user")]
+    User,
+    #[serde(rename = "--workdir")]
+    Workdir,
+    #[serde(rename = "--hostname")]
+    Hostname,
+    #[serde(rename = "--label")]
+    Label,
+    #[serde(rename = "--env")]
+    Environment,
+    #[serde(rename = "--restart")]
+    Restart,
+    #[serde(rename = "--volume")]
+    Volume,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+enum CliValueShape {
+    ArgumentArray,
+    ContainerUser,
+    AbsoluteContainerPath,
+    Hostname,
+    LabelAssignment,
+    EnvironmentAssignment,
+    RestartPolicy,
+    NamedVolumeMount,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "snake_case")]
+enum LibpodBodyMember {
+    Command,
+    Entrypoint,
+    User,
+    WorkDir,
+    Hostname,
+    Labels,
+    Env,
+    RestartPolicy,
+    Volumes,
 }
 
 /// Exactness of a rendered operation or plan.
@@ -512,12 +632,25 @@ fn render_operation(
                     pod.identity().name().to_owned(),
                 ];
                 append_network_arguments(&mut cli_suffix, pod.networks());
+                if !append_named_volume_arguments(&mut cli_suffix, pod.infra_mounts()) {
+                    return Err(RenderingFinding::new(
+                        DiagnosticCode::RenderingUnsupported,
+                        Some(id.clone()),
+                        Some("infra_mounts.cli_ambiguous"),
+                    ));
+                }
+                let mut body = Map::new();
+                body.insert("name".to_owned(), Value::String(pod.identity().name().to_owned()));
+                body.insert("networks".to_owned(), networks);
+                if !pod.infra_mounts().is_empty() {
+                    body.insert("volumes".to_owned(), named_volume_json(pod.infra_mounts()));
+                }
                 (
                     RenderStatus::Exact,
                     cli_suffix,
                     RenderedHttpMethod::Post,
                     format!("/v{version}/libpod/pods/create"),
-                    RenderedHttpBody::Json(json!({"name": pod.identity().name(), "networks": networks})),
+                    RenderedHttpBody::Json(Value::Object(body)),
                     None,
                 )
             }
@@ -550,7 +683,7 @@ fn render_operation(
                     container.identity().name().to_owned(),
                     "--pull=never".to_owned(),
                 ];
-                let body = if let Some(pod) = container.pod() {
+                let mut body = if let Some(pod) = container.pod() {
                     cli_suffix.push("--pod".to_owned());
                     cli_suffix.push(pod.name().to_owned());
                     json!({"image": image, "pod": pod.name()})
@@ -558,7 +691,26 @@ fn render_operation(
                     append_network_arguments(&mut cli_suffix, container.networks());
                     json!({"image": image, "networks": network_configuration(container.networks())})
                 };
+                if !append_named_volume_arguments(&mut cli_suffix, container.mounts()) {
+                    return Err(RenderingFinding::new(
+                        DiagnosticCode::RenderingUnsupported,
+                        Some(id.clone()),
+                        Some("mounts.cli_ambiguous"),
+                    ));
+                }
+                append_container_setting_arguments(&mut cli_suffix, container, id)?;
+                let Some(body_map) = body.as_object_mut() else {
+                    return Err(RenderingFinding::new(
+                        DiagnosticCode::RenderingUnsupported,
+                        Some(id.clone()),
+                        Some("container_body"),
+                    ));
+                };
+                append_container_setting_json(body_map, container, id)?;
                 cli_suffix.push(image.to_owned());
+                if let Some(command) = container.settings().command() {
+                    cli_suffix.extend(command.values().iter().cloned());
+                }
                 (
                     RenderStatus::Exact,
                     cli_suffix,
@@ -607,29 +759,139 @@ fn renderer_catalogue_versions() -> Result<Vec<String>, ()> {
 }
 
 fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
+    reject_duplicate_json_keys(source)?;
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
-    if catalogue.schema_version != 2 || catalogue.provenance.trim().is_empty() || catalogue.reviewed_lines.is_empty() {
+    let capabilities = crate::capability_catalogue().map_err(|_| ())?;
+    if catalogue.schema_version != 3
+        || catalogue.provenance.trim().is_empty()
+        || catalogue.reviewed_lines.len() != capabilities.len()
+    {
         return Err(());
     }
     let mut versions = Vec::with_capacity(catalogue.reviewed_lines.len());
-    let mut previous = None;
-    for line in catalogue.reviewed_lines {
+    for (line, capability) in catalogue.reviewed_lines.into_iter().zip(capabilities) {
         let version = Version::parse(&line.version).map_err(|_| ())?;
         if !version.pre.is_empty()
             || !version.build.is_empty()
             || line.version != canonical_version(&version)
-            || line.tag != format!("v{}", line.version)
+            || line.version != capability.observed_podman_version()
+            || line.revision != capability.evidence().revision()
+            || line.tag != capability.evidence().release_tag()
             || !is_lowercase_sha40(&line.revision)
-            || previous.is_some_and(|previous: Version| previous >= version)
             || !validated_renderer_operations(&line, &expected_operations)
+            || !validated_field_evidence(&line)
         {
             return Err(());
         }
-        previous = Some(version);
         versions.push(line.version);
     }
     Ok(versions)
+}
+
+fn reject_duplicate_json_keys(source: &str) -> Result<(), ()> {
+    let mut deserializer = serde_json::Deserializer::from_str(source);
+    RejectDuplicateJsonKeys::deserialize(&mut deserializer).map_err(|_| ())?;
+    deserializer.end().map_err(|_| ())
+}
+
+struct RejectDuplicateJsonKeys;
+
+impl<'de> Deserialize<'de> for RejectDuplicateJsonKeys {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(RejectDuplicateJsonKeysVisitor)
+    }
+}
+
+struct RejectDuplicateJsonKeysVisitor;
+
+impl<'de> de::Visitor<'de> for RejectDuplicateJsonKeysVisitor {
+    type Value = RejectDuplicateJsonKeys;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a JSON value without duplicate object keys")
+    }
+
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_str<E>(self, _value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_string<E>(self, _value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        while sequence.next_element::<RejectDuplicateJsonKeys>()?.is_some() {}
+        Ok(RejectDuplicateJsonKeys)
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut keys = HashSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key) {
+                return Err(de::Error::custom("duplicate JSON object key"));
+            }
+            map.next_value::<RejectDuplicateJsonKeys>()?;
+        }
+        Ok(RejectDuplicateJsonKeys)
+    }
 }
 
 fn validated_renderer_operations(line: &ReviewedRenderingLine, expected_categories: &BTreeSet<&str>) -> bool {
@@ -648,11 +910,164 @@ fn validated_renderer_operations(line: &ReviewedRenderingLine, expected_categori
                 && operation.libpod_endpoint_source == immutable_source_url(&line.revision, libpod_path)
                 && match body_path {
                     Some(body_path) => {
-                        operation.body_source == Value::String(immutable_source_url(&line.revision, body_path))
+                        operation.body_source.as_deref()
+                            == Some(immutable_source_url(&line.revision, body_path).as_str())
                     }
-                    None => operation.body_source.is_null(),
+                    None => operation.body_source.is_none(),
                 }
         })
+}
+
+fn validated_field_evidence(line: &ReviewedRenderingLine) -> bool {
+    let observed = line
+        .field_evidence
+        .iter()
+        .map(|evidence| evidence.field)
+        .collect::<BTreeSet<_>>();
+    line.field_evidence.len() == expected_rendered_fields().len()
+        && observed == expected_rendered_fields()
+        && line.field_evidence.iter().all(|evidence| {
+            let (operation, flag, shape, member, cli_path, model_paths, handler_path) =
+                expected_field_claim(evidence.field);
+            evidence.operation == operation
+                && evidence.cli.flag == flag
+                && evidence.cli.value_shape == shape
+                && evidence.libpod.json_member == member
+                && evidence.cli_source == immutable_source_url(&line.revision, cli_path)
+                && evidence.model_sources
+                    == model_paths
+                        .iter()
+                        .map(|path| immutable_source_url(&line.revision, path))
+                        .collect::<Vec<_>>()
+                && evidence.handler_source == immutable_source_url(&line.revision, handler_path)
+        })
+}
+
+fn expected_rendered_fields() -> BTreeSet<RenderedField> {
+    [
+        RenderedField::ContainerCommand,
+        RenderedField::ContainerEntrypoint,
+        RenderedField::ContainerUser,
+        RenderedField::ContainerWorkdir,
+        RenderedField::ContainerHostname,
+        RenderedField::ContainerLabel,
+        RenderedField::ContainerEnvironment,
+        RenderedField::ContainerRestartPolicy,
+        RenderedField::ContainerNamedVolumeMount,
+        RenderedField::PodInfraNamedVolumeMount,
+    ]
+    .into_iter()
+    .collect()
+}
+
+#[allow(clippy::too_many_lines)]
+fn expected_field_claim(
+    field: RenderedField,
+) -> (
+    RenderingOperationCategory,
+    Option<CliFlag>,
+    CliValueShape,
+    LibpodBodyMember,
+    &'static str,
+    &'static [&'static str],
+    &'static str,
+) {
+    const CONTAINER_MODEL: &[&str] = &["pkg/specgen/specgen.go"];
+    const CONTAINER_VOLUME_MODEL: &[&str] = &["pkg/specgen/specgen.go", "pkg/specgen/volumes.go"];
+    const POD_VOLUME_MODEL: &[&str] = &["pkg/specgen/podspecgen.go", "pkg/specgen/volumes.go"];
+    const CONTAINER_HANDLER: &str = "pkg/api/handlers/libpod/containers_create.go";
+    match field {
+        RenderedField::ContainerCommand => (
+            RenderingOperationCategory::ContainerCreate,
+            None,
+            CliValueShape::ArgumentArray,
+            LibpodBodyMember::Command,
+            "cmd/podman/containers/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerEntrypoint => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Entrypoint),
+            CliValueShape::ArgumentArray,
+            LibpodBodyMember::Entrypoint,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerUser => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::User),
+            CliValueShape::ContainerUser,
+            LibpodBodyMember::User,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerWorkdir => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Workdir),
+            CliValueShape::AbsoluteContainerPath,
+            LibpodBodyMember::WorkDir,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerHostname => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Hostname),
+            CliValueShape::Hostname,
+            LibpodBodyMember::Hostname,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerLabel => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Label),
+            CliValueShape::LabelAssignment,
+            LibpodBodyMember::Labels,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerEnvironment => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Environment),
+            CliValueShape::EnvironmentAssignment,
+            LibpodBodyMember::Env,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerRestartPolicy => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Restart),
+            CliValueShape::RestartPolicy,
+            LibpodBodyMember::RestartPolicy,
+            "cmd/podman/common/create.go",
+            CONTAINER_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::ContainerNamedVolumeMount => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Volume),
+            CliValueShape::NamedVolumeMount,
+            LibpodBodyMember::Volumes,
+            "cmd/podman/common/create.go",
+            CONTAINER_VOLUME_MODEL,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::PodInfraNamedVolumeMount => (
+            RenderingOperationCategory::PodCreate,
+            Some(CliFlag::Volume),
+            CliValueShape::NamedVolumeMount,
+            LibpodBodyMember::Volumes,
+            "cmd/podman/pods/create.go",
+            POD_VOLUME_MODEL,
+            "pkg/api/handlers/libpod/pods.go",
+        ),
+    }
 }
 
 fn rendering_source_paths(category: &str) -> Option<(&'static str, &'static str, Option<&'static str>)> {
@@ -720,7 +1135,6 @@ fn managed_image_sources(plan: &DeploymentPlan) -> BTreeMap<DeploymentResourceId
 
 fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
     match resource {
-        DeploymentResource::Pod(pod) if !pod.infra_mounts().is_empty() => vec!["infra_mounts"],
         DeploymentResource::Container(container) => {
             let mut fields = Vec::new();
             if container.pod().is_some() && !container.networks().is_empty() {
@@ -729,33 +1143,24 @@ fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
             if !container.secrets().is_empty() {
                 fields.push("secrets");
             }
-            if !container.mounts().is_empty() {
-                fields.push("mounts");
-            }
             let settings = container.settings();
-            if settings.command().is_some() {
-                fields.push("command");
+            if settings.environment().iter().any(|assignment| {
+                matches!(
+                    assignment.value(),
+                    crate::DeploymentEnvironmentValue::SensitiveInline(_)
+                )
+            }) {
+                fields.push("environment.sensitive_inline");
             }
-            if settings.entrypoint().is_some() {
-                fields.push("entrypoint");
+            if settings
+                .environment()
+                .iter()
+                .any(|assignment| matches!(assignment.value(), crate::DeploymentEnvironmentValue::External(_)))
+            {
+                fields.push("environment.external");
             }
-            if settings.user().is_some() {
-                fields.push("user");
-            }
-            if settings.workdir().is_some() {
-                fields.push("workdir");
-            }
-            if settings.hostname().is_some() {
-                fields.push("hostname");
-            }
-            if !settings.labels().is_empty() {
-                fields.push("labels");
-            }
-            if !settings.environment().is_empty() {
-                fields.push("environment");
-            }
-            if settings.restart_policy().is_some() {
-                fields.push("restart_policy");
+            if container.pod().is_some() && settings.restart_policy().is_some() {
+                fields.push("restart_policy.pod_member");
             }
             fields
         }
@@ -776,6 +1181,181 @@ fn network_configuration(networks: &[DeploymentResourceId]) -> Value {
         .map(|network| (network.name().to_owned(), Value::Object(Map::new())))
         .collect::<Map<String, Value>>();
     Value::Object(networks)
+}
+
+fn append_named_volume_arguments(arguments: &mut Vec<String>, mounts: &[NamedVolumeMount]) -> bool {
+    for mount in mounts {
+        if !cli_safe_mount_component(mount.source().name()) || !cli_safe_mount_component(mount.destination().as_str()) {
+            return false;
+        }
+        let access = if mount.is_read_only() { "ro" } else { "rw" };
+        let copy = match mount.copy_mode() {
+            crate::NamedVolumeCopyMode::Copy => "copy",
+            crate::NamedVolumeCopyMode::NoCopy => "nocopy",
+        };
+        arguments.push("--volume".to_owned());
+        arguments.push(format!(
+            "{}:{}:{access},{copy}",
+            mount.source().name(),
+            mount.destination().as_str()
+        ));
+    }
+    true
+}
+
+fn cli_safe_mount_component(value: &str) -> bool {
+    !value.contains([':', ','])
+}
+
+fn named_volume_json(mounts: &[NamedVolumeMount]) -> Value {
+    Value::Array(
+        mounts
+            .iter()
+            .map(|mount| {
+                let access = if mount.is_read_only() { "ro" } else { "rw" };
+                let copy = match mount.copy_mode() {
+                    crate::NamedVolumeCopyMode::Copy => "copy",
+                    crate::NamedVolumeCopyMode::NoCopy => "nocopy",
+                };
+                json!({
+                    "Name": mount.source().name(),
+                    "Dest": mount.destination().as_str(),
+                    "Options": [access, copy],
+                })
+            })
+            .collect(),
+    )
+}
+
+fn append_container_setting_arguments(
+    arguments: &mut Vec<String>,
+    container: &crate::ContainerIntent,
+    identity: &DeploymentResourceId,
+) -> Result<(), RenderingFinding> {
+    let settings = container.settings();
+    if let Some(entrypoint) = settings.entrypoint() {
+        let encoded = serde_json::to_string(entrypoint.values()).map_err(|_| {
+            RenderingFinding::new(
+                DiagnosticCode::RenderingUnsupported,
+                Some(identity.clone()),
+                Some("entrypoint"),
+            )
+        })?;
+        arguments.push("--entrypoint".to_owned());
+        arguments.push(encoded);
+    }
+    if let Some(user) = settings.user() {
+        arguments.push("--user".to_owned());
+        arguments.push(user.as_str().to_owned());
+    }
+    if let Some(workdir) = settings.workdir() {
+        arguments.push("--workdir".to_owned());
+        arguments.push(workdir.path().as_str().to_owned());
+    }
+    if let Some(hostname) = settings.hostname() {
+        arguments.push("--hostname".to_owned());
+        arguments.push(hostname.as_str().to_owned());
+    }
+    for label in settings.labels() {
+        arguments.push("--label".to_owned());
+        arguments.push(format!("{}={}", label.key().as_str(), label.value().as_str()));
+    }
+    for assignment in settings.environment() {
+        let crate::DeploymentEnvironmentValue::Public(value) = assignment.value() else {
+            return Err(RenderingFinding::new(
+                DiagnosticCode::RenderingUnsupported,
+                Some(identity.clone()),
+                Some("environment"),
+            ));
+        };
+        arguments.push("--env".to_owned());
+        arguments.push(format!("{}={}", assignment.name().as_str(), value.as_str()));
+    }
+    if let Some(restart) = settings.restart_policy() {
+        arguments.push("--restart".to_owned());
+        arguments.push(restart_policy_name(restart).to_owned());
+    }
+    Ok(())
+}
+
+fn append_container_setting_json(
+    body: &mut Map<String, Value>,
+    container: &crate::ContainerIntent,
+    identity: &DeploymentResourceId,
+) -> Result<(), RenderingFinding> {
+    let settings = container.settings();
+    if let Some(command) = settings.command() {
+        body.insert("command".to_owned(), string_array(command.values()));
+    }
+    if let Some(entrypoint) = settings.entrypoint() {
+        body.insert("entrypoint".to_owned(), string_array(entrypoint.values()));
+    }
+    if let Some(user) = settings.user() {
+        body.insert("user".to_owned(), Value::String(user.as_str().to_owned()));
+    }
+    if let Some(workdir) = settings.workdir() {
+        body.insert("work_dir".to_owned(), Value::String(workdir.path().as_str().to_owned()));
+    }
+    if let Some(hostname) = settings.hostname() {
+        body.insert("hostname".to_owned(), Value::String(hostname.as_str().to_owned()));
+    }
+    if !settings.labels().is_empty() {
+        body.insert(
+            "labels".to_owned(),
+            Value::Object(
+                settings
+                    .labels()
+                    .iter()
+                    .map(|label| {
+                        (
+                            label.key().as_str().to_owned(),
+                            Value::String(label.value().as_str().to_owned()),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    if !settings.environment().is_empty() {
+        let mut environment = Map::new();
+        for assignment in settings.environment() {
+            let crate::DeploymentEnvironmentValue::Public(value) = assignment.value() else {
+                return Err(RenderingFinding::new(
+                    DiagnosticCode::RenderingUnsupported,
+                    Some(identity.clone()),
+                    Some("environment"),
+                ));
+            };
+            environment.insert(
+                assignment.name().as_str().to_owned(),
+                Value::String(value.as_str().to_owned()),
+            );
+        }
+        body.insert("env".to_owned(), Value::Object(environment));
+    }
+    if let Some(restart) = settings.restart_policy() {
+        body.insert(
+            "restart_policy".to_owned(),
+            Value::String(restart_policy_name(restart).to_owned()),
+        );
+    }
+    if !container.mounts().is_empty() {
+        body.insert("volumes".to_owned(), named_volume_json(container.mounts()));
+    }
+    Ok(())
+}
+
+fn string_array(values: &[String]) -> Value {
+    Value::Array(values.iter().cloned().map(Value::String).collect())
+}
+
+fn restart_policy_name(policy: RestartPolicy) -> &'static str {
+    match policy {
+        RestartPolicy::No => "no",
+        RestartPolicy::OnFailure => "on-failure",
+        RestartPolicy::Always => "always",
+        RestartPolicy::UnlessStopped => "unless-stopped",
+    }
 }
 
 fn percent_encode(value: &str) -> String {
@@ -807,7 +1387,17 @@ fn resource_kind_name(kind: ResourceKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use super::{RENDERING_CATALOGUE_JSON, parse_renderer_catalogue};
+
+    fn decoded_catalogue() -> serde_json::Value {
+        serde_json::from_str(RENDERING_CATALOGUE_JSON).expect("embedded catalogue JSON")
+    }
+
+    fn encoded_catalogue(value: &serde_json::Value) -> String {
+        serde_json::to_string(value).expect("catalogue JSON")
+    }
 
     #[test]
     fn renderer_catalogue_rejects_invalid_operation_evidence_revisions_and_noncanonical_versions() {
@@ -835,5 +1425,93 @@ mod tests {
         let build_metadata =
             RENDERING_CATALOGUE_JSON.replacen("\"version\": \"5.4.0\"", "\"version\": \"5.4.0+build\"", 1);
         assert!(parse_renderer_catalogue(&build_metadata).is_err());
+    }
+
+    #[test]
+    fn renderer_catalogue_requires_the_complete_strict_field_matrix() {
+        let mut missing = decoded_catalogue();
+        missing["reviewed_lines"][0]["field_evidence"]
+            .as_array_mut()
+            .expect("field evidence")
+            .pop();
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing)).is_err());
+
+        let mut duplicate = decoded_catalogue();
+        let fields = duplicate["reviewed_lines"][0]["field_evidence"]
+            .as_array_mut()
+            .expect("field evidence");
+        fields.push(fields[0].clone());
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&duplicate)).is_err());
+
+        let mut wrong_operation = decoded_catalogue();
+        wrong_operation["reviewed_lines"][0]["field_evidence"][0]["operation"] = serde_json::json!("pod-create");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_operation)).is_err());
+
+        let mut wrong_claim = decoded_catalogue();
+        wrong_claim["reviewed_lines"][0]["field_evidence"][1]["cli"]["flag"] = serde_json::json!("--label");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_claim)).is_err());
+
+        let mut wrong_shape = decoded_catalogue();
+        wrong_shape["reviewed_lines"][0]["field_evidence"][1]["cli"]["value_shape"] = serde_json::json!("hostname");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_shape)).is_err());
+
+        let mut wrong_member = decoded_catalogue();
+        wrong_member["reviewed_lines"][0]["field_evidence"][1]["libpod"]["json_member"] = serde_json::json!("hostname");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_member)).is_err());
+    }
+
+    #[test]
+    fn renderer_catalogue_rejects_nonimmutable_field_evidence_and_capability_substitutions() {
+        let mut wrong_source = decoded_catalogue();
+        wrong_source["reviewed_lines"][0]["field_evidence"][0]["cli_source"] =
+            serde_json::json!("https://github.com/containers/podman/blob/main/cmd/podman/containers/create.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_source)).is_err());
+
+        let mut wrong_model = decoded_catalogue();
+        wrong_model["reviewed_lines"][0]["field_evidence"][8]["model_sources"][1] = serde_json::json!(
+            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/not-volumes.go"
+        );
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_model)).is_err());
+
+        let mut wrong_handler = decoded_catalogue();
+        wrong_handler["reviewed_lines"][0]["field_evidence"][9]["handler_source"] = serde_json::json!(
+            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+        );
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_handler)).is_err());
+
+        let mut missing_line = decoded_catalogue();
+        missing_line["reviewed_lines"]
+            .as_array_mut()
+            .expect("reviewed lines")
+            .remove(0);
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing_line)).is_err());
+
+        let mut substituted_line = decoded_catalogue();
+        let lines = substituted_line["reviewed_lines"]
+            .as_array_mut()
+            .expect("reviewed lines");
+        lines[0] = lines[1].clone();
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&substituted_line)).is_err());
+    }
+
+    #[test]
+    fn renderer_catalogue_rejects_unknown_and_duplicate_json_keys() {
+        let unknown = RENDERING_CATALOGUE_JSON.replacen(
+            "\"schema_version\": 3,",
+            "\"schema_version\": 3, \"unexpected\": true,",
+            1,
+        );
+        assert!(parse_renderer_catalogue(&unknown).is_err());
+
+        let duplicate_root = RENDERING_CATALOGUE_JSON.replacen(
+            "\"schema_version\": 3,",
+            "\"schema_version\": 3, \"schema_version\": 3,",
+            1,
+        );
+        assert!(parse_renderer_catalogue(&duplicate_root).is_err());
+
+        let duplicate_nested =
+            RENDERING_CATALOGUE_JSON.replacen("\"flag\": null,", "\"flag\": null, \"flag\": null,", 1);
+        assert!(parse_renderer_catalogue(&duplicate_nested).is_err());
     }
 }

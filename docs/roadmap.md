@@ -141,12 +141,17 @@ remain external; only a redacted external material reference is available to M6.
       workdir, hostname, labels, environment, and restart-policy intent. Preserve order where it
       is semantic, redact sensitive environment values, and reject every populated unrendered
       field with `PLN0046`.
+- [x] M6-B1b: Render command, entrypoint, user, workdir, unpodded hostname, explicitly public
+      labels and environment values, restart policy, and named-volume mounts exactly to CLI and
+      Libpod forms for every reviewed release. Require the v3 per-field source matrix before
+      rendering, reject ambiguous mount CLI spellings, and keep sensitive environment variants
+      redacted as all-or-nothing `PLN0046` outcomes.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.
 - [ ] Cover pods, containers, networks, named volumes, images, and secrets in dependency order.
 - [ ] Preserve explicit pod membership and validate unpodded output intent.
-- [ ] Add evidence-backed renderings for typed mounts and container settings.
+- [ ] Add evidence-backed renderings for remaining mount and container settings.
 - [ ] Cover ports, health, security, namespace, logging, bind/tmpfs mounts, and resource settings.
 - [ ] Add positive and negative tests for every supported value and version boundary.
 - [ ] Emit structured outcomes for every approximation, omission, and manual action.

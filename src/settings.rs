@@ -18,19 +18,20 @@ const MAX_PATH_BYTES: usize = 4096;
 pub struct ArgumentArray(Vec<String>);
 
 impl ArgumentArray {
-    /// Creates a validated argument array. Empty arrays and empty individual arguments are valid.
+    /// Creates a validated nonempty argument array. Empty individual arguments are valid.
     ///
     /// # Errors
     ///
-    /// Returns `PLN0034` for more than 128 arguments or arguments containing controls or exceeding
-    /// 4096 bytes.
+    /// Returns `PLN0034` for an empty array, more than 128 arguments, or arguments containing
+    /// controls or exceeding 4096 bytes.
     pub fn new<I, S>(arguments: I) -> PodmanLensResult<Self>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
         let arguments = arguments.into_iter().map(Into::into).collect::<Vec<String>>();
-        if arguments.len() > MAX_ARGUMENTS
+        if arguments.is_empty()
+            || arguments.len() > MAX_ARGUMENTS
             || arguments
                 .iter()
                 .any(|argument| !valid_non_control(argument, MAX_ARGUMENT_BYTES))

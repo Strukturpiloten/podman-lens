@@ -43,6 +43,7 @@ fn typed_setting_scalars_validate_values_and_reject_conflicts() {
         ["program", ""]
     );
     for arguments in [
+        Vec::new(),
         vec!["bad\nargument".to_owned()],
         vec!["a".repeat(4097)],
         vec!["argument".to_owned(); 129],
@@ -128,6 +129,34 @@ fn typed_setting_scalars_validate_values_and_reject_conflicts() {
             assert_eq!(settings.restart_policy(), Some(policy));
         }
     }
+}
+
+#[test]
+fn pod_members_reject_explicit_hostname_before_rendering() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/web:1");
+    let pod = id(ResourceKind::Pod, "application");
+    let container = id(ResourceKind::Container, "web");
+    let mut pod_intent = PodIntent::new(pod.clone()).expect("pod");
+    pod_intent.add_member(container.clone()).expect("member");
+    let mut container_intent = ContainerIntent::new(container.clone(), image.clone()).expect("container");
+    container_intent.set_pod(pod).expect("pod assignment");
+    container_intent
+        .settings_mut()
+        .set_hostname(ContainerHostname::new("web.example").expect("hostname"))
+        .expect("hostname");
+    let mut intent = DeploymentIntent::new(target("6.1.0"));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/web:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Pod(pod_intent));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let outcome = plan_deployment(&intent);
+    assert!(outcome.plan().is_none());
+    assert!(outcome.findings().iter().any(|finding| {
+        finding.code().as_str() == "PLN0038"
+            && finding.subject() == Some(&container)
+            && finding.field() == Some("hostname")
+    }));
 }
 
 #[test]

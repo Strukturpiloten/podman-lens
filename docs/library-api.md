@@ -105,16 +105,17 @@ names the Podman infra-container scope: it does not add the mount to each member
 and environment assignments retain declaration order and reject duplicate keys;
 `SensitiveInlineEnvironmentValue` and external environment references redact their value in `Debug`.
 `PublicLabelValue` and `PublicEnvironmentValue` make caller declassification explicit; do not
-construct them from observed runtime values. These values are semantic-only in M6-B1a: rendering a plan that contains one produces `PLN0046` for
-its field instead of silently dropping it.
+construct them from observed runtime values. M6-B1b renders these explicitly public values exactly;
+`SensitiveInlineEnvironmentValue` and external environment references instead cause a redacted,
+all-or-nothing `PLN0046` outcome and never expose an environment name, value, or reference.
 
 `DeploymentRendering::shell_script` is generated solely from those argument arrays, requires
 explicit secret file paths, and safely names every external prerequisite in a review comment.
-Rendering accepts only an identical engine/API version listed in its committed per-operation renderer
-evidence. Pod networks, pod membership, and unpodded-container networks are exact. Typed container
-and infra-container mounts and container settings are rejected with `PLN0046` until their renderer
-evidence lands; secret attachments remain unmodelled because their target and option semantics are
-not yet retained.
+Rendering accepts only an identical engine/API version listed in its committed v3 renderer evidence.
+Each reviewed line carries exact CLI, model, and handler provenance for every rendered setting.
+Pod networks, pod membership, unpodded-container networks, typed named-volume mounts, and the
+bounded public container settings are exact. Secret attachments remain unmodelled because their
+target and option semantics are not yet retained.
 
 `PlanningFinding::occurrence` is a one-based list position for a duplicate prerequisite or
 startup edge. Grouped duplicate or conflicting resource declarations have no single position;

@@ -7,9 +7,9 @@ use podman_lens::{
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
     DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, Label, LabelKey,
     NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
-    PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, SecretIntent,
-    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent, artifact::deployment_v1,
-    plan_deployment, render_deployment,
+    PublicEnvironmentValue, PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy,
+    SecretIntent, SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent,
+    artifact::deployment_v1, plan_deployment, render_deployment,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -109,6 +109,132 @@ fn external_precondition_plan() -> podman_lens::DeploymentPlan {
     plan_deployment(&intent).plan().cloned().expect("semantic plan")
 }
 
+fn core_settings_plan(version: &str) -> podman_lens::DeploymentPlan {
+    core_settings_plan_with_restart(version, RestartPolicy::No)
+}
+
+fn core_settings_plan_with_restart(version: &str, restart_policy: RestartPolicy) -> podman_lens::DeploymentPlan {
+    let volume = id(ResourceKind::Volume, "application-data");
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let pod = id(ResourceKind::Pod, "infra-pod");
+    let container = id(ResourceKind::Container, "application");
+    let mut pod_intent = PodIntent::new(pod).expect("pod");
+    pod_intent.add_infra_mount(
+        NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/var/lib/infra").expect("destination"),
+            true,
+            NamedVolumeCopyMode::NoCopy,
+        )
+        .expect("infra mount"),
+    );
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent.add_mount(
+        NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/var/lib/application").expect("destination"),
+            false,
+            NamedVolumeCopyMode::Copy,
+        )
+        .expect("mount"),
+    );
+    let settings = container_intent.settings_mut();
+    settings
+        .set_command(ArgumentArray::new(["serve", "--foreground"]).expect("command"))
+        .expect("command");
+    settings
+        .set_entrypoint(ArgumentArray::new(["/init", "--safe"]).expect("entrypoint"))
+        .expect("entrypoint");
+    settings
+        .set_user(ContainerUser::new("1000:1000").expect("user"))
+        .expect("user");
+    settings
+        .set_workdir(ContainerWorkdir::new(
+            AbsoluteContainerPath::new("/srv/application").expect("workdir"),
+        ))
+        .expect("workdir");
+    settings
+        .set_hostname(ContainerHostname::new("application.example").expect("hostname"))
+        .expect("hostname");
+    for (key, value) in [("org.example.role", "web"), ("org.example.tier", "frontend")] {
+        settings
+            .add_label(Label::new(
+                LabelKey::new(key).expect("label key"),
+                PublicLabelValue::new(value).expect("public label value"),
+            ))
+            .expect("label");
+    }
+    for (name, value) in [("MODE", "production"), ("LOG_LEVEL", "info")] {
+        settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new(name).expect("environment name"),
+                DeploymentEnvironmentValue::Public(PublicEnvironmentValue::new(value).expect("public value")),
+            ))
+            .expect("environment");
+    }
+    settings.set_restart_policy(restart_policy).expect("restart policy");
+    let mut intent = DeploymentIntent::new(target(version, version));
+    intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Pod(pod_intent));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    plan_deployment(&intent).plan().cloned().expect("semantic plan")
+}
+
+#[test]
+fn renderer_reports_one_pod_member_restart_boundary() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let pod = id(ResourceKind::Pod, "application");
+    let container = id(ResourceKind::Container, "application");
+    let mut pod_intent = PodIntent::new(pod.clone()).expect("pod");
+    pod_intent.add_member(container.clone()).expect("member");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent.set_pod(pod).expect("pod assignment");
+    container_intent
+        .settings_mut()
+        .set_restart_policy(RestartPolicy::Always)
+        .expect("restart policy");
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Pod(pod_intent));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    assert_eq!(outcome.findings()[0].field(), Some("restart_policy.pod_member"));
+}
+
+#[test]
+fn renderer_rejects_cli_ambiguous_named_volume_spelling_without_partial_output() {
+    let volume = id(ResourceKind::Volume, "data:ambiguous");
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let container = id(ResourceKind::Container, "application");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent.add_mount(
+        NamedVolumeMount::new(
+            volume.clone(),
+            AbsoluteContainerPath::new("/var/lib/application").expect("destination"),
+            false,
+            NamedVolumeCopyMode::Copy,
+        )
+        .expect("mount"),
+    );
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    intent.add_resource(DeploymentResource::Volume(VolumeIntent::new(volume).expect("volume")));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    assert_eq!(outcome.findings()[0].field(), Some("mounts.cli_ambiguous"));
+}
+
 #[test]
 fn reviewed_versions_render_the_complete_m5_surface_deterministically() {
     for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
@@ -186,6 +312,139 @@ fn reviewed_versions_render_the_complete_m5_surface_deterministically() {
                 "pod": "pod-one"
             }))
         );
+    }
+}
+
+#[test]
+fn reviewed_versions_render_every_core_setting_exactly_and_in_declaration_order() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let rendering = render_deployment(&core_settings_plan(version))
+            .rendering()
+            .cloned()
+            .expect("exact rendering");
+        assert_eq!(rendering.status(), RenderStatus::Exact);
+        let pod = rendering
+            .operations()
+            .iter()
+            .find(|operation| operation.cli().argv().windows(2).any(|args| args == ["pod", "create"]))
+            .expect("pod create");
+        assert!(
+            pod.cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["--volume", "application-data:/var/lib/infra:ro,nocopy"])
+        );
+        assert_eq!(
+            pod.libpod().body(),
+            &RenderedHttpBody::Json(serde_json::json!({
+                "name": "infra-pod",
+                "networks": {},
+                "volumes": [{"Name": "application-data", "Dest": "/var/lib/infra", "Options": ["ro", "nocopy"]}],
+            }))
+        );
+        let container = rendering
+            .operations()
+            .iter()
+            .find(|operation| {
+                operation
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|args| args == ["container", "create"])
+            })
+            .expect("container create");
+        let arguments = container.cli().argv();
+        let image_index = arguments
+            .iter()
+            .position(|argument| argument == "registry.example.invalid/app:1")
+            .expect("image");
+        assert!(arguments[..image_index].contains(&"--entrypoint".to_owned()));
+        assert_eq!(&arguments[image_index + 1..], ["serve", "--foreground"]);
+        for pair in [
+            ["--entrypoint", r#"["/init","--safe"]"#],
+            ["--user", "1000:1000"],
+            ["--workdir", "/srv/application"],
+            ["--hostname", "application.example"],
+            ["--label", "org.example.role=web"],
+            ["--label", "org.example.tier=frontend"],
+            ["--env", "MODE=production"],
+            ["--env", "LOG_LEVEL=info"],
+            ["--restart", "no"],
+            ["--volume", "application-data:/var/lib/application:rw,copy"],
+        ] {
+            assert!(arguments.windows(2).any(|actual| actual == pair), "missing {pair:?}");
+        }
+        assert_eq!(
+            container.libpod().body(),
+            &RenderedHttpBody::Json(serde_json::json!({
+                "image": "registry.example.invalid/app:1",
+                "networks": {},
+                "command": ["serve", "--foreground"],
+                "entrypoint": ["/init", "--safe"],
+                "user": "1000:1000",
+                "work_dir": "/srv/application",
+                "hostname": "application.example",
+                "labels": {"org.example.role": "web", "org.example.tier": "frontend"},
+                "env": {"MODE": "production", "LOG_LEVEL": "info"},
+                "restart_policy": "no",
+                "volumes": [{"Name": "application-data", "Dest": "/var/lib/application", "Options": ["rw", "copy"]}],
+            }))
+        );
+        let artifact = serde_json::to_string(&deployment_v1::deployment(&rendering)).expect("artifact JSON");
+        let script = rendering.shell_script();
+        for public_value in [
+            "production",
+            "application.example",
+            "application-data:/var/lib/application:rw,copy",
+        ] {
+            assert!(artifact.contains(public_value));
+            assert!(script.contains(public_value));
+        }
+    }
+}
+
+#[test]
+fn every_restart_policy_has_exact_cli_and_libpod_forms_for_every_reviewed_target() {
+    let policies = [
+        (RestartPolicy::No, "no"),
+        (RestartPolicy::OnFailure, "on-failure"),
+        (RestartPolicy::Always, "always"),
+        (RestartPolicy::UnlessStopped, "unless-stopped"),
+    ];
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        for (policy, expected) in policies {
+            let rendering = render_deployment(&core_settings_plan_with_restart(version, policy))
+                .rendering()
+                .cloned()
+                .expect("exact rendering");
+            let container = rendering
+                .operations()
+                .iter()
+                .find(|operation| {
+                    operation
+                        .cli()
+                        .argv()
+                        .windows(2)
+                        .any(|arguments| arguments == ["container", "create"])
+                })
+                .expect("container create");
+            assert!(
+                container
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|arguments| arguments == ["--restart", expected]),
+                "missing {expected:?} CLI restart policy for Podman {version}"
+            );
+            assert!(matches!(container.libpod().body(), RenderedHttpBody::Json(_)));
+            if let RenderedHttpBody::Json(body) = container.libpod().body() {
+                assert_eq!(
+                    body["restart_policy"],
+                    serde_json::Value::String(expected.to_owned()),
+                    "missing {expected:?} Libpod restart policy for Podman {version}"
+                );
+            }
+        }
     }
 }
 
@@ -518,7 +777,7 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
 }
 
 #[test]
-fn renderer_reports_every_unrepresentable_topology_field_without_partial_output() {
+fn renderer_rejects_unmodelled_secret_attachments_without_partial_output() {
     let volume = id(ResourceKind::Volume, "data");
     let secret = id(ResourceKind::Secret, "credential");
     let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
@@ -557,16 +816,12 @@ fn renderer_reports_every_unrepresentable_topology_field_without_partial_output(
                 finding.field()
             ))
             .collect::<Vec<_>>(),
-        vec![
-            ("PLN0046", "container", Some("mounts")),
-            ("PLN0046", "container", Some("secrets")),
-            ("PLN0046", "pod", Some("infra_mounts")),
-        ]
+        vec![("PLN0046", "container", Some("secrets"))]
     );
 }
 
 #[test]
-fn renderer_rejects_each_unrendered_container_setting_without_leaking_sensitive_values() {
+fn renderer_rejects_sensitive_environment_values_without_leaking_names_or_values() {
     let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
     let container = id(ResourceKind::Container, "container");
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
@@ -605,6 +860,14 @@ fn renderer_rejects_each_unrendered_container_setting_without_leaking_sensitive_
             ))
             .expect("environment");
         settings
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("SECOND_PASSWORD").expect("environment name"),
+                DeploymentEnvironmentValue::SensitiveInline(
+                    SensitiveInlineEnvironmentValue::new("another-sensitive-value").expect("sensitive value"),
+                ),
+            ))
+            .expect("environment");
+        settings
             .set_restart_policy(RestartPolicy::UnlessStopped)
             .expect("restart policy");
     }
@@ -623,19 +886,39 @@ fn renderer_rejects_each_unrendered_container_setting_without_leaking_sensitive_
             .iter()
             .map(podman_lens::RenderingFinding::field)
             .collect::<Vec<_>>(),
-        vec![
-            Some("command"),
-            Some("entrypoint"),
-            Some("environment"),
-            Some("hostname"),
-            Some("labels"),
-            Some("restart_policy"),
-            Some("user"),
-            Some("workdir"),
-        ]
+        vec![Some("environment.sensitive_inline"),]
     );
     let debug = format!("{outcome:?}");
     assert!(!debug.contains(sensitive_sentinel));
+    assert!(!debug.contains("PASSWORD"));
+}
+
+#[test]
+fn renderer_rejects_external_environment_values_without_leaking_names_or_references() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let container = id(ResourceKind::Container, "container");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent
+        .settings_mut()
+        .add_environment(EnvironmentAssignment::new(
+            EnvironmentName::new("TOKEN_FILE").expect("environment name"),
+            DeploymentEnvironmentValue::External(
+                SensitiveInputReference::new("vault/external-token").expect("external reference"),
+            ),
+        ))
+        .expect("environment");
+    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/app:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    assert_eq!(outcome.findings()[0].field(), Some("environment.external"));
+    let debug = format!("{outcome:?}");
+    assert!(!debug.contains("TOKEN_FILE"));
+    assert!(!debug.contains("vault/external-token"));
 }
 
 #[test]
@@ -748,7 +1031,7 @@ fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result
 fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Result<(), Box<dyn std::error::Error>> {
     let evidence: serde_json::Value =
         serde_json::from_str(include_str!("../catalogue/v1/podman-deployment-rendering.json"))?;
-    assert_eq!(evidence["schema_version"], 2);
+    assert_eq!(evidence["schema_version"], 3);
     let lines = evidence["reviewed_lines"].as_array().expect("lines");
     assert_eq!(lines.len(), 7);
     assert_eq!(
@@ -766,7 +1049,9 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
     for line in lines {
         let revision = line["revision"].as_str().expect("revision");
         let operations = line["operations"].as_array().expect("operations");
+        let fields = line["field_evidence"].as_array().expect("field evidence");
         assert_eq!(operations.len(), 8);
+        assert_eq!(fields.len(), 10);
         for operation in operations {
             for source in ["cli_source", "libpod_endpoint_source"] {
                 assert!(
@@ -784,6 +1069,19 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
             } else {
                 assert!(operation["body_source"].is_null(), "body source must be a URL or null");
             }
+        }
+        for field in fields {
+            for source in ["cli_source", "handler_source"] {
+                assert!(
+                    field[source].as_str().is_some_and(|source| source.contains(revision)),
+                    "{source} must use the immutable release revision"
+                );
+            }
+            assert!(field["model_sources"].as_array().is_some_and(|sources| {
+                sources
+                    .iter()
+                    .all(|source| source.as_str().is_some_and(|source| source.contains(revision)))
+            }));
         }
     }
     Ok(())

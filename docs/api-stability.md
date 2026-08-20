@@ -60,9 +60,13 @@ policy. Sensitive inline environment values and external input references redact
 declared values use `PublicLabelValue`, `PublicEnvironmentValue`, and
 `DeploymentEnvironmentValue::Public`, making caller declassification explicit; no conversion from
 observed sensitive values is provided. These
-settings deliberately have no rendering promise yet: `render_deployment` returns `PLN0046` for each
-populated unrendered field. Bind/tmpfs mounts, ports, health checks, logging, security, namespace,
-and secret attachment targets remain later M6 contracts.
+M6-B1b makes the bounded public subset exact across the reviewed releases: command follows the
+image; entrypoint uses a JSON-array CLI flag; public labels and environment values retain declared
+CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v3 catalogue
+requires revision-pinned CLI, model, and handler evidence for every emitted field. Inline and
+external environment variants remain all-or-nothing redacted `PLN0046` outcomes. Pod-member
+hostnames fail planning and pod-member restart policies remain `PLN0046`; bind/tmpfs mounts, ports,
+health checks, logging, security, namespace, and secret attachment targets remain later M6 contracts.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

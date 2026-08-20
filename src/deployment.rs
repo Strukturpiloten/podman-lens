@@ -872,9 +872,12 @@ impl DeploymentPlan {
 
 /// Validates explicit typed intent and returns its deterministic semantic deployment plan.
 ///
-/// The plan never contains a shell fragment, HTTP request, secret payload, or environment value.
-/// Every operation is ordered after its declared prerequisites. M6 will render the same operations
-/// as exact CLI arguments and Libpod API requests.
+/// The plan never contains a shell fragment, HTTP request, or secret payload. It may retain typed
+/// caller-declared public and sensitive environment intent so a later renderer can make an explicit
+/// output decision. Sensitive values and references remain redacted from diagnostics, `Debug`,
+/// observational snapshots, and serialized deployment artifacts; renderers must block them until a
+/// safe output representation is available. Every operation is ordered after its declared
+/// prerequisites. M6 renders supported operations as exact CLI arguments and Libpod API requests.
 ///
 /// # Findings
 ///
@@ -1073,6 +1076,13 @@ fn validate_container(
         findings,
     );
     if let Some(pod) = container.pod() {
+        if container.settings().hostname().is_some() {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("hostname"),
+            ));
+        }
         if !container.networks().is_empty() {
             findings.push(PlanningFinding::new(
                 DiagnosticCode::DeploymentUnsupportedCombination,

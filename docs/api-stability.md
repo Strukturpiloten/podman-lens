@@ -11,17 +11,20 @@ boundary reviewable; adding one is a deliberate public API change. Evolving nati
 such as `ResourceKind`, observation states, graph evidence, and diagnostics, are
 `#[non_exhaustive]` so callers retain a forward-compatible fallback branch.
 
-M2 introduced the read-only `acquire_inventory` boundary,
-`AcquisitionOptions`, and redacted typed inventory records. Its wire decoder and Libpod JSON types
-remain private. The inventory carries all six fixed sections, per-section availability, partial
-records for non-atomic races, labels, relationships, source/version evidence, field-path and JSON
-kind metadata for unsupported fields, and structured findings. `SensitiveEnvironmentValue` may be
-used only through its callback accessor; it does not serialize or print its plaintext value.
+M7-A resets the unreleased input model directly to `ResourceObservation`, `ObservationHeader`,
+`ResourceDetails`, `ObservationField`, and `ObservedValue`. Its wire decoder and Libpod JSON types
+remain private. The inventory carries all six fixed sections, typed section availability,
+resource-acquisition state, source/version evidence, bounded semantic unmodelled metadata, and
+structured findings. `ObservationField` prevents an unavailable, malformed, or inapplicable native
+fact from appearing as an empty configuration value; `ObservedValue` distinguishes configured,
+effective, runtime-assigned, and local-resolution facts. `SensitiveEnvironmentValue` may be used
+only through its callback accessor; it does not serialize or print its plaintext value.
 `native_field_coverage_catalogue()` exposes the strict, packaged two-plane coverage ledger. Its
 rows name their input observation or output intent plane, planner, distinct CLI and Libpod renderer
 where applicable, reviewed target versions, public access point, diagnostic, and focused tests.
-`ResourceRecord::unknown_fields_complete()` prevents callers from treating bounded unknown metadata
-as exhaustive after `PLN0021` or a partial inspection.
+`ObservationHeader::unmodelled_completeness()` prevents callers from treating bounded metadata as
+exhaustive after `PLN0021` or an incomplete observation. The old generic record projection has no
+alias or deprecation period because this is a pre-release API.
 
 The packaged ledger currently contains 38 input-observation rows and 50 output-intent rows. M6-B4
 extends the latter beyond container runtime settings to container mounts and secret grants, volume
@@ -43,7 +46,8 @@ M4 stabilizes `acquire_inventory`, `discover`, the documented inventory/graph ac
 diagnostic/evidence values as the native input contract. Private Libpod decoder DTOs and response
 shapes are not public API. `snapshot::v1` is a separate serialization-only schema contract with an
 exact committed Draft 2020-12 schema. It has no deserialization API. An incompatible snapshot
-shape requires a new versioned module and schema; compatible additions must still preserve the
+shape requires a new versioned module and schema after the first release. Before that release,
+M7-A resets `snapshot::v1` in place with the typed observation contract. Every shape preserves the
 always-redacted boundary recorded in ADR 0008. These contracts intentionally do not promise SSH or
 TLS transport implementations or deployment plans.
 

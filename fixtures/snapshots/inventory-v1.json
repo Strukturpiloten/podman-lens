@@ -9,411 +9,549 @@
   "sections": [
     {
       "kind": "container",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
-            "kind": "container",
-            "id": "container-a",
-            "name": "a"
-          },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [
-            {
-              "kind": "image",
-              "target_id": "sha256:abc",
-              "field_path": "$.Image"
-            },
-            {
-              "kind": "image",
-              "target_id": "sha256:abc",
-              "field_path": "$.ImageName"
-            },
-            {
-              "kind": "pod",
-              "target_id": "pod-1",
-              "field_path": "$.Pod"
-            },
-            {
-              "kind": "network",
-              "target_id": "app",
-              "field_path": "$.NetworkSettings.Networks.app"
-            },
-            {
-              "kind": "volume",
-              "target_id": "database-data",
-              "field_path": "$.Mounts[0].Name"
-            },
-            {
+          "header": {
+            "identity": {
               "kind": "container",
-              "target_id": "container-z",
-              "field_path": "$.Dependencies[0]"
+              "id": "container-a",
+              "name": "a"
             },
-            {
-              "kind": "secret",
-              "target_id": "secret-1",
-              "field_path": "$.Config.Secrets[0].ID"
-            },
-            {
-              "kind": "secret",
-              "target_id": "db-password",
-              "field_path": "$.Config.Secrets[0].Name"
-            }
-          ],
-          "environment": [
-            {
-              "name": "A",
-              "value_state": "redacted"
-            },
-            {
-              "name": "A",
-              "value_state": "redacted"
-            }
-          ],
-          "image_aliases": [],
-          "network": null,
-          "memory_swappiness": 10,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [
-            {
-              "path": "$.FutureField",
-              "json_kind": "number",
-              "resource": {
-                "kind": "container",
-                "id": "container-a",
-                "name": "a"
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [
+              {
+                "id": "podman.native.container.top-level",
+                "path": "$.FutureField",
+                "json_kind": "number",
+                "resource": {
+                  "kind": "container",
+                  "id": "container-a",
+                  "name": "a"
+                },
+                "evidence": {
+                  "engine_version": "6.1.0",
+                  "api_version": "6.1.0",
+                  "podman_minor_line": "6.1",
+                  "minimum_podman_version": "6.1.0",
+                  "maximum_exclusive_podman_version": "6.2.0",
+                  "minimum_libpod_api_version": "4.0.0",
+                  "observed_podman_version": "6.1.0",
+                  "observed_libpod_api_version": "6.1.0",
+                  "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+                  "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+                  "evidence_release_tag": "v6.1.0"
+                }
               },
-              "evidence": {
-                "engine_version": "6.1.0",
-                "api_version": "6.1.0",
-                "podman_minor_line": "6.1",
-                "minimum_podman_version": "6.1.0",
-                "maximum_exclusive_podman_version": "6.2.0",
-                "minimum_libpod_api_version": "4.0.0",
-                "observed_podman_version": "6.1.0",
-                "observed_libpod_api_version": "6.1.0",
-                "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-                "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-                "evidence_release_tag": "v6.1.0"
+              {
+                "id": "podman.native.container.config",
+                "path": "$.Config.FutureConfig",
+                "json_kind": "boolean",
+                "resource": {
+                  "kind": "container",
+                  "id": "container-a",
+                  "name": "a"
+                },
+                "evidence": {
+                  "engine_version": "6.1.0",
+                  "api_version": "6.1.0",
+                  "podman_minor_line": "6.1",
+                  "minimum_podman_version": "6.1.0",
+                  "maximum_exclusive_podman_version": "6.2.0",
+                  "minimum_libpod_api_version": "4.0.0",
+                  "observed_podman_version": "6.1.0",
+                  "observed_libpod_api_version": "6.1.0",
+                  "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+                  "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+                  "evidence_release_tag": "v6.1.0"
+                }
               }
-            },
-            {
-              "path": "$.Config.FutureConfig",
-              "json_kind": "boolean",
-              "resource": {
-                "kind": "container",
-                "id": "container-a",
-                "name": "a"
+            ],
+            "findings": [
+              {
+                "code": "PLN0023",
+                "resource": {
+                  "kind": "container",
+                  "id": "container-a",
+                  "name": "a"
+                },
+                "field_path": "$.FutureField",
+                "occurrence": null
               },
-              "evidence": {
-                "engine_version": "6.1.0",
-                "api_version": "6.1.0",
-                "podman_minor_line": "6.1",
-                "minimum_podman_version": "6.1.0",
-                "maximum_exclusive_podman_version": "6.2.0",
-                "minimum_libpod_api_version": "4.0.0",
-                "observed_podman_version": "6.1.0",
-                "observed_libpod_api_version": "6.1.0",
-                "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-                "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-                "evidence_release_tag": "v6.1.0"
+              {
+                "code": "PLN0023",
+                "resource": {
+                  "kind": "container",
+                  "id": "container-a",
+                  "name": "a"
+                },
+                "field_path": "$.Config.FutureConfig",
+                "occurrence": null
               }
+            ],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
             }
-          ],
-          "findings": [
-            {
-              "code": "PLN0023",
-              "resource": {
-                "kind": "container",
-                "id": "container-a",
-                "name": "a"
-              },
-              "field_path": "$.FutureField",
-              "occurrence": null
+          },
+          "details": {
+            "kind": "container",
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
             },
-            {
-              "code": "PLN0023",
-              "resource": {
-                "kind": "container",
-                "id": "container-a",
-                "name": "a"
-              },
-              "field_path": "$.Config.FutureConfig",
-              "occurrence": null
-            }
-          ],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+            "configured_image": {
+              "state": "observed",
+              "origin": "configured"
+            },
+            "local_image_id": {
+              "state": "observed",
+              "origin": "local_resolution"
+            },
+            "relationships": {
+              "state": "observed",
+              "origin": "effective",
+              "count": 6
+            },
+            "environment": {
+              "state": "observed",
+              "origin": "effective",
+              "entries": [
+                {
+                  "name": "A",
+                  "value_state": "redacted"
+                },
+                {
+                  "name": "A",
+                  "value_state": "redacted"
+                }
+              ]
+            },
+            "image_aliases": null,
+            "network": null,
+            "memory_swappiness": {
+              "state": "observed",
+              "origin": "effective"
+            },
+            "infra": {
+              "state": "absent",
+              "origin": null
+            },
+            "secret_driver": null,
+            "volume_uid": null,
+            "volume_gid": null
           }
         },
         {
-          "identity": {
-            "kind": "container",
-            "id": "container-z",
-            "name": "z"
+          "header": {
+            "identity": {
+              "kind": "container",
+              "id": "container-z",
+              "name": "z"
+            },
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
+            }
           },
-          "observation_state": "complete",
-          "label_count": 0,
-          "relationships": [],
-          "environment": [],
-          "image_aliases": [],
-          "network": null,
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [],
-          "findings": [],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+          "details": {
+            "kind": "container",
+            "labels": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "configured_image": {
+              "state": "absent",
+              "origin": null
+            },
+            "local_image_id": {
+              "state": "absent",
+              "origin": null
+            },
+            "relationships": {
+              "state": "absent",
+              "origin": null,
+              "count": 0
+            },
+            "environment": {
+              "state": "absent",
+              "origin": null,
+              "entries": []
+            },
+            "image_aliases": null,
+            "network": null,
+            "memory_swappiness": {
+              "state": "absent",
+              "origin": null
+            },
+            "infra": {
+              "state": "absent",
+              "origin": null
+            },
+            "secret_driver": null,
+            "volume_uid": null,
+            "volume_gid": null
           }
         }
       ]
     },
     {
       "kind": "pod",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
-            "kind": "pod",
-            "id": "pod-1",
-            "name": "pod-one"
-          },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [
-            {
-              "kind": "container",
-              "target_id": "container-a",
-              "field_path": "$.Containers[0].Id"
+          "header": {
+            "identity": {
+              "kind": "pod",
+              "id": "pod-1",
+              "name": "pod-one"
             },
-            {
-              "kind": "network",
-              "target_id": "app",
-              "field_path": "$.Networks[0]"
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
             }
-          ],
-          "environment": [],
-          "image_aliases": [],
-          "network": null,
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [],
-          "findings": [],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+          },
+          "details": {
+            "kind": "pod",
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "configured_image": null,
+            "local_image_id": null,
+            "relationships": {
+              "state": "observed",
+              "origin": "effective",
+              "count": 2
+            },
+            "environment": null,
+            "image_aliases": null,
+            "network": null,
+            "memory_swappiness": null,
+            "infra": null,
+            "secret_driver": null,
+            "volume_uid": null,
+            "volume_gid": null
           }
         }
       ]
     },
     {
       "kind": "network",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
+          "header": {
+            "identity": {
+              "kind": "network",
+              "id": "network-1",
+              "name": "app"
+            },
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
+            }
+          },
+          "details": {
             "kind": "network",
-            "id": "network-1",
-            "name": "app"
-          },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [],
-          "environment": [],
-          "image_aliases": [],
-          "network": {
-            "internal": true,
-            "option_count": 1,
-            "subnets": [
-              "10.88.0.0/16"
-            ]
-          },
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [],
-          "findings": [],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "configured_image": null,
+            "local_image_id": null,
+            "relationships": null,
+            "environment": null,
+            "image_aliases": null,
+            "network": {
+              "internal": {
+                "state": "observed",
+                "origin": "effective"
+              },
+              "options": {
+                "state": "observed",
+                "origin": "effective",
+                "count": 1
+              },
+              "subnets": {
+                "state": "observed",
+                "origin": "effective",
+                "count": 1
+              }
+            },
+            "memory_swappiness": null,
+            "infra": null,
+            "secret_driver": null,
+            "volume_uid": null,
+            "volume_gid": null
           }
         }
       ]
     },
     {
       "kind": "volume",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
-            "kind": "volume",
-            "id": "database-data",
-            "name": "database-data"
+          "header": {
+            "identity": {
+              "kind": "volume",
+              "id": "database-data",
+              "name": "database-data"
+            },
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [
+              {
+                "code": "PLN0049",
+                "resource": {
+                  "kind": "volume",
+                  "id": "database-data",
+                  "name": "database-data"
+                },
+                "field_path": "$.UID",
+                "occurrence": null
+              },
+              {
+                "code": "PLN0049",
+                "resource": {
+                  "kind": "volume",
+                  "id": "database-data",
+                  "name": "database-data"
+                },
+                "field_path": "$.GID",
+                "occurrence": null
+              }
+            ],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
+            }
           },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [],
-          "environment": [],
-          "image_aliases": [],
-          "network": null,
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [],
-          "findings": [],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+          "details": {
+            "kind": "volume",
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "configured_image": null,
+            "local_image_id": null,
+            "relationships": null,
+            "environment": null,
+            "image_aliases": null,
+            "network": null,
+            "memory_swappiness": null,
+            "infra": null,
+            "secret_driver": null,
+            "volume_uid": {
+              "state": "observed",
+              "origin": "effective",
+              "wire_value": "wire_absent_may_mean_zero"
+            },
+            "volume_gid": {
+              "state": "observed",
+              "origin": "effective",
+              "wire_value": "wire_absent_may_mean_zero"
+            }
           }
         }
       ]
     },
     {
       "kind": "image",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
-            "kind": "image",
-            "id": "sha256:abc",
-            "name": "registry.example.invalid/team/image:1@sha256:abc"
-          },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [],
-          "environment": [
-            {
-              "name": "IMAGE_ENV",
-              "value_state": "redacted"
+          "header": {
+            "identity": {
+              "kind": "image",
+              "id": "sha256:abc",
+              "name": "registry.example.invalid/team/image:1@sha256:abc"
+            },
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
             }
-          ],
-          "image_aliases": [
-            "registry.example.invalid/team/image:1@sha256:abc",
-            "image:latest"
-          ],
-          "network": null,
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": null,
-          "unknown_fields": [],
-          "findings": [],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+          },
+          "details": {
+            "kind": "image",
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "configured_image": null,
+            "local_image_id": null,
+            "relationships": null,
+            "environment": {
+              "state": "observed",
+              "origin": "effective",
+              "entries": [
+                {
+                  "name": "IMAGE_ENV",
+                  "value_state": "redacted"
+                }
+              ]
+            },
+            "image_aliases": {
+              "state": "observed",
+              "origin": "local_resolution",
+              "count": 2
+            },
+            "network": null,
+            "memory_swappiness": null,
+            "infra": null,
+            "secret_driver": null,
+            "volume_uid": null,
+            "volume_gid": null
           }
         }
       ]
     },
     {
       "kind": "secret",
-      "available": true,
+      "availability": "available",
       "findings": [],
-      "records": [
+      "observations": [
         {
-          "identity": {
-            "kind": "secret",
-            "id": "secret-1",
-            "name": "db-password"
-          },
-          "observation_state": "complete",
-          "label_count": 1,
-          "relationships": [],
-          "environment": [],
-          "image_aliases": [],
-          "network": null,
-          "memory_swappiness": null,
-          "is_infra": null,
-          "secret_driver": "file",
-          "unknown_fields": [],
-          "findings": [
-            {
-              "code": "PLN0018",
-              "resource": {
-                "kind": "secret",
-                "id": "secret-1",
-                "name": "db-password"
-              },
-              "field_path": null,
-              "occurrence": null
+          "header": {
+            "identity": {
+              "kind": "secret",
+              "id": "secret-1",
+              "name": "db-password"
+            },
+            "state": "complete",
+            "unmodelled_completeness": "complete",
+            "unmodelled_fields": [],
+            "findings": [
+              {
+                "code": "PLN0018",
+                "resource": {
+                  "kind": "secret",
+                  "id": "secret-1",
+                  "name": "db-password"
+                },
+                "field_path": null,
+                "occurrence": null
+              }
+            ],
+            "evidence": {
+              "engine_version": "6.1.0",
+              "api_version": "6.1.0",
+              "podman_minor_line": "6.1",
+              "minimum_podman_version": "6.1.0",
+              "maximum_exclusive_podman_version": "6.2.0",
+              "minimum_libpod_api_version": "4.0.0",
+              "observed_podman_version": "6.1.0",
+              "observed_libpod_api_version": "6.1.0",
+              "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+              "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "evidence_release_tag": "v6.1.0"
             }
-          ],
-          "evidence": {
-            "engine_version": "6.1.0",
-            "api_version": "6.1.0",
-            "podman_minor_line": "6.1",
-            "minimum_podman_version": "6.1.0",
-            "maximum_exclusive_podman_version": "6.2.0",
-            "minimum_libpod_api_version": "4.0.0",
-            "observed_podman_version": "6.1.0",
-            "observed_libpod_api_version": "6.1.0",
-            "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-            "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-            "evidence_release_tag": "v6.1.0"
+          },
+          "details": {
+            "kind": "secret",
+            "labels": {
+              "state": "observed",
+              "origin": "configured",
+              "count": 1
+            },
+            "configured_image": null,
+            "local_image_id": null,
+            "relationships": null,
+            "environment": null,
+            "image_aliases": null,
+            "network": null,
+            "memory_swappiness": null,
+            "infra": null,
+            "secret_driver": {
+              "state": "observed",
+              "origin": "configured"
+            },
+            "volume_uid": null,
+            "volume_gid": null
           }
         }
       ]

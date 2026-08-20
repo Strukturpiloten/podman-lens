@@ -55,5 +55,7 @@ and explicit image policies. Sensitive environment and secret payload values rem
 external; unsupported source portability and target-version boundaries return structured findings.
 
 The inventory's currently accepted native fields are declared in a strict machine-readable ledger.
-Unmodeled data is retained only as bounded, redacted metadata; a partial record or overflow finding
-means that metadata is explicitly incomplete rather than an exhaustive native configuration export.
+Each resource is a typed observation whose fields preserve absence, malformed/unavailable state,
+and configured/effective/runtime/local-resolution provenance. Unmodeled data is retained only as
+bounded, redacted metadata; an incomplete observation or overflow finding means that metadata is
+explicitly incomplete rather than an exhaustive native configuration export.

@@ -1,17 +1,168 @@
 //! Offline M2 acquisition coverage using bounded fixture transports.
 
-#![allow(clippy::expect_used)] // Test-only fixture access reports concise assertion failures.
+#![allow(clippy::expect_used, clippy::panic)] // Test-only fixture access reports concise assertion failures.
 
 use std::{collections::VecDeque, fs, path::PathBuf, sync::Mutex};
 
 use podman_lens::{
-    AcquisitionOptions, DiagnosticCode, EnvironmentValue, InventorySection, LibpodHeader, LibpodHeaders, LibpodMethod,
-    LibpodRequest, LibpodResponse, LibpodTransport, LibpodTransportFuture, ObservationState, ResourceKind,
-    TransportError, acquire_inventory,
+    AcquisitionOptions, DiagnosticCode, LibpodHeader, LibpodHeaders, LibpodMethod, LibpodRequest, LibpodResponse,
+    LibpodTransport, LibpodTransportFuture, ObservationField, ObservationOrigin, ProtectedEnvironmentEntry,
+    ProtectedEnvironmentValue, ResourceDetails, ResourceKind, ResourceObservation, TransportError,
+    UnmodelledCompleteness, acquire_inventory,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+#[derive(Debug, Eq, PartialEq)]
+enum ObservationState {
+    Complete,
+    Partial,
+}
+enum EnvironmentValue<'a> {
+    Redacted,
+    Included(&'a podman_lens::SensitiveEnvironmentValue),
+}
+trait EnvironmentEntryAccess {
+    fn test_value(&self) -> EnvironmentValue<'_>;
+}
+impl EnvironmentEntryAccess for ProtectedEnvironmentEntry {
+    fn test_value(&self) -> EnvironmentValue<'_> {
+        match self.value() {
+            ProtectedEnvironmentValue::AuthorizedOpaque(value) => EnvironmentValue::Included(value),
+            _ => EnvironmentValue::Redacted,
+        }
+    }
+}
+#[derive(Clone)]
+struct TestNetwork {
+    internal: Option<bool>,
+    options: Vec<String>,
+    subnets: Vec<String>,
+}
+impl std::fmt::Debug for TestNetwork {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TestNetwork")
+            .field("internal", &self.internal)
+            .field("option_count", &self.options.len())
+            .field("subnet_count", &self.subnets.len())
+            .finish()
+    }
+}
+impl TestNetwork {
+    fn internal(&self) -> Option<bool> {
+        self.internal
+    }
+    fn options(&self) -> &[String] {
+        &self.options
+    }
+    fn subnets(&self) -> &[String] {
+        &self.subnets
+    }
+}
+trait ObservationTestAccess {
+    fn identity(&self) -> &podman_lens::ResourceIdentity;
+    fn state(&self) -> ObservationState;
+    fn environment(&self) -> Vec<&ProtectedEnvironmentEntry>;
+    fn image_aliases(&self) -> Vec<String>;
+    fn network(&self) -> Option<TestNetwork>;
+    fn memory_swappiness(&self) -> Option<u64>;
+    fn secret_driver(&self) -> Option<&str>;
+    fn unknown_fields(&self) -> &[podman_lens::UnmodelledField];
+    fn unknown_fields_complete(&self) -> bool;
+    fn findings(&self) -> &[podman_lens::InventoryFinding];
+}
+impl ObservationTestAccess for ResourceObservation {
+    fn identity(&self) -> &podman_lens::ResourceIdentity {
+        self.header().identity()
+    }
+    fn state(&self) -> ObservationState {
+        if self.header().state() == podman_lens::ResourceObservationState::Complete {
+            ObservationState::Complete
+        } else {
+            ObservationState::Partial
+        }
+    }
+    fn environment(&self) -> Vec<&ProtectedEnvironmentEntry> {
+        match self.details() {
+            ResourceDetails::Container(value) => value.environment(),
+            ResourceDetails::Image(value) => value.environment(),
+            _ => return Vec::new(),
+        }
+        .observed()
+        .map(|value| value.value().entries().iter().collect())
+        .unwrap_or_default()
+    }
+    fn image_aliases(&self) -> Vec<String> {
+        match self.details() {
+            ResourceDetails::Image(value) => value
+                .aliases()
+                .observed()
+                .map(|value| value.value().clone())
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    }
+    fn network(&self) -> Option<TestNetwork> {
+        let ResourceDetails::Network(value) = self.details() else {
+            return None;
+        };
+        Some(TestNetwork {
+            internal: value.internal().observed().map(|value| *value.value()),
+            options: value
+                .options()
+                .observed()
+                .map(|value| value.value().keys().map(ToOwned::to_owned).collect())
+                .unwrap_or_default(),
+            subnets: value
+                .subnets()
+                .observed()
+                .map(|value| value.value().clone())
+                .unwrap_or_default(),
+        })
+    }
+    fn memory_swappiness(&self) -> Option<u64> {
+        let ResourceDetails::Container(value) = self.details() else {
+            return None;
+        };
+        value.memory_swappiness().observed().map(|value| *value.value())
+    }
+    fn secret_driver(&self) -> Option<&str> {
+        let ResourceDetails::Secret(value) = self.details() else {
+            return None;
+        };
+        value.driver().observed().map(|value| value.value().as_str())
+    }
+    fn unknown_fields(&self) -> &[podman_lens::UnmodelledField] {
+        self.header().unmodelled_fields()
+    }
+    fn unknown_fields_complete(&self) -> bool {
+        self.header().unmodelled_completeness() == UnmodelledCompleteness::Complete
+    }
+    fn findings(&self) -> &[podman_lens::InventoryFinding] {
+        self.header().findings()
+    }
+}
+
+fn container_memory_field(observation: &ResourceObservation) -> &ObservationField<u64> {
+    let ResourceDetails::Container(container) = observation.details() else {
+        panic!("fixture observation must be a container");
+    };
+    container.memory_swappiness()
+}
+
+fn volume_owner_fields(
+    observation: &ResourceObservation,
+) -> (
+    &ObservationField<podman_lens::VolumeOwnerIdWireValue>,
+    &ObservationField<podman_lens::VolumeOwnerIdWireValue>,
+) {
+    let ResourceDetails::Volume(volume) = observation.details() else {
+        panic!("fixture observation must be a volume");
+    };
+    (volume.uid(), volume.gid())
+}
 
 #[derive(Deserialize)]
 struct InventoryFixtureManifest {
@@ -164,54 +315,71 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
     );
 
     let containers = inventory.section(ResourceKind::Container).expect("containers");
-    assert_eq!(containers.records()[0].identity().id(), "container-a");
-    assert_eq!(containers.records()[0].environment().len(), 2);
+    assert_eq!(containers.observations()[0].identity().id(), "container-a");
+    assert_eq!(containers.observations()[0].environment().len(), 2);
     assert!(
-        containers.records()[0]
+        containers.observations()[0]
             .environment()
             .iter()
-            .all(|entry| matches!(entry.value(), EnvironmentValue::Redacted))
+            .all(|entry| matches!(entry.test_value(), EnvironmentValue::Redacted))
     );
     assert!(
-        containers.records()[0]
+        containers.observations()[0]
             .unknown_fields()
             .iter()
             .any(|field| field.path() == "$.FutureField")
     );
     assert!(
-        containers.records()[0]
+        containers.observations()[0]
             .unknown_fields()
             .iter()
             .any(|field| field.path() == "$.Config.FutureConfig")
     );
     assert_eq!(
-        containers.records()[0].unknown_fields()[0].evidence().api_version(),
+        containers.observations()[0].unknown_fields()[0]
+            .evidence()
+            .api_version(),
         "6.1.0"
     );
+    assert_eq!(containers.observations()[1].state(), ObservationState::Complete);
+    let ResourceDetails::Container(second_container) = containers.observations()[1].details() else {
+        return Err("second fixture observation must be a container".into());
+    };
+    assert!(matches!(second_container.labels(), ObservationField::Absent));
+    assert!(containers.observations()[1].environment().is_empty());
+    assert_eq!(containers.observations()[0].memory_swappiness(), Some(10));
+    let ResourceDetails::Container(container) = containers.observations()[0].details() else {
+        return Err("container fixture has the wrong detail kind".into());
+    };
+    let configured_image = container
+        .configured_image()
+        .observed()
+        .ok_or("configured image must be observed")?;
+    assert_eq!(configured_image.value(), "sha256:abc");
+    assert_eq!(configured_image.origin(), ObservationOrigin::Configured);
+    let local_image_id = container
+        .local_image_id()
+        .observed()
+        .ok_or("local image ID must be observed")?;
+    assert_eq!(local_image_id.value(), "sha256:abc");
+    assert_eq!(local_image_id.origin(), ObservationOrigin::LocalResolution);
     assert!(
-        containers.records()[0]
-            .relationships()
-            .iter()
-            .any(|relationship| relationship.kind() == ResourceKind::Secret && relationship.target_id() == "secret-1")
-    );
-    assert_eq!(containers.records()[1].state(), ObservationState::Complete);
-    assert!(containers.records()[1].labels().is_empty());
-    assert!(containers.records()[1].environment().is_empty());
-    assert_eq!(containers.records()[0].memory_swappiness(), Some(10));
-    assert!(
-        !containers.records()[0]
+        !containers.observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::RelationshipConflict)
     );
-    assert!(!format!("{:?}", containers.records()[0]).contains("fixture-label"));
-    let network = inventory.section(ResourceKind::Network).expect("network").records()[0]
+    assert!(!format!("{:?}", containers.observations()[0]).contains("fixture-label"));
+    let network = inventory
+        .section(ResourceKind::Network)
+        .expect("network")
+        .observations()[0]
         .network()
         .expect("network details");
     assert_eq!(network.internal(), Some(true));
-    assert_eq!(network.options().get("mtu"), Some(&"fixture-option".to_owned()));
+    assert_eq!(network.options(), ["mtu"]);
     assert_eq!(network.subnets(), ["10.88.0.0/16"]);
-    let secret = &inventory.section(ResourceKind::Secret).expect("secret").records()[0];
+    let secret = &inventory.section(ResourceKind::Secret).expect("secret").observations()[0];
     assert_eq!(secret.secret_driver(), Some("file"));
     assert!(
         !secret
@@ -225,7 +393,7 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::SecretPayloadDiscarded)
     );
-    let image = &inventory.section(ResourceKind::Image).expect("images").records()[0];
+    let image = &inventory.section(ResourceKind::Image).expect("images").observations()[0];
     assert_eq!(
         image.image_aliases(),
         ["registry.example.invalid/team/image:1@sha256:abc", "image:latest"]
@@ -233,7 +401,11 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
     assert!(
         !format!(
             "{:?}",
-            inventory.section(ResourceKind::Network).expect("network").records()[0].network()
+            inventory
+                .section(ResourceKind::Network)
+                .expect("network")
+                .observations()[0]
+                .network()
         )
         .contains("fixture-option")
     );
@@ -252,16 +424,10 @@ async fn explicit_environment_inclusion_is_opaque_and_preserves_duplicate_order(
     let entries = inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records()[0]
+        .observations()[0]
         .environment();
-    assert_eq!(
-        entries
-            .iter()
-            .map(podman_lens::EnvironmentEntry::name)
-            .collect::<Vec<_>>(),
-        ["A", "A"]
-    );
-    let EnvironmentValue::Included(value) = entries[0].value() else {
+    assert_eq!(entries.iter().map(|entry| entry.name()).collect::<Vec<_>>(), ["A", "A"]);
+    let EnvironmentValue::Included(value) = entries[0].test_value() else {
         return Err("authorized environment value was unexpectedly redacted".into());
     };
     assert_eq!(value.expose(ToOwned::to_owned), "one");
@@ -270,7 +436,7 @@ async fn explicit_environment_inclusion_is_opaque_and_preserves_duplicate_order(
         inventory
             .section(ResourceKind::Container)
             .expect("containers")
-            .records()[0]
+            .observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::VersionInapplicableField)
@@ -285,9 +451,12 @@ async fn malformed_and_duplicate_list_entries_do_not_hide_valid_resources() -> R
     let transport = RecordingTransport::new(responses);
     let inventory = acquire_inventory(&transport, AcquisitionOptions::redacted()).await?;
     let containers = inventory.section(ResourceKind::Container).expect("containers");
-    assert!(containers.available());
-    assert_eq!(containers.records().len(), 2);
-    assert_eq!(containers.records()[0].identity().id(), "container-a");
+    assert_eq!(
+        containers.availability(),
+        podman_lens::InventorySectionAvailability::Available
+    );
+    assert_eq!(containers.observations().len(), 2);
+    assert_eq!(containers.observations()[0].identity().id(), "container-a");
     assert_eq!(containers.findings().len(), 2);
     assert!(
         containers
@@ -309,15 +478,21 @@ async fn unavailable_lists_and_disappeared_inspects_remain_visible_as_partial_in
     let transport = RecordingTransport::new(responses);
     let inventory = acquire_inventory(&transport, AcquisitionOptions::redacted()).await?;
     let containers = inventory.section(ResourceKind::Container).expect("containers");
-    assert_eq!(containers.records()[0].state(), ObservationState::Partial);
+    assert_eq!(containers.observations()[0].state(), ObservationState::Partial);
     assert_eq!(
-        containers.records()[0].findings()[0].code(),
+        containers.observations()[0].findings()[0].code(),
         DiagnosticCode::ResourceUnavailable
     );
     let network = inventory.section(ResourceKind::Network).expect("network");
-    assert!(!network.available());
+    assert_ne!(
+        network.availability(),
+        podman_lens::InventorySectionAvailability::Available
+    );
     assert_eq!(network.findings()[0].code(), DiagnosticCode::InventoryHttpStatus);
-    assert!(inventory.section(ResourceKind::Secret).expect("secrets").available());
+    assert_eq!(
+        inventory.section(ResourceKind::Secret).expect("secrets").availability(),
+        podman_lens::InventorySectionAvailability::Available
+    );
     Ok(())
 }
 
@@ -343,14 +518,18 @@ async fn every_list_status_and_shape_failure_leaves_only_its_section_unavailable
             let inventory =
                 acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
             let section = inventory.section(kind).expect("fixed section");
-            assert!(!section.available(), "{kind:?} must be unavailable");
+            assert_ne!(
+                section.availability(),
+                podman_lens::InventorySectionAvailability::Available,
+                "{kind:?} must be unavailable"
+            );
             assert_eq!(section.findings().len(), 1);
             assert!(
                 inventory
                     .sections()
                     .iter()
                     .filter(|section| section.kind() != kind)
-                    .all(InventorySection::available)
+                    .all(|section| section.availability() == podman_lens::InventorySectionAvailability::Available)
             );
         }
     }
@@ -374,7 +553,7 @@ async fn every_inspect_status_and_shape_failure_retains_a_partial_stable_identit
             responses[response_index] = replacement;
             let inventory =
                 acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-            let record = &inventory.section(kind).expect("fixed section").records()[0];
+            let record = &inventory.section(kind).expect("fixed section").observations()[0];
             assert_eq!(
                 record.state(),
                 ObservationState::Partial,
@@ -480,12 +659,109 @@ async fn modeled_nested_boundaries_report_the_precise_path_without_hiding_the_re
         let mut responses = fixture_responses("6.1.0")?;
         responses[response_index] = json(body)?;
         let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-        let record = &inventory.section(kind).expect("fixed section").records()[0];
+        let record = &inventory.section(kind).expect("fixed section").observations()[0];
         assert_eq!(record.state(), ObservationState::Complete);
         assert!(record.findings().iter().any(|finding| {
             finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(expected_path)
         }));
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_labels_are_local_to_every_typed_resource_observation() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (8, ResourceKind::Container, "/Config", "Labels", "$.Config.Labels"),
+        (10, ResourceKind::Pod, "", "Labels", "$.Labels"),
+        (11, ResourceKind::Network, "", "labels", "$.labels"),
+        (12, ResourceKind::Volume, "", "Labels", "$.Labels"),
+        (13, ResourceKind::Image, "", "Labels", "$.Labels"),
+        (14, ResourceKind::Secret, "/Spec", "Labels", "$.Spec.Labels"),
+    ];
+    for (response_index, kind, parent, label_key, expected_path) in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        let mut body: Value = serde_json::from_slice(responses[response_index].body())?;
+        let object = if parent.is_empty() {
+            body.as_object_mut().ok_or("fixture response must be an object")?
+        } else {
+            body.pointer_mut(parent)
+                .and_then(Value::as_object_mut)
+                .ok_or("fixture label parent must be an object")?
+        };
+        object.insert(label_key.to_owned(), Value::Bool(false));
+        responses[response_index] = json(serde_json::to_vec(&body)?)?;
+
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory.section(kind).expect("fixed resource section").observations()[0];
+        assert_eq!(observation.state(), ObservationState::Complete, "{kind:?}");
+        let labels = match observation.details() {
+            ResourceDetails::Container(value) => value.labels(),
+            ResourceDetails::Pod(value) => value.labels(),
+            ResourceDetails::Network(value) => value.labels(),
+            ResourceDetails::Volume(value) => value.labels(),
+            ResourceDetails::Image(value) => value.labels(),
+            ResourceDetails::Secret(value) => value.labels(),
+            _ => panic!("future details variant has no labels"),
+        };
+        assert!(matches!(labels, ObservationField::Malformed), "{kind:?}");
+        assert!(observation.findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(expected_path)
+        }));
+    }
+
+    let mut responses = fixture_responses("6.1.0")?;
+    let mut body: Value = serde_json::from_slice(responses[8].body())?;
+    body["Config"]["Labels"] = Value::Bool(false);
+    responses[8] = json(serde_json::to_vec(&body)?)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    let ResourceDetails::Container(details) = container.details() else {
+        return Err("container fixture must decode as a container".into());
+    };
+    assert!(details.configured_image().is_observed());
+    assert!(details.local_image_id().is_observed());
+    assert!(details.environment().is_observed());
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_enclosing_config_marks_every_modeled_child_malformed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(r#"{"Id":"container-a","Name":"a","Config":false}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    let ResourceDetails::Container(details) = container.details() else {
+        return Err("fixture must remain a container".into());
+    };
+    assert!(matches!(details.labels(), ObservationField::Malformed));
+    assert!(matches!(details.environment(), ObservationField::Malformed));
+    assert!(
+        container
+            .findings()
+            .iter()
+            .any(|finding| finding.field_path() == Some("$.Config"))
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[13] = json(r#"{"Id":"sha256:abc","Names":["example.invalid/image:1"],"Config":false}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let image = &inventory.section(ResourceKind::Image).expect("images").observations()[0];
+    let ResourceDetails::Image(details) = image.details() else {
+        return Err("fixture must remain an image".into());
+    };
+    assert!(matches!(details.environment(), ObservationField::Malformed));
+    assert!(
+        image
+            .findings()
+            .iter()
+            .any(|finding| finding.field_path() == Some("$.Config"))
+    );
     Ok(())
 }
 
@@ -503,13 +779,12 @@ async fn environment_boundaries_preserve_valid_entries_and_report_every_bad_occu
     let record = &inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records()[0];
-    assert_eq!(record.environment().len(), 1);
-    assert_eq!(record.environment()[0].name(), "A");
-    let EnvironmentValue::Included(value) = record.environment()[0].value() else {
-        return Err("authorized value unexpectedly redacted".into());
+        .observations()[0];
+    let ResourceDetails::Container(details) = record.details() else {
+        return Err("fixture must remain a container observation".into());
     };
-    assert_eq!(value.expose(ToOwned::to_owned), "value=with=equals");
+    assert!(matches!(details.environment(), ObservationField::Malformed));
+    assert!(record.environment().is_empty());
     let malformed = record
         .findings()
         .iter()
@@ -540,7 +815,7 @@ async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_valu
         inventory
             .section(ResourceKind::Container)
             .expect("containers")
-            .records()[0]
+            .observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::VersionInapplicableField)
@@ -556,7 +831,7 @@ async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_valu
             inventory
                 .section(ResourceKind::Container)
                 .expect("containers")
-                .records()[0]
+                .observations()[0]
                 .findings()
                 .iter()
                 .any(|finding| finding.code() == DiagnosticCode::ResourceMalformed)
@@ -572,11 +847,221 @@ async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_valu
         !inventory
             .section(ResourceKind::Container)
             .expect("containers")
-            .records()[0]
+            .observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::VersionInapplicableField)
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn public_typed_observations_exercise_every_field_state_without_promoting_unmodelled_data()
+-> Result<(), Box<dyn std::error::Error>> {
+    let observed = acquire_inventory(
+        &RecordingTransport::new(fixture_responses("6.1.0")?),
+        AcquisitionOptions::redacted(),
+    )
+    .await?;
+    assert!(matches!(
+        container_memory_field(&observed.section(ResourceKind::Container).expect("containers").observations()[0]),
+        ObservationField::Observed(value) if *value.value() == 10
+    ));
+
+    for body in [
+        r#"{"Id":"container-a","Name":"a"}"#,
+        r#"{"Id":"container-a","Name":"a","HostConfig":null}"#,
+        r#"{"Id":"container-a","Name":"a","HostConfig":{}}"#,
+    ] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        assert!(matches!(
+            container_memory_field(
+                &inventory
+                    .section(ResourceKind::Container)
+                    .expect("containers")
+                    .observations()[0]
+            ),
+            ObservationField::Absent
+        ));
+    }
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = status(404)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    assert!(matches!(
+        container_memory_field(
+            &inventory
+                .section(ResourceKind::Container)
+                .expect("containers")
+                .observations()[0]
+        ),
+        ObservationField::Unavailable
+    ));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(r#"{"Id":"container-a","Name":"a","HostConfig":{"MemorySwappiness":false}}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    assert!(matches!(
+        container_memory_field(
+            &inventory
+                .section(ResourceKind::Container)
+                .expect("containers")
+                .observations()[0]
+        ),
+        ObservationField::Malformed
+    ));
+
+    let version_inapplicable = acquire_inventory(
+        &RecordingTransport::new(fixture_responses("5.4.0")?),
+        AcquisitionOptions::redacted(),
+    )
+    .await?;
+    assert!(matches!(
+        container_memory_field(
+            &version_inapplicable
+                .section(ResourceKind::Container)
+                .expect("containers")
+                .observations()[0]
+        ),
+        ObservationField::VersionInapplicable
+    ));
+
+    assert!(matches!(
+        container_memory_field(
+            &observed
+                .section(ResourceKind::Container)
+                .expect("containers")
+                .observations()[1]
+        ),
+        ObservationField::Absent
+    ));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(r#"{"Id":"container-a","Name":"a","HostConfig":{"NanoCpus":1}}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    assert!(matches!(container_memory_field(observation), ObservationField::Absent));
+    assert!(
+        observation
+            .header()
+            .unmodelled_fields()
+            .iter()
+            .any(|field| field.path() == "$.HostConfig.NanoCpus")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn typed_section_and_resource_availability_preserve_their_failure_cause() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[2] = status(500)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    assert_eq!(
+        inventory
+            .section(ResourceKind::Container)
+            .expect("containers")
+            .availability(),
+        podman_lens::InventorySectionAvailability::Unavailable
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[2] = json("false")?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    assert_eq!(
+        inventory
+            .section(ResourceKind::Container)
+            .expect("containers")
+            .availability(),
+        podman_lens::InventorySectionAvailability::Malformed
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json("false")?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    assert_eq!(
+        observation.header().state(),
+        podman_lens::ResourceObservationState::Malformed
+    );
+    assert!(matches!(
+        container_memory_field(observation),
+        ObservationField::Malformed
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn volume_owner_ids_preserve_absence_zero_bounds_and_unavailability() -> Result<(), Box<dyn std::error::Error>> {
+    let inventory = acquire_inventory(
+        &RecordingTransport::new(fixture_responses("6.1.0")?),
+        AcquisitionOptions::redacted(),
+    )
+    .await?;
+    let observation = &inventory.section(ResourceKind::Volume).expect("volumes").observations()[0];
+    let (uid, gid) = volume_owner_fields(observation);
+    assert!(matches!(
+        uid,
+        ObservationField::Observed(value)
+            if matches!(value.value(), podman_lens::VolumeOwnerIdWireValue::WireAbsentMayMeanZero)
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert!(matches!(
+        gid,
+        ObservationField::Observed(value)
+            if matches!(value.value(), podman_lens::VolumeOwnerIdWireValue::WireAbsentMayMeanZero)
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert_eq!(
+        observation
+            .header()
+            .findings()
+            .iter()
+            .filter(|finding| finding.code() == DiagnosticCode::VolumeOwnerDefaultAmbiguous)
+            .count(),
+        2
+    );
+
+    for (wire, expected) in [("0", 0_u32), ("42", 42_u32)] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[12] = json(format!(r#"{{"Name":"database-data","UID":{wire},"GID":{wire}}}"#))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory.section(ResourceKind::Volume).expect("volumes").observations()[0];
+        for field in [volume_owner_fields(observation).0, volume_owner_fields(observation).1] {
+            assert!(matches!(
+                field,
+                ObservationField::Observed(value)
+                    if matches!(value.value(), podman_lens::VolumeOwnerIdWireValue::Explicit(id) if id.get() == expected)
+                        && value.origin() == ObservationOrigin::Effective
+            ));
+        }
+    }
+
+    for wire in ["null", "false", "-1", "4294967296"] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[12] = json(format!(r#"{{"Name":"database-data","UID":{wire},"GID":{wire}}}"#))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory.section(ResourceKind::Volume).expect("volumes").observations()[0];
+        let (uid, gid) = volume_owner_fields(observation);
+        assert!(matches!(uid, ObservationField::Malformed), "UID {wire}");
+        assert!(matches!(gid, ObservationField::Malformed), "GID {wire}");
+    }
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[12] = status(404)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory.section(ResourceKind::Volume).expect("volumes").observations()[0];
+    let (uid, gid) = volume_owner_fields(observation);
+    assert!(matches!(uid, ObservationField::Unavailable));
+    assert!(matches!(gid, ObservationField::Unavailable));
     Ok(())
 }
 
@@ -591,13 +1076,13 @@ async fn host_config_members_not_yet_modeled_are_retained_as_unknown_metadata() 
     let record = &inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records()[0];
+        .observations()[0];
     assert_eq!(record.memory_swappiness(), Some(10));
     assert_eq!(
         record
             .unknown_fields()
             .iter()
-            .map(podman_lens::UnknownNativeField::path)
+            .map(podman_lens::UnmodelledField::path)
             .collect::<Vec<_>>(),
         ["$.HostConfig.LogConfig", "$.HostConfig.NanoCpus"]
     );
@@ -621,7 +1106,7 @@ async fn secret_driver_is_modeled_without_unsupported_metadata() -> Result<(), B
         let mut responses = fixture_responses(version)?;
         responses[14] = json(r#"{"ID":"secret-1","Spec":{"Name":"database-password","Driver":"file"}}"#)?;
         let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-        let record = &inventory.section(ResourceKind::Secret).expect("secrets").records()[0];
+        let record = &inventory.section(ResourceKind::Secret).expect("secrets").observations()[0];
         assert_eq!(record.secret_driver(), Some("file"), "{version}");
         assert!(
             !record
@@ -641,7 +1126,7 @@ async fn secret_payload_is_discarded_from_metadata_inspection() -> Result<(), Bo
         r#"{"ID":"secret-1","Spec":{"Name":"database-password","SecretData":"must-not-be-retained"},"SecretData":"must-not-be-retained"}"#,
     )?;
     let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-    let record = &inventory.section(ResourceKind::Secret).expect("secrets").records()[0];
+    let record = &inventory.section(ResourceKind::Secret).expect("secrets").observations()[0];
     assert!(
         record
             .findings()
@@ -665,7 +1150,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
     let record = &inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records()[0];
+        .observations()[0];
     assert_eq!(
         record.unknown_fields().len(),
         podman_lens::MAX_UNKNOWN_FIELDS_PER_RECORD
@@ -697,7 +1182,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
     let records = inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records();
+        .observations();
     assert_eq!(
         records
             .iter()
@@ -727,7 +1212,7 @@ async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memb
     let containers = inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records();
+        .observations();
     let first = &containers[0];
     assert!(
         first
@@ -742,7 +1227,7 @@ async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memb
             .all(|finding| finding.code() != DiagnosticCode::PodMembershipConflict)
     );
     assert!(
-        inventory.section(ResourceKind::Pod).expect("pods").records()[0]
+        inventory.section(ResourceKind::Pod).expect("pods").observations()[0]
             .findings()
             .iter()
             .all(|finding| finding.code() != DiagnosticCode::PodMembershipConflict)
@@ -752,7 +1237,7 @@ async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memb
     responses[10] = json(r#"{"Id":"pod-1","Name":"pod-one","Containers":[{"Id":"container-z"}]}"#)?;
     let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
     assert!(
-        inventory.section(ResourceKind::Pod).expect("pods").records()[0]
+        inventory.section(ResourceKind::Pod).expect("pods").observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::PodMembershipConflict)
@@ -761,17 +1246,75 @@ async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memb
 }
 
 #[tokio::test]
-async fn debug_output_never_leaks_labels_network_options_or_environment_values()
--> Result<(), Box<dyn std::error::Error>> {
+async fn public_debug_output_and_network_options_never_leak_protected_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    use std::fmt::Write as _;
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","Image":"SENTINEL_LOCAL_IMAGE","ImageName":"SENTINEL_CONFIGURED_IMAGE","Config":{"Labels":{"SENTINEL_LABEL_KEY":"SENTINEL_LABEL_VALUE"},"Env":["SENTINEL_ENV_NAME=SENTINEL_ENV_VALUE"]}}"#,
+    )?;
+    responses[11] = json(
+        r#"{"id":"network-1","name":"app","labels":{"SENTINEL_NETWORK_LABEL":"SENTINEL_NETWORK_LABEL_VALUE"},"options":{"SENTINEL_OPTION_KEY":"SENTINEL_OPTION_VALUE"},"subnets":[{"subnet":"10.17.0.0/24"}]}"#,
+    )?;
+    responses[12] =
+        json(r#"{"Name":"database-data","Labels":{"SENTINEL_VOLUME_LABEL":"SENTINEL_VOLUME_LABEL_VALUE"}}"#)?;
+    responses[13] = json(
+        r#"{"Id":"sha256:abc","Names":["SENTINEL_IMAGE_ALIAS"],"Labels":{"SENTINEL_IMAGE_LABEL":"SENTINEL_IMAGE_LABEL_VALUE"},"Config":{"Env":["SENTINEL_IMAGE_ENV=SENTINEL_IMAGE_ENV_VALUE"]}}"#,
+    )?;
+    responses[14] = json(
+        r#"{"ID":"secret-1","Spec":{"Name":"db-password","Labels":{"SENTINEL_SECRET_LABEL":"SENTINEL_SECRET_LABEL_VALUE"},"Driver":"SENTINEL_SECRET_DRIVER"}}"#,
+    )?;
     let inventory = acquire_inventory(
-        &RecordingTransport::new(fixture_responses("6.1.0")?),
+        &RecordingTransport::new(responses),
         AcquisitionOptions::include_environment_values(),
     )
     .await?;
-    let rendered = format!("{inventory:?}");
-    for secret in ["fixture-label", "fixture-option", "A=one", "IMAGE_ENV=value"] {
+    let mut rendered = format!("{inventory:?}");
+    for section in inventory.sections() {
+        for observation in section.observations() {
+            write!(rendered, "{:?}", observation.details())?;
+        }
+    }
+    let direct = ObservationField::Observed(podman_lens::ObservedValue::new(
+        "SENTINEL_DIRECT_OBSERVED_VALUE",
+        ObservationOrigin::Configured,
+    ));
+    write!(rendered, "{direct:?}")?;
+    for secret in [
+        "SENTINEL_LABEL_VALUE",
+        "SENTINEL_NETWORK_LABEL_VALUE",
+        "SENTINEL_VOLUME_LABEL_VALUE",
+        "SENTINEL_IMAGE_LABEL_VALUE",
+        "SENTINEL_SECRET_LABEL_VALUE",
+        "SENTINEL_OPTION_VALUE",
+        "SENTINEL_ENV_VALUE",
+        "SENTINEL_IMAGE_ENV_VALUE",
+        "SENTINEL_CONFIGURED_IMAGE",
+        "SENTINEL_LOCAL_IMAGE",
+        "SENTINEL_IMAGE_ALIAS",
+        "SENTINEL_SECRET_DRIVER",
+        "SENTINEL_DIRECT_OBSERVED_VALUE",
+    ] {
         assert!(!rendered.contains(secret), "debug output leaked {secret}");
     }
+
+    let ResourceDetails::Network(network) = inventory
+        .section(ResourceKind::Network)
+        .expect("networks")
+        .observations()[0]
+        .details()
+    else {
+        return Err("network fixture must have network details".into());
+    };
+    let options = network
+        .options()
+        .observed()
+        .ok_or("network options must be observed")?
+        .value();
+    assert_eq!(options.keys().collect::<Vec<_>>(), ["SENTINEL_OPTION_KEY"]);
+    assert_eq!(options.len(), 1);
+    assert!(!format!("{options:?}").contains("SENTINEL_OPTION_KEY"));
     Ok(())
 }
 

@@ -106,14 +106,15 @@ creates only `GET` requests; it never calls a secret payload endpoint or adds a 
 query parameter.
 
 The acquisition is deliberately non-atomic. An unavailable list makes only that section
-unavailable. A `404` or malformed inspect response creates a partial record with its stable list
-identity, leaving every unrelated list and record available. Unknown data is represented only by
-path, JSON kind, record identity, and source/version evidence—not raw JSON. Podman image names and
-IDs are treated as raw identifiers and percent-encoded once before an inspect path is generated.
-The strict native-field ledger names every M2 decoder field and its public contract. Accepting a
-nested object does not accept its unmodeled descendants: they become `PLN0023` metadata. That
-metadata is bounded; `PLN0021` and `ResourceRecord::unknown_fields_complete()` explicitly mark it
-as incomplete after overflow or a partial record.
+unavailable. A `404` or malformed inspect response creates an incomplete `ResourceObservation`
+with its stable list identity, leaving every unrelated observation available. Unknown data is
+represented only by a closed semantic ID, path, JSON kind, resource identity, and source/version
+evidence—not raw JSON. Podman image names and IDs are treated as raw identifiers and
+percent-encoded once before an inspect path is generated. The strict native-field ledger names
+every M2 decoder field and its public contract. Accepting a nested object does not accept its
+unmodeled descendants: they become `PLN0023` metadata. That metadata is bounded; `PLN0021` and
+`ObservationHeader::unmodelled_completeness()` explicitly mark it as incomplete after overflow or
+an incomplete observation.
 
 ## M4 stable input and snapshots
 
@@ -126,6 +127,16 @@ views never contain environment values, secret payloads, connection details, raw
 label values, driver-option values, or Compose ownership values. They intentionally retain useful
 operational metadata and are therefore redacted, not anonymous. PodmanLens does not deserialize
 snapshots or treat them as trusted input.
+
+M7-A makes the inventory boundary typed all the way through: a `ResourceObservation` has a shared
+header and a `ResourceDetails` variant for its exact resource kind. Every modeled fact is an
+`ObservationField<T>` with a distinct unavailable/malformed/inapplicable state and, when observed,
+configured/effective/runtime-assigned/local-resolution provenance. Container `ImageName` is
+configured image evidence; container `Image` is a local resolver result and cannot create a
+desired-image dependency edge. Native secret grants coalesce their ID/name aliases into one
+relationship only when both resolve to the same secret, retaining both evidence locations. A
+contradiction is `PLN0020` and is never traversed. Malformed label maps are field-local `PLN0017`
+findings, preserving all unrelated typed observations.
 
 ## Ordered deployment plans
 

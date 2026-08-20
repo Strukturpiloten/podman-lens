@@ -6,12 +6,38 @@ use std::{collections::VecDeque, fmt::Write as _, fs, path::PathBuf, sync::Mutex
 
 use podman_lens::{
     AcquisitionOptions, DiagnosticCode, DiscoveryRequest, LibpodHeader, LibpodHeaders, LibpodRequest, LibpodResponse,
-    LibpodTransport, LibpodTransportFuture, ObservationState, ResourceKind, ResourceSelector, TransportError,
+    LibpodTransport, LibpodTransportFuture, ResourceKind, ResourceObservation, ResourceSelector, TransportError,
     acquire_inventory, discover, snapshot::v1,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+#[derive(Debug, Eq, PartialEq)]
+enum ObservationState {
+    Complete,
+    Partial,
+}
+trait ObservationTestAccess {
+    fn state(&self) -> ObservationState;
+    fn findings(&self) -> &[podman_lens::InventoryFinding];
+    fn unknown_fields(&self) -> &[podman_lens::UnmodelledField];
+}
+impl ObservationTestAccess for ResourceObservation {
+    fn state(&self) -> ObservationState {
+        if self.header().state() == podman_lens::ResourceObservationState::Complete {
+            ObservationState::Complete
+        } else {
+            ObservationState::Partial
+        }
+    }
+    fn findings(&self) -> &[podman_lens::InventoryFinding] {
+        self.header().findings()
+    }
+    fn unknown_fields(&self) -> &[podman_lens::UnmodelledField] {
+        self.header().unmodelled_fields()
+    }
+}
 
 #[derive(Deserialize)]
 struct CorpusManifest {
@@ -162,10 +188,13 @@ async fn rootless_and_rootful_corpus_cases_acquire_then_discover() -> Result<(),
         rootless
             .section(ResourceKind::Pod)
             .expect("fixed pod section")
-            .records()
+            .observations()
             .is_empty()
     );
-    let worker = &rootless.section(ResourceKind::Container).expect("containers").records()[1];
+    let worker = &rootless
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[1];
     assert_eq!(worker.state(), ObservationState::Partial);
     assert!(
         worker
@@ -224,7 +253,10 @@ async fn every_list_failure_leaves_only_its_section_unavailable() -> Result<(), 
         }
         let responses = values.iter().map(response).collect::<Result<Vec<_>, _>>()?;
         let inventory = acquire_inventory(&FixtureTransport::new(responses), AcquisitionOptions::redacted()).await?;
-        assert!(!inventory.section(kind).expect("fixed section").available());
+        assert_ne!(
+            inventory.section(kind).expect("fixed section").availability(),
+            podman_lens::InventorySectionAvailability::Available
+        );
 
         let mut values = fixture_values("malformed-6.1.responses.json")?;
         let malformed_shape = match kind {
@@ -247,7 +279,10 @@ async fn every_list_failure_leaves_only_its_section_unavailable() -> Result<(), 
         }
         let responses = values.iter().map(response).collect::<Result<Vec<_>, _>>()?;
         let inventory = acquire_inventory(&FixtureTransport::new(responses), AcquisitionOptions::redacted()).await?;
-        assert!(!inventory.section(kind).expect("fixed section").available());
+        assert_ne!(
+            inventory.section(kind).expect("fixed section").availability(),
+            podman_lens::InventorySectionAvailability::Available
+        );
     }
 
     Ok(())
@@ -271,7 +306,7 @@ async fn every_inspect_failure_remains_a_partial_record() -> Result<(), Box<dyn 
             inventory
                 .section(kind)
                 .expect("fixed section")
-                .records()
+                .observations()
                 .iter()
                 .any(|record| record.state() == ObservationState::Partial)
         );
@@ -284,7 +319,7 @@ async fn every_inspect_failure_remains_a_partial_record() -> Result<(), Box<dyn 
             inventory
                 .section(kind)
                 .expect("fixed section")
-                .records()
+                .observations()
                 .iter()
                 .any(|record| record
                     .findings()
@@ -307,19 +342,19 @@ async fn malformed_corpus_is_structured_and_bounded_never_panics() -> Result<(),
             .any(|finding| finding.code() == DiagnosticCode::ResourceMalformed)
     );
     assert!(
-        containers.records()[1]
+        containers.observations()[1]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::ResourceUnavailable)
     );
     assert!(
-        containers.records()[0]
+        containers.observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::EnvironmentMalformed)
     );
     assert!(
-        malformed.section(ResourceKind::Secret).expect("secrets").records()[0]
+        malformed.section(ResourceKind::Secret).expect("secrets").observations()[0]
             .findings()
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::SecretPayloadDiscarded)
@@ -348,7 +383,7 @@ async fn malformed_corpus_is_structured_and_bounded_never_panics() -> Result<(),
     let record = &inventory
         .section(ResourceKind::Container)
         .expect("containers")
-        .records()[0];
+        .observations()[0];
     assert!(record.unknown_fields().len() <= podman_lens::MAX_UNKNOWN_FIELDS_PER_RECORD);
     assert!(
         record

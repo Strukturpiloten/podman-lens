@@ -83,7 +83,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Dependencies[0]"
+        "field_paths": [
+          "$.Dependencies[0]"
+        ]
       }
     },
     {
@@ -99,7 +101,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Pod"
+        "field_paths": [
+          "$.Pod"
+        ]
       }
     },
     {
@@ -115,7 +119,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.NetworkSettings.Networks.app"
+        "field_paths": [
+          "$.NetworkSettings.Networks.app"
+        ]
       }
     },
     {
@@ -131,7 +137,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Mounts[0].Name"
+        "field_paths": [
+          "$.Mounts[0].Name"
+        ]
       }
     },
     {
@@ -147,23 +155,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Image"
-      }
-    },
-    {
-      "dependent": {
-        "kind": "container",
-        "id": "container-a",
-        "name": "a"
-      },
-      "prerequisite": {
-        "kind": "image",
-        "id": "sha256:abc",
-        "name": "registry.example.invalid/team/image:1@sha256:abc"
-      },
-      "evidence": {
-        "kind": "native_relationship",
-        "field_path": "$.ImageName"
+        "field_paths": [
+          "$.ImageName"
+        ]
       }
     },
     {
@@ -179,23 +173,10 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Config.Secrets[0].ID"
-      }
-    },
-    {
-      "dependent": {
-        "kind": "container",
-        "id": "container-a",
-        "name": "a"
-      },
-      "prerequisite": {
-        "kind": "secret",
-        "id": "secret-1",
-        "name": "db-password"
-      },
-      "evidence": {
-        "kind": "native_relationship",
-        "field_path": "$.Config.Secrets[0].Name"
+        "field_paths": [
+          "$.Config.Secrets[0].ID",
+          "$.Config.Secrets[0].Name"
+        ]
       }
     },
     {
@@ -211,7 +192,9 @@
       },
       "evidence": {
         "kind": "native_relationship",
-        "field_path": "$.Networks[0]"
+        "field_paths": [
+          "$.Networks[0]"
+        ]
       }
     }
   ],

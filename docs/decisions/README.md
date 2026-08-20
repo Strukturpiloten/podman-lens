@@ -17,3 +17,4 @@ do not let code silently change it.
 | [0010: Versioned non-executing output rendering](0010-versioned-nonexecuting-output-rendering.md)                          | Accepted |
 | [0011: Native field coverage is an explicit, strict ledger](0011-native-field-coverage-ledger.md)                          | Accepted |
 | [0012: Bounded runtime intent before rendering](0012-bounded-runtime-intent-before-rendering.md)                           | Accepted |
+| [0013: Typed native observations preserve state and provenance](0013-typed-native-observations.md)                         | Accepted |

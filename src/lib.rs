@@ -18,6 +18,7 @@ pub mod discovery;
 pub mod evidence;
 pub mod inventory;
 pub mod networking;
+pub mod observation;
 pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
@@ -50,14 +51,20 @@ pub use discovery::{
 };
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
 pub use inventory::{
-    AcquisitionOptions, EnvironmentEntry, EnvironmentValue, EnvironmentValuePolicy, InventoryFinding, InventorySection,
+    AcquisitionOptions, EnvironmentValuePolicy, InventoryFinding, InventorySection, InventorySectionAvailability,
     JsonValueKind, MAX_INVENTORY_JSON_BYTES, MAX_UNKNOWN_FIELDS_PER_INVENTORY, MAX_UNKNOWN_FIELDS_PER_RECORD,
-    NetworkDetails, ObservationState, ResourceEvidence, ResourceIdentity, ResourceInventory, ResourceKind,
-    ResourceRecord, ResourceRelationship, SensitiveEnvironmentValue, UnknownNativeField, acquire_inventory,
+    ResourceEvidence, ResourceIdentity, ResourceInventory, ResourceKind, SensitiveEnvironmentValue, acquire_inventory,
 };
 pub use networking::{
     DnsConfiguration, HostAlias, NetworkAttachment, NetworkCidr, NetworkRoute, NetworkSubnet, PortMapping,
     PortProtocol, RouteType, StaticMacAddress,
+};
+pub use observation::{
+    ContainerObservation, ImageObservation, Labels, NetworkObservation, NetworkOptionKeys, ObservationField,
+    ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
+    ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
+    ResourceObservationState, SecretObservation, UnixId as ObservedUnixId, UnmodelledCompleteness, UnmodelledField,
+    UnmodelledFieldId, VolumeObservation, VolumeOwnerIdWireValue,
 };
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]

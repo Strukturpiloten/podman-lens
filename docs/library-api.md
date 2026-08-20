@@ -26,12 +26,25 @@ all four explicit image pull policies, and manual no-copy-subpath, source-portab
 pod-infra-mount boundaries. Sensitive and external health commands are manual redacted boundaries
 that apply to all reviewed targets and block the complete resource artifact with `PLN0046`.
 
-`ResourceRecord::unknown_fields()` retains bounded metadata for unmodeled native fields without raw
-values. Call `ResourceRecord::unknown_fields_complete()` before treating that metadata as an
-exhaustive account: it is false for partial records and after `PLN0021` unknown-field overflow.
+`ResourceInventory::observations()` returns deterministic `ResourceObservation` values. Each has
+an `ObservationHeader` and a kind-safe `ResourceDetails` variant. A modeled field is always an
+`ObservationField<T>`: absent, observed, unavailable, malformed, version-inapplicable,
+not-applicable, or unmodelled. An observed value also records whether it was configured,
+effective, runtime-assigned, or locally resolved. Adapters must not promote an effective,
+runtime-assigned, or local-resolution value to declared deployment intent without an explicit
+mapping policy.
+
+`ObservationHeader::unmodelled_fields()` retains bounded metadata without raw values. Check
+`ObservationHeader::unmodelled_completeness()` before treating it as exhaustive: it is incomplete
+for unavailable or malformed observations and after `PLN0021` unknown-field overflow.
 `HostConfig.MemorySwappiness` is typed, while any other direct `HostConfig` member is explicitly
 unsupported metadata. `Secret.Spec.Driver` is typed metadata; secret payload material is discarded
 and reported as `PLN0018`.
+
+For a container, `configured_image()` reflects Libpod `ImageName`; `local_image_id()` reflects the
+local `Image` resolver result. Discovery derives an image dependency only from the configured
+spelling. Environment observations provide names plus redacted or authorized-opaque value states;
+they never expose a deployment value.
 
 ## Select roots
 
@@ -78,8 +91,9 @@ Draft 2020-12 schema. Snapshot creation always removes environment values, secre
 connection data, raw unknown JSON, label values, driver-option values, and Compose ownership
 values, regardless of in-memory acquisition policy.
 
-Snapshots still contain operational metadata such as resource IDs and names, image aliases,
-environment variable names, network subnets, evidence URLs, and source field paths. Always-redacted
+Snapshots retain resource IDs and names, environment variable names, evidence URLs, and source
+field paths. Image aliases and network subnets are deliberately exported as counts only, because
+their spellings may disclose private registry, topology, or addressing information. Always-redacted
 does not mean anonymous; callers must still handle reports as operational data.
 
 ## Plan native deployment semantics

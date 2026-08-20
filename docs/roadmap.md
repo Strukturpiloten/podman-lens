@@ -201,7 +201,10 @@ without silent loss; all other native output remains explicitly outside that con
 
 ## M7: BoxFerry integration readiness
 
-- [ ] Document the exact PodmanLens-to-neutral-model mapping contract.
+- [x] M7-A: Reset the unreleased inventory contract to typed native observations with explicit
+      field state, provenance, protected environment handling, bounded semantic unmodelled
+      metadata, and redacted snapshot support.
+- [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.
 - [ ] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.
@@ -209,6 +212,12 @@ without silent loss; all other native output remains explicitly outside that con
       step after merge.
 
 Exit: BoxFerry can add Podman input and output routes using only public PodmanLens APIs.
+
+M7-A is complete when `ResourceObservation` exposes one kind-safe `ResourceDetails` payload and
+every modeled field reports an `ObservationField` state. Configured, effective,
+runtime-assigned, and local-resolution values remain distinct. Container configured image spelling
+and local image resolution remain separate; discovery uses only configured image evidence. This is
+an in-place reset because the library has not been released; no obsolete record projection is kept.
 
 ## Deferred
 

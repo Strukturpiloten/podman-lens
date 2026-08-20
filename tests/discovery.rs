@@ -62,10 +62,14 @@ fn responses() -> Result<Vec<LibpodResponse>, Box<dyn std::error::Error>> {
             r#"[{"ID":"secret-1","Spec":{"Name":"credential"}},{"ID":"secret-2","Spec":{"Name":"standalone-secret"}}]"#,
         )?,
         json(
-            r#"{"Id":"container-a","Name":"a","Pod":"pod-1","Image":"sha256:one","NetworkSettings":{"Networks":{"app":{}}},"Mounts":[{"Type":"volume","Name":"data"}],"Dependencies":["container-b"],"Config":{"Secrets":[{"ID":"secret-1"}]}}"#,
+            r#"{"Id":"container-a","Name":"a","Pod":"pod-1","Image":"sha256:one","ImageName":"sha256:one","NetworkSettings":{"Networks":{"app":{}}},"Mounts":[{"Type":"volume","Name":"data"}],"Dependencies":["container-b"],"Config":{"Secrets":[{"ID":"secret-1"}]}}"#,
         )?,
-        json(r#"{"Id":"container-b","Name":"b","Image":"sha256:one","NetworkSettings":{"Networks":{"app":{}}}}"#)?,
-        json(r#"{"Id":"container-c","Name":"c","Image":"sha256:one","NetworkSettings":{"Networks":{"app":{}}}}"#)?,
+        json(
+            r#"{"Id":"container-b","Name":"b","Image":"sha256:one","ImageName":"sha256:one","NetworkSettings":{"Networks":{"app":{}}}}"#,
+        )?,
+        json(
+            r#"{"Id":"container-c","Name":"c","Image":"sha256:one","ImageName":"sha256:one","NetworkSettings":{"Networks":{"app":{}}}}"#,
+        )?,
         json(r#"{"Id":"infra","Name":"infra","Pod":"pod-1","IsInfra":true}"#)?,
         json(r#"{"Id":"pod-1","Name":"pod","Containers":[{"Id":"container-a"},{"Id":"infra"}]}"#)?,
         json(r#"{"id":"network-1","name":"app","internal":true}"#)?,
@@ -459,6 +463,279 @@ async fn relationship_ambiguity_is_reported_and_pod_membership_never_creates_a_d
                 .is_some_and(|resource| resource.id() == "pod-1")
             && finding.field_path() == Some("$.Containers[0].Id")
     }));
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_secret_id_and_name_grants_are_coalesced_and_never_select_one_reference_silently()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Secrets":[{"ID":"secret-1","Name":"standalone-secret"}]}}"#,
+            Some(DiagnosticCode::RelationshipConflict),
+            0,
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Config":{"Secrets":[{"ID":"secret-1","Name":"missing"}]}}"#,
+            Some(DiagnosticCode::UnresolvedRelationship),
+            0,
+        ),
+    ];
+    for (container, expected, edge_count) in cases {
+        let mut fixture = responses()?;
+        fixture[8] = json(container)?;
+        let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+        let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+        assert_eq!(
+            graph
+                .dependencies()
+                .iter()
+                .filter(
+                    |edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Secret
+                )
+                .count(),
+            edge_count
+        );
+        assert!(
+            graph
+                .findings()
+                .iter()
+                .any(|finding| finding.code() == expected.expect("expected finding"))
+        );
+    }
+
+    let mut fixture = responses()?;
+    fixture[8] =
+        json(r#"{"Id":"container-a","Name":"a","Config":{"Secrets":[{"ID":"secret-1","Name":"credential"}]}}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    let secret_edges = graph
+        .dependencies()
+        .iter()
+        .filter(|edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Secret)
+        .collect::<Vec<_>>();
+    assert_eq!(secret_edges.len(), 1);
+    let podman_lens::DependencyEvidence::NativeRelationship { field_paths } = secret_edges[0].evidence() else {
+        return Err("secret dependency must retain native evidence".into());
+    };
+    assert_eq!(
+        field_paths.iter().map(String::as_str).collect::<Vec<_>>(),
+        ["$.Config.Secrets[0].ID", "$.Config.Secrets[0].Name"]
+    );
+
+    let mut fixture = responses()?;
+    fixture[7] = json(r#"[{"ID":"secret-1","Spec":{"Name":"same"}},{"ID":"secret-2","Spec":{"Name":"same"}}]"#)?;
+    fixture[8] = json(r#"{"Id":"container-a","Name":"a","Config":{"Secrets":[{"ID":"secret-1","Name":"same"}]}}"#)?;
+    fixture[19] = json(r#"{"ID":"secret-1","Spec":{"Name":"same"}}"#)?;
+    fixture[20] = json(r#"{"ID":"secret-2","Spec":{"Name":"same"}}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    assert!(
+        graph
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::RelationshipAmbiguous)
+    );
+    assert!(
+        !graph
+            .dependencies()
+            .iter()
+            .any(|edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Secret)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn configured_and_locally_resolved_container_images_remain_separate() -> Result<(), Box<dyn std::error::Error>> {
+    let inventory = inventory().await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    assert!(
+        !container
+            .header()
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::RelationshipConflict)
+    );
+
+    let mut fixture = responses()?;
+    fixture[8] = json(r#"{"Id":"container-a","Name":"a","Image":"sha256:cache","ImageName":"sha256:one"}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let container = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .observations()[0];
+    assert!(container.header().findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::RelationshipConflict && finding.field_path() == Some("$.ImageName")
+    }));
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    let image_dependencies = graph
+        .dependencies()
+        .iter()
+        .filter(|edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Image)
+        .collect::<Vec<_>>();
+    assert_eq!(image_dependencies.len(), 1);
+    assert_eq!(image_dependencies[0].prerequisite().id(), "sha256:one");
+
+    let mut fixture = responses()?;
+    fixture[8] = json(r#"{"Id":"container-a","Name":"a","Image":"sha256:one","ImageName":"missing"}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    assert!(graph.findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::UnresolvedRelationship && finding.field_path() == Some("$.ImageName")
+    }));
+    assert!(
+        !graph
+            .dependencies()
+            .iter()
+            .any(|edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Image)
+    );
+
+    let mut fixture = responses()?;
+    fixture[8] = json(r#"{"Id":"container-a","Name":"a","Image":"sha256:one","ImageName":"shared:1"}"#)?;
+    fixture[17] = json(r#"{"Id":"sha256:cache","Names":["shared:1"]}"#)?;
+    fixture[18] = json(r#"{"Id":"sha256:one","Names":["shared:1"]}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    assert!(graph.findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::RelationshipAmbiguous && finding.field_path() == Some("$.ImageName")
+    }));
+    assert!(
+        !graph
+            .dependencies()
+            .iter()
+            .any(|edge| edge.dependent().id() == "container-a" && edge.prerequisite().kind() == ResourceKind::Image)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_relationship_fields_are_visible_but_never_traversed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = responses()?;
+    fixture[8] = json("false")?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let graph = discover(&inventory, &root(ResourceKind::Container, "a")?)?;
+    assert!(
+        graph
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::RelationshipConflict)
+    );
+    assert!(
+        !graph
+            .dependencies()
+            .iter()
+            .any(|edge| edge.dependent().id() == "container-a")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn absent_relationship_collections_create_no_edges_or_conflict_findings() -> Result<(), Box<dyn std::error::Error>>
+{
+    let cases = [
+        (8, r#"{"Id":"container-a","Name":"a"}"#, ResourceKind::Container, "a"),
+        (12, r#"{"Id":"pod-1","Name":"pod"}"#, ResourceKind::Pod, "pod"),
+    ];
+    for (response_index, body, kind, reference) in cases {
+        let mut fixture = responses()?;
+        fixture[response_index] = json(body)?;
+        let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+        let graph = discover(&inventory, &root(kind, reference)?)?;
+        assert!(
+            !graph
+                .dependencies()
+                .iter()
+                .any(|edge| edge.dependent().kind() == kind && edge.dependent().name() == Some(reference)),
+            "absent {kind:?} relationships must not create edges"
+        );
+        assert!(
+            !graph.findings().iter().any(|finding| {
+                finding.code() == DiagnosticCode::RelationshipConflict
+                    && finding
+                        .resource_identity()
+                        .is_some_and(|identity| identity.kind() == kind)
+            }),
+            "absent {kind:?} relationships must not be diagnosed as a conflict"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn one_malformed_relationship_member_blocks_its_entire_collection() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            8,
+            r#"{"Id":"container-a","Name":"a","ImageName":"sha256:one","NetworkSettings":{"Networks":{"app":{},"broken":false}}}"#,
+            ResourceKind::Container,
+            "a",
+        ),
+        (
+            8,
+            r#"{"Id":"container-a","Name":"a","ImageName":"sha256:one","Mounts":[{"Type":"volume","Name":"data"},false]}"#,
+            ResourceKind::Container,
+            "a",
+        ),
+        (
+            8,
+            r#"{"Id":"container-a","Name":"a","ImageName":"sha256:one","Dependencies":["container-b",false]}"#,
+            ResourceKind::Container,
+            "a",
+        ),
+        (
+            8,
+            r#"{"Id":"container-a","Name":"a","ImageName":"sha256:one","Config":{"Secrets":[{"ID":"secret-1"},false]}}"#,
+            ResourceKind::Container,
+            "a",
+        ),
+        (
+            12,
+            r#"{"Id":"pod-1","Name":"pod","Containers":[{"Id":"container-a"},false]}"#,
+            ResourceKind::Pod,
+            "pod",
+        ),
+        (
+            12,
+            r#"{"Id":"pod-1","Name":"pod","Networks":["app",false]}"#,
+            ResourceKind::Pod,
+            "pod",
+        ),
+    ];
+
+    for (response_index, body, kind, reference) in cases {
+        let mut fixture = responses()?;
+        fixture[response_index] = json(body)?;
+        let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+        let graph = discover(&inventory, &root(kind, reference)?)?;
+        assert!(graph.findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::RelationshipConflict
+                && finding
+                    .resource_identity()
+                    .is_some_and(|identity| identity.kind() == kind)
+        }));
+        assert!(
+            !graph
+                .dependencies()
+                .iter()
+                .any(|edge| edge.dependent().kind() == kind && edge.dependent().name() == Some(reference)),
+            "malformed {kind:?} relationship collection must not contribute an edge"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_infra_marker_never_promotes_a_container_to_an_all_root() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = responses()?;
+    fixture[11] = json(r#"{"Id":"infra","Name":"infra","Pod":"pod-1","IsInfra":"not-a-boolean"}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let mut request = DiscoveryRequest::new();
+    request.select_all();
+    let graph = discover(&inventory, &request)?;
+    assert!(graph.resolved_roots().iter().all(|identity| identity.id() != "infra"));
     Ok(())
 }
 

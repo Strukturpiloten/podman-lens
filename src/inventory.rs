@@ -7,6 +7,13 @@ use std::{collections::BTreeMap, fmt};
 
 use serde_json::{Map, Value};
 
+use crate::observation::{
+    ContainerObservation, ImageObservation, Labels, NativeRelationship, NetworkObservation, NetworkOptionKeys,
+    ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
+    ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
+    ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId, UnmodelledCompleteness, UnmodelledField,
+    VolumeObservation, VolumeOwnerIdWireValue,
+};
 use crate::{
     CapabilityCatalogueEntry, Diagnostic, DiagnosticCode, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse,
     LibpodTransport, ObservedApiVersion, PodmanLensResult, ServiceObservation, capability_catalogue,
@@ -211,52 +218,6 @@ impl ResourceEvidence {
     }
 }
 
-/// The observed completeness of one record in a non-atomic inspection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum ObservationState {
-    /// The inspect response was decoded.
-    Complete,
-    /// A listed resource disappeared or could not be decoded during inspection.
-    Partial,
-}
-
-/// A typed relationship asserted by a native inspect response.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ResourceRelationship {
-    kind: ResourceKind,
-    target_id: String,
-    field_path: String,
-}
-
-impl ResourceRelationship {
-    fn new(kind: ResourceKind, target_id: impl Into<String>, field_path: impl Into<String>) -> Self {
-        Self {
-            kind,
-            target_id: target_id.into(),
-            field_path: field_path.into(),
-        }
-    }
-
-    /// Returns the kind of the referenced prerequisite or member resource.
-    #[must_use]
-    pub const fn kind(&self) -> ResourceKind {
-        self.kind
-    }
-
-    /// Returns the native reference spelling exactly as reported by Podman.
-    #[must_use]
-    pub fn target_id(&self) -> &str {
-        &self.target_id
-    }
-
-    /// Returns the exact source field that asserted this relationship.
-    #[must_use]
-    pub fn field_path(&self) -> &str {
-        &self.field_path
-    }
-}
-
 /// The JSON kind of an unknown field whose value was intentionally not retained.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -273,50 +234,6 @@ pub enum JsonValueKind {
     Array,
     /// A JSON object.
     Object,
-}
-
-/// Metadata for native data that M2 does not decode into a typed field.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UnknownNativeField {
-    path: String,
-    json_kind: JsonValueKind,
-    resource: ResourceIdentity,
-    evidence: ResourceEvidence,
-}
-
-impl UnknownNativeField {
-    fn new(path: String, value: &Value, resource: ResourceIdentity, evidence: ResourceEvidence) -> Self {
-        Self {
-            path,
-            json_kind: json_value_kind(value),
-            resource,
-            evidence,
-        }
-    }
-
-    /// Returns the JSON path relative to the resource root.
-    #[must_use]
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-
-    /// Returns only the unknown field's JSON kind, never its raw value.
-    #[must_use]
-    pub const fn json_kind(&self) -> JsonValueKind {
-        self.json_kind
-    }
-
-    /// Returns the resource that carried the unknown field.
-    #[must_use]
-    pub fn resource(&self) -> &ResourceIdentity {
-        &self.resource
-    }
-
-    /// Returns the source/version evidence that gives the unknown field meaning.
-    #[must_use]
-    pub fn evidence(&self) -> &ResourceEvidence {
-        &self.evidence
-    }
 }
 
 /// One structured non-fatal acquisition finding.
@@ -422,232 +339,24 @@ impl fmt::Display for SensitiveEnvironmentValue {
     }
 }
 
-/// One environment entry in its original source order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EnvironmentEntry {
-    name: String,
-    value: EnvironmentValue,
-}
-
-impl EnvironmentEntry {
-    /// Returns the environment variable name.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns whether the runtime value was redacted or explicitly included.
-    #[must_use]
-    pub fn value(&self) -> &EnvironmentValue {
-        &self.value
-    }
-}
-
-/// The safely retained representation of an environment value.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Explicit acquisition state for one independently listed resource kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
-pub enum EnvironmentValue {
-    /// The value was not requested and is not retained.
-    Redacted,
-    /// The value was explicitly requested and remains opaque to formatting and serialization.
-    Included(SensitiveEnvironmentValue),
+pub enum InventorySectionAvailability {
+    /// The list response decoded; individual observations retain their own state.
+    Available,
+    /// The list endpoint could not be acquired.
+    Unavailable,
+    /// The list endpoint returned malformed or unsupported data.
+    Malformed,
 }
 
-/// Typed network properties that affect connectivity but do not imply application ownership.
-#[derive(Clone, Eq, PartialEq)]
-pub struct NetworkDetails {
-    internal: Option<bool>,
-    options: BTreeMap<String, String>,
-    subnets: Vec<String>,
-}
-
-impl fmt::Debug for NetworkDetails {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("NetworkDetails")
-            .field("internal", &self.internal)
-            .field("option_count", &self.options.len())
-            .field("subnet_count", &self.subnets.len())
-            .finish()
-    }
-}
-
-impl NetworkDetails {
-    /// Returns the explicit internal-network property, when the service reported it.
-    #[must_use]
-    pub const fn internal(&self) -> Option<bool> {
-        self.internal
-    }
-
-    /// Returns native driver options without interpreting them as ownership evidence.
-    #[must_use]
-    pub fn options(&self) -> &BTreeMap<String, String> {
-        &self.options
-    }
-
-    /// Returns reported subnet spellings in source order.
-    #[must_use]
-    pub fn subnets(&self) -> &[String] {
-        &self.subnets
-    }
-}
-
-/// A typed resource observation independent of the private Libpod wire response.
-#[derive(Clone, Eq, PartialEq)]
-pub struct ResourceRecord {
-    identity: ResourceIdentity,
-    state: ObservationState,
-    labels: BTreeMap<String, String>,
-    relationships: Vec<ResourceRelationship>,
-    environment: Vec<EnvironmentEntry>,
-    image_aliases: Vec<String>,
-    network: Option<NetworkDetails>,
-    memory_swappiness: Option<u64>,
-    is_infra: Option<bool>,
-    secret_driver: Option<String>,
-    unknown_fields: Vec<UnknownNativeField>,
-    unknown_fields_complete: bool,
-    findings: Vec<InventoryFinding>,
-    evidence: ResourceEvidence,
-}
-
-impl ResourceRecord {
-    fn partial(identity: ResourceIdentity, evidence: ResourceEvidence, finding: DiagnosticCode) -> Self {
-        Self {
-            identity: identity.clone(),
-            state: ObservationState::Partial,
-            labels: BTreeMap::new(),
-            relationships: Vec::new(),
-            environment: Vec::new(),
-            image_aliases: Vec::new(),
-            network: None,
-            memory_swappiness: None,
-            is_infra: None,
-            secret_driver: None,
-            unknown_fields: Vec::new(),
-            unknown_fields_complete: false,
-            findings: vec![InventoryFinding::for_resource(finding, identity)],
-            evidence,
-        }
-    }
-
-    /// Returns the stable resource identity.
-    #[must_use]
-    pub fn identity(&self) -> &ResourceIdentity {
-        &self.identity
-    }
-
-    /// Returns whether this record was fully inspected.
-    #[must_use]
-    pub const fn state(&self) -> ObservationState {
-        self.state
-    }
-
-    /// Returns labels exactly as represented by the JSON object.
-    #[must_use]
-    pub fn labels(&self) -> &BTreeMap<String, String> {
-        &self.labels
-    }
-
-    /// Returns native relationships in source order.
-    #[must_use]
-    pub fn relationships(&self) -> &[ResourceRelationship] {
-        &self.relationships
-    }
-
-    /// Returns duplicate-preserving runtime environment entries in source order.
-    #[must_use]
-    pub fn environment(&self) -> &[EnvironmentEntry] {
-        &self.environment
-    }
-
-    /// Returns an image's native aliases in their original source order; other records return an empty slice.
-    #[must_use]
-    pub fn image_aliases(&self) -> &[String] {
-        &self.image_aliases
-    }
-
-    /// Returns network-specific connectivity fields for a network record only.
-    #[must_use]
-    pub fn network(&self) -> Option<&NetworkDetails> {
-        self.network.as_ref()
-    }
-
-    /// Returns the modeled `HostConfig.MemorySwappiness` value when present and version-applicable.
-    #[must_use]
-    pub const fn memory_swappiness(&self) -> Option<u64> {
-        self.memory_swappiness
-    }
-
-    /// Returns whether this is Podman's infrastructure container, when reported by inspection.
-    #[must_use]
-    pub const fn is_infra(&self) -> Option<bool> {
-        self.is_infra
-    }
-
-    /// Returns the native secret driver metadata for a secret record when reported.
-    #[must_use]
-    pub fn secret_driver(&self) -> Option<&str> {
-        self.secret_driver.as_deref()
-    }
-
-    /// Returns metadata for native fields not yet modeled by M2.
-    #[must_use]
-    pub fn unknown_fields(&self) -> &[UnknownNativeField] {
-        &self.unknown_fields
-    }
-
-    /// Returns whether [`Self::unknown_fields`] accounts for every unmodeled native field.
-    ///
-    /// A partial inspection and an [`DiagnosticCode::UnknownFieldOverflow`] finding make the
-    /// retained metadata incomplete. Callers must use the finding and this flag rather than
-    /// treating the bounded slice as an exhaustive record of unsupported native configuration.
-    #[must_use]
-    pub const fn unknown_fields_complete(&self) -> bool {
-        self.unknown_fields_complete
-    }
-
-    /// Returns non-fatal findings attached to this record.
-    #[must_use]
-    pub fn findings(&self) -> &[InventoryFinding] {
-        &self.findings
-    }
-
-    /// Returns source and version evidence for this record.
-    #[must_use]
-    pub fn evidence(&self) -> &ResourceEvidence {
-        &self.evidence
-    }
-}
-
-impl fmt::Debug for ResourceRecord {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ResourceRecord")
-            .field("identity", &self.identity)
-            .field("state", &self.state)
-            .field("label_count", &self.labels.len())
-            .field("relationships", &self.relationships)
-            .field("environment", &self.environment)
-            .field("image_alias_count", &self.image_aliases.len())
-            .field("network", &self.network)
-            .field("memory_swappiness", &self.memory_swappiness)
-            .field("is_infra", &self.is_infra)
-            .field("has_secret_driver", &self.secret_driver.is_some())
-            .field("unknown_fields", &self.unknown_fields)
-            .field("unknown_fields_complete", &self.unknown_fields_complete)
-            .field("findings", &self.findings)
-            .field("evidence", &self.evidence)
-            .finish()
-    }
-}
-
-/// Availability and records for one independently listed resource kind.
+/// Typed observations for one independently listed resource kind.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InventorySection {
     kind: ResourceKind,
-    available: bool,
-    records: Vec<ResourceRecord>,
+    availability: InventorySectionAvailability,
+    observations: Vec<ResourceObservation>,
     findings: Vec<InventoryFinding>,
 }
 
@@ -655,8 +364,12 @@ impl InventorySection {
     fn unavailable(kind: ResourceKind, code: DiagnosticCode) -> Self {
         Self {
             kind,
-            available: false,
-            records: Vec::new(),
+            availability: if code == DiagnosticCode::InventoryJson || code == DiagnosticCode::InventoryShape {
+                InventorySectionAvailability::Malformed
+            } else {
+                InventorySectionAvailability::Unavailable
+            },
+            observations: Vec::new(),
             findings: vec![InventoryFinding::section(code)],
         }
     }
@@ -667,22 +380,26 @@ impl InventorySection {
         self.kind
     }
 
-    /// Returns whether the kind's list response could be decoded.
+    /// Returns the typed list-acquisition state for this resource kind.
     #[must_use]
-    pub const fn available(&self) -> bool {
-        self.available
+    pub const fn availability(&self) -> InventorySectionAvailability {
+        self.availability
     }
 
-    /// Returns records in the deterministic list response order.
+    /// Returns typed observations in deterministic list response order.
     #[must_use]
-    pub fn records(&self) -> &[ResourceRecord] {
-        &self.records
+    pub fn observations(&self) -> &[ResourceObservation] {
+        &self.observations
     }
 
     /// Returns kind-wide findings that have no stable individual resource.
     #[must_use]
     pub fn findings(&self) -> &[InventoryFinding] {
         &self.findings
+    }
+
+    pub(crate) fn is_available(&self) -> bool {
+        self.availability == InventorySectionAvailability::Available
     }
 }
 
@@ -710,6 +427,18 @@ impl ResourceInventory {
     #[must_use]
     pub fn section(&self, kind: ResourceKind) -> Option<&InventorySection> {
         self.sections.iter().find(|section| section.kind == kind)
+    }
+
+    /// Returns every acquired observation in deterministic resource-kind and list order.
+    pub fn observations(&self) -> impl Iterator<Item = &ResourceObservation> {
+        self.sections.iter().flat_map(InventorySection::observations)
+    }
+
+    /// Finds one observation by its complete stable native identity.
+    #[must_use]
+    pub fn observation(&self, identity: &ResourceIdentity) -> Option<&ResourceObservation> {
+        self.observations()
+            .find(|observation| observation.header().identity() == identity)
     }
 }
 
@@ -744,9 +473,9 @@ pub async fn acquire_inventory(
     for (kind, identities) in listed {
         match identities {
             Ok(listed) => {
-                let mut records = Vec::with_capacity(listed.identities.len());
+                let mut observations = Vec::with_capacity(listed.identities.len());
                 for identity in listed.identities {
-                    let record = inspect_record(
+                    let observation = inspect_observation(
                         transport,
                         service.api_version(),
                         evidence.clone(),
@@ -755,13 +484,14 @@ pub async fn acquire_inventory(
                         remaining_unknown_fields.min(MAX_UNKNOWN_FIELDS_PER_RECORD),
                     )
                     .await;
-                    remaining_unknown_fields = remaining_unknown_fields.saturating_sub(record.unknown_fields.len());
-                    records.push(record);
+                    remaining_unknown_fields =
+                        remaining_unknown_fields.saturating_sub(observation.header().unmodelled_fields().len());
+                    observations.push(observation);
                 }
                 sections.push(InventorySection {
                     kind,
-                    available: true,
-                    records,
+                    availability: InventorySectionAvailability::Available,
+                    observations,
                     findings: listed.findings,
                 });
             }
@@ -776,12 +506,12 @@ pub async fn acquire_inventory(
 fn reconcile_relationships(sections: &mut [InventorySection]) {
     let available = sections
         .iter()
-        .map(|section| (section.kind, section.available))
+        .map(|section| (section.kind, section.is_available()))
         .collect::<BTreeMap<_, _>>();
     let mut targets = BTreeMap::<(ResourceKind, String), Vec<String>>::new();
     for section in sections.iter() {
-        for record in &section.records {
-            let identity = record.identity();
+        for observation in &section.observations {
+            let identity = observation.header().identity();
             targets
                 .entry((identity.kind(), identity.id().to_owned()))
                 .or_default()
@@ -792,107 +522,196 @@ fn reconcile_relationships(sections: &mut [InventorySection]) {
                     .or_default()
                     .push(identity.id().to_owned());
             }
-            for alias in record.image_aliases() {
-                targets
-                    .entry((identity.kind(), alias.clone()))
-                    .or_default()
-                    .push(identity.id().to_owned());
+            if let Some(ObservationField::Observed(aliases)) = observation.image_aliases() {
+                for alias in aliases.value() {
+                    targets
+                        .entry((identity.kind(), alias.clone()))
+                        .or_default()
+                        .push(identity.id().to_owned());
+                }
+            }
+        }
+    }
+    for candidates in targets.values_mut() {
+        candidates.sort();
+        candidates.dedup();
+    }
+    for section in sections.iter_mut() {
+        for observation in &mut section.observations {
+            let Some(ObservationField::Observed(relationships)) = observation.relationships() else {
+                continue;
+            };
+            let relationship_findings = relationships
+                .value()
+                .iter()
+                .filter(|relationship| available.get(&relationship.kind).copied().unwrap_or(false))
+                .flat_map(
+                    |relationship| match resolve_relationship_target(&targets, relationship) {
+                        RelationshipTarget::One(_) => Vec::new(),
+                        RelationshipTarget::Unresolved => relationship
+                            .field_paths
+                            .iter()
+                            .cloned()
+                            .map(|path| (DiagnosticCode::UnresolvedRelationship, path))
+                            .collect(),
+                        RelationshipTarget::Ambiguous => relationship
+                            .field_paths
+                            .iter()
+                            .cloned()
+                            .map(|path| (DiagnosticCode::RelationshipAmbiguous, path))
+                            .collect(),
+                        RelationshipTarget::Conflict => relationship
+                            .field_paths
+                            .iter()
+                            .cloned()
+                            .map(|path| (DiagnosticCode::RelationshipConflict, path))
+                            .collect(),
+                    },
+                )
+                .collect::<Vec<_>>();
+            let pod_membership_unresolved = observation.header().identity().kind() == ResourceKind::Pod
+                && relationships.value().iter().any(|relationship| {
+                    relationship.kind == ResourceKind::Container
+                        && !matches!(
+                            resolve_relationship_target(&targets, relationship),
+                            RelationshipTarget::One(_)
+                        )
+                });
+            let identity = observation.header().identity().clone();
+            observation.header_mut().findings_mut().extend(
+                relationship_findings
+                    .into_iter()
+                    .map(|(code, path)| InventoryFinding::field(code, identity.clone(), path)),
+            );
+            if pod_membership_unresolved {
+                observation.header_mut().findings_mut().push(InventoryFinding::field(
+                    DiagnosticCode::PodMembershipConflict,
+                    identity,
+                    "$.Containers",
+                ));
+            }
+        }
+    }
+
+    let mut pod_members = BTreeMap::<String, Vec<String>>::new();
+    let mut container_pods = BTreeMap::<String, Vec<String>>::new();
+    for section in sections.iter() {
+        if !section.is_available() {
+            continue;
+        }
+        for observation in &section.observations {
+            let identity = observation.header().identity();
+            let Some(ObservationField::Observed(relationships)) = observation.relationships() else {
+                continue;
+            };
+            for relationship in relationships.value() {
+                match (identity.kind(), relationship.kind) {
+                    (ResourceKind::Pod, ResourceKind::Container) => {
+                        if let RelationshipTarget::One(target) = resolve_relationship_target(&targets, relationship) {
+                            pod_members
+                                .entry(identity.id().to_owned())
+                                .or_default()
+                                .push(target.to_owned());
+                        }
+                    }
+                    (ResourceKind::Container, ResourceKind::Pod) => {
+                        if let RelationshipTarget::One(target) = resolve_relationship_target(&targets, relationship) {
+                            container_pods
+                                .entry(identity.id().to_owned())
+                                .or_default()
+                                .push(target.to_owned());
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }
     for section in sections.iter_mut() {
-        for record in &mut section.records {
-            let unresolved = record
-                .relationships
-                .iter()
-                .filter(|relationship| available.get(&relationship.kind()).copied().unwrap_or(false))
-                .filter(|relationship| {
-                    !targets.contains_key(&(relationship.kind(), relationship.target_id().to_owned()))
-                })
-                .map(|relationship| relationship.field_path().to_owned())
-                .collect::<Vec<_>>();
-            record.findings.extend(unresolved.into_iter().map(|path| {
-                InventoryFinding::field(DiagnosticCode::UnresolvedRelationship, record.identity.clone(), path)
-            }));
-        }
-    }
-
-    let pod_members = sections
-        .iter()
-        .filter(|section| section.kind == ResourceKind::Pod && section.available)
-        .flat_map(|section| section.records.iter())
-        .map(|pod| {
-            (
-                pod.identity.id.clone(),
-                pod.relationships
-                    .iter()
-                    .filter(|relationship| relationship.kind == ResourceKind::Container)
-                    .filter_map(|relationship| {
-                        canonical_target(&targets, ResourceKind::Container, relationship.target_id())
-                            .map(ToOwned::to_owned)
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    let container_pods = sections
-        .iter()
-        .filter(|section| section.kind == ResourceKind::Container && section.available)
-        .flat_map(|section| section.records.iter())
-        .map(|container| {
-            (
-                container.identity.id.clone(),
-                container
-                    .relationships
-                    .iter()
-                    .filter(|relationship| relationship.kind == ResourceKind::Pod)
-                    .filter_map(|relationship| {
-                        canonical_target(&targets, ResourceKind::Pod, relationship.target_id()).map(ToOwned::to_owned)
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    for section in sections {
-        for record in &mut section.records {
-            let disagrees = match record.identity.kind {
-                ResourceKind::Pod => pod_members.get(&record.identity.id).is_some_and(|members| {
+        for observation in &mut section.observations {
+            let identity = observation.header().identity().clone();
+            let conflict = match identity.kind() {
+                ResourceKind::Pod => pod_members.get(identity.id()).is_some_and(|members| {
                     members.iter().any(|member| {
-                        container_pods
+                        !container_pods
                             .get(member)
-                            .is_some_and(|pods| !pods.contains(&record.identity.id))
+                            .is_some_and(|pods| pods.contains(&identity.id().to_owned()))
                     })
                 }),
-                ResourceKind::Container => container_pods.get(&record.identity.id).is_some_and(|pods| {
+                ResourceKind::Container => container_pods.get(identity.id()).is_some_and(|pods| {
                     pods.iter().any(|pod| {
-                        pod_members
+                        !pod_members
                             .get(pod)
-                            .is_some_and(|members| !members.contains(&record.identity.id))
+                            .is_some_and(|members| members.contains(&identity.id().to_owned()))
                     })
                 }),
                 _ => false,
             };
-            if disagrees {
-                record.findings.push(InventoryFinding::field(
+            if conflict {
+                observation.header_mut().findings_mut().push(InventoryFinding::field(
                     DiagnosticCode::PodMembershipConflict,
-                    record.identity.clone(),
+                    identity,
                     "$.PodMembership",
                 ));
             }
         }
     }
+
+    for section in sections.iter_mut() {
+        for observation in &mut section.observations {
+            let ResourceDetails::Container(container) = observation.details() else {
+                continue;
+            };
+            let (ObservationField::Observed(configured), ObservationField::Observed(local)) =
+                (container.configured_image(), container.local_image_id())
+            else {
+                continue;
+            };
+            let configured = NativeRelationship::new(ResourceKind::Image, configured.value(), "$.ImageName");
+            let local = NativeRelationship::new(ResourceKind::Image, local.value(), "$.Image");
+            if let (RelationshipTarget::One(configured), RelationshipTarget::One(local)) = (
+                resolve_relationship_target(&targets, &configured),
+                resolve_relationship_target(&targets, &local),
+            ) {
+                if configured != local {
+                    let identity = observation.header().identity().clone();
+                    observation.header_mut().findings_mut().push(InventoryFinding::field(
+                        DiagnosticCode::RelationshipConflict,
+                        identity,
+                        "$.ImageName",
+                    ));
+                }
+            }
+        }
+    }
 }
 
-fn canonical_target<'a>(
+enum RelationshipTarget<'a> {
+    One(&'a str),
+    Unresolved,
+    Ambiguous,
+    Conflict,
+}
+
+fn resolve_relationship_target<'a>(
     targets: &'a BTreeMap<(ResourceKind, String), Vec<String>>,
-    kind: ResourceKind,
-    reference: &str,
-) -> Option<&'a str> {
-    let candidates = targets.get(&(kind, reference.to_owned()))?;
-    let [identity] = candidates.as_slice() else {
-        return None;
-    };
-    Some(identity)
+    relationship: &NativeRelationship,
+) -> RelationshipTarget<'a> {
+    let mut resolved = std::collections::BTreeSet::new();
+    for reference in &relationship.references {
+        let Some(candidates) = targets.get(&(relationship.kind, reference.clone())) else {
+            return RelationshipTarget::Unresolved;
+        };
+        let [candidate] = candidates.as_slice() else {
+            return RelationshipTarget::Ambiguous;
+        };
+        resolved.insert(candidate.as_str());
+    }
+    match resolved.into_iter().collect::<Vec<_>>().as_slice() {
+        [target] => RelationshipTarget::One(target),
+        [] => RelationshipTarget::Unresolved,
+        _ => RelationshipTarget::Conflict,
+    }
 }
 
 struct ListedSection {
@@ -911,27 +730,29 @@ async fn list_section(
     response.and_then(|response| decode_list(kind, &response))
 }
 
-async fn inspect_record(
+async fn inspect_observation(
     transport: &dyn LibpodTransport,
     api_version: &ObservedApiVersion,
     evidence: ResourceEvidence,
     identity: ResourceIdentity,
     options: AcquisitionOptions,
     unknown_field_limit: usize,
-) -> ResourceRecord {
+) -> ResourceObservation {
     let Ok(path) = LibpodPath::resource(api_version, identity.kind.collection(), identity.id(), "json") else {
-        return ResourceRecord::partial(identity, evidence, DiagnosticCode::ResourceMalformed);
+        return partial_observation(identity, evidence, DiagnosticCode::ResourceMalformed);
     };
     let response = send_get(transport, path).await;
     match response {
         Ok(response) if response.status() == 404 => {
-            ResourceRecord::partial(identity, evidence, DiagnosticCode::ResourceUnavailable)
+            partial_observation(identity, evidence, DiagnosticCode::ResourceUnavailable)
         }
-        Ok(response) => match decode_record(&identity, &response, evidence.clone(), options, unknown_field_limit) {
-            Ok(record) => record,
-            Err(error) => ResourceRecord::partial(identity, evidence, error.code()),
-        },
-        Err(_) => ResourceRecord::partial(identity, evidence, DiagnosticCode::ResourceUnavailable),
+        Ok(response) => {
+            match decode_observation(&identity, &response, evidence.clone(), options, unknown_field_limit) {
+                Ok(record) => record,
+                Err(error) => partial_observation(identity, evidence, error.code()),
+            }
+        }
+        Err(_) => partial_observation(identity, evidence, DiagnosticCode::ResourceUnavailable),
     }
 }
 
@@ -1016,13 +837,13 @@ fn list_identity(kind: ResourceKind, value: &Value) -> PodmanLensResult<Resource
     Ok(ResourceIdentity::new(kind, id.to_owned(), name.map(ToOwned::to_owned)))
 }
 
-fn decode_record(
+fn decode_observation(
     listed_identity: &ResourceIdentity,
     response: &LibpodResponse,
     evidence: ResourceEvidence,
     options: AcquisitionOptions,
     unknown_field_limit: usize,
-) -> PodmanLensResult<ResourceRecord> {
+) -> PodmanLensResult<ResourceObservation> {
     require_ok_json(response)?;
     let value = decode_json(response.body())?;
     let object = value
@@ -1036,7 +857,12 @@ fn decode_record(
         image_aliases,
         network,
         memory_swappiness,
+        configured_image,
+        local_image_id,
+        is_infra,
         secret_driver,
+        volume_owner_user,
+        volume_owner_group,
         mut findings,
         known,
     ) = match listed_identity.kind {
@@ -1046,11 +872,6 @@ fn decode_record(
         ResourceKind::Volume => decode_volume(listed_identity, object)?,
         ResourceKind::Image => decode_image(listed_identity, object, options)?,
         ResourceKind::Secret => decode_secret(listed_identity, object)?,
-    };
-    let is_infra = if listed_identity.kind == ResourceKind::Container {
-        decode_is_infra(object, &identity, &mut findings)
-    } else {
-        None
     };
     let mut unknown_fields = UnknownFieldCollector::new(&identity, &evidence, unknown_field_limit);
     unknown_top_level(object, known, &mut unknown_fields);
@@ -1068,36 +889,141 @@ fn decode_record(
             InventoryFinding::field(DiagnosticCode::NativeFieldUnsupported, identity.clone(), field.path())
         }),
     );
-    Ok(ResourceRecord {
-        identity,
-        state: ObservationState::Complete,
+    let header = ObservationHeader::complete(
+        identity.clone(),
+        evidence,
+        findings,
+        unknown_fields,
+        if unknown_field_overflow {
+            UnmodelledCompleteness::Incomplete
+        } else {
+            UnmodelledCompleteness::Complete
+        },
+    );
+    ResourceObservation::try_new(
+        header,
+        details_from_decoded(
+            identity.kind(),
+            DecodedDetails {
+                labels,
+                relationships,
+                environment,
+                image_aliases,
+                network,
+                memory_swappiness,
+                configured_image,
+                local_image_id,
+                is_infra,
+                secret_driver,
+                volume_owner_user,
+                volume_owner_group,
+            },
+        ),
+    )
+}
+
+type Decoded = (
+    ResourceIdentity,
+    ObservationField<Labels>,
+    ObservationField<Vec<NativeRelationship>>,
+    ObservationField<ProtectedEnvironment>,
+    ObservationField<Vec<String>>,
+    Option<NetworkDecoded>,
+    Option<ObservationField<u64>>,
+    Option<ObservationField<String>>,
+    Option<ObservationField<String>>,
+    Option<ObservationField<bool>>,
+    Option<ObservationField<String>>,
+    Option<ObservationField<VolumeOwnerIdWireValue>>,
+    Option<ObservationField<VolumeOwnerIdWireValue>>,
+    Vec<InventoryFinding>,
+    &'static [&'static str],
+);
+
+type NetworkDecoded = (
+    ObservationField<bool>,
+    ObservationField<NetworkOptionKeys>,
+    ObservationField<Vec<String>>,
+);
+
+struct DecodedDetails {
+    labels: ObservationField<Labels>,
+    relationships: ObservationField<Vec<NativeRelationship>>,
+    environment: ObservationField<ProtectedEnvironment>,
+    image_aliases: ObservationField<Vec<String>>,
+    network: Option<NetworkDecoded>,
+    memory_swappiness: Option<ObservationField<u64>>,
+    configured_image: Option<ObservationField<String>>,
+    local_image_id: Option<ObservationField<String>>,
+    is_infra: Option<ObservationField<bool>>,
+    secret_driver: Option<ObservationField<String>>,
+    volume_owner_user: Option<ObservationField<VolumeOwnerIdWireValue>>,
+    volume_owner_group: Option<ObservationField<VolumeOwnerIdWireValue>>,
+}
+
+fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> ResourceDetails {
+    let DecodedDetails {
         labels,
         relationships,
         environment,
         image_aliases,
         network,
         memory_swappiness,
+        configured_image,
+        local_image_id,
         is_infra,
         secret_driver,
-        unknown_fields,
-        unknown_fields_complete: !unknown_field_overflow,
-        findings,
-        evidence,
-    })
+        volume_owner_user,
+        volume_owner_group,
+    } = details;
+    match kind {
+        ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            labels,
+            configured_image.unwrap_or(ObservationField::NotApplicable),
+            local_image_id.unwrap_or(ObservationField::NotApplicable),
+            relationships,
+            environment,
+            memory_swappiness.unwrap_or(ObservationField::NotApplicable),
+            is_infra.unwrap_or(ObservationField::Absent),
+        )),
+        ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(labels, relationships)),
+        ResourceKind::Network => {
+            let (internal, options, subnets) = network.unwrap_or((
+                ObservationField::NotApplicable,
+                ObservationField::NotApplicable,
+                ObservationField::NotApplicable,
+            ));
+            ResourceDetails::Network(NetworkObservation::new(labels, internal, options, subnets))
+        }
+        ResourceKind::Volume => ResourceDetails::Volume(VolumeObservation::new(
+            labels,
+            volume_owner_user.unwrap_or(ObservationField::Malformed),
+            volume_owner_group.unwrap_or(ObservationField::Malformed),
+        )),
+        ResourceKind::Image => ResourceDetails::Image(ImageObservation::new(labels, image_aliases, environment)),
+        ResourceKind::Secret => ResourceDetails::Secret(SecretObservation::new(
+            labels,
+            secret_driver.unwrap_or(ObservationField::Absent),
+        )),
+    }
 }
 
-type Decoded = (
-    ResourceIdentity,
-    BTreeMap<String, String>,
-    Vec<ResourceRelationship>,
-    Vec<EnvironmentEntry>,
-    Vec<String>,
-    Option<NetworkDetails>,
-    Option<u64>,
-    Option<String>,
-    Vec<InventoryFinding>,
-    &'static [&'static str],
-);
+fn partial_observation(
+    identity: ResourceIdentity,
+    evidence: ResourceEvidence,
+    finding: DiagnosticCode,
+) -> ResourceObservation {
+    ResourceObservation::incomplete(ObservationHeader::incomplete(
+        identity.clone(),
+        evidence,
+        if finding == DiagnosticCode::ResourceUnavailable {
+            ResourceObservationState::Unavailable
+        } else {
+            ResourceObservationState::Malformed
+        },
+        vec![InventoryFinding::for_resource(finding, identity)],
+    ))
+}
 
 fn decode_container(
     listed: &ResourceIdentity,
@@ -1106,33 +1032,26 @@ fn decode_container(
     evidence: &ResourceEvidence,
 ) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Id"], &["Name"])?;
-    let labels = labels(
-        object
-            .get("Config")
-            .and_then(Value::as_object)
-            .and_then(|config| config.get("Labels")),
-    )?;
-    let mut relationships = Vec::new();
     let mut findings = Vec::new();
-    append_optional_relationship(
-        object,
-        "Image",
-        ResourceKind::Image,
+    let (labels, environment) = decode_container_configuration(object, options, &identity, &mut findings);
+    let mut relationships = Vec::new();
+    let local_image_id = optional_string_field(
+        object.get("Image"),
         "$.Image",
         &identity,
-        &mut relationships,
+        ObservationOrigin::LocalResolution,
         &mut findings,
     );
-    append_optional_relationship(
-        object,
-        "ImageName",
-        ResourceKind::Image,
+    let configured_image = optional_string_field(
+        object.get("ImageName"),
         "$.ImageName",
         &identity,
-        &mut relationships,
+        ObservationOrigin::Configured,
         &mut findings,
     );
-    append_optional_relationship(
+    append_configured_image_relationship(&configured_image, &mut relationships);
+    let mut relationship_decoding = RelationshipDecoding::from_field(&configured_image);
+    relationship_decoding.merge(append_optional_relationship(
         object,
         "Pod",
         ResourceKind::Pod,
@@ -1140,29 +1059,41 @@ fn decode_container(
         &identity,
         &mut relationships,
         &mut findings,
-    );
-    decode_container_networks(object, &identity, &mut relationships, &mut findings);
-    decode_mounts(object, &identity, &mut relationships, &mut findings);
-    decode_dependencies(object, &identity, &mut relationships, &mut findings);
-    decode_container_secrets(object, &identity, &mut relationships, &mut findings);
-    let (environment, environment_findings) = decode_environment(
-        object
-            .get("Config")
-            .and_then(Value::as_object)
-            .and_then(|config| config.get("Env")),
-        options.environment_values,
+    ));
+    relationship_decoding.merge(decode_container_networks(
+        object,
         &identity,
-    );
-    findings.extend(environment_findings);
+        &mut relationships,
+        &mut findings,
+    ));
+    relationship_decoding.merge(decode_mounts(object, &identity, &mut relationships, &mut findings));
+    relationship_decoding.merge(decode_dependencies(
+        object,
+        &identity,
+        &mut relationships,
+        &mut findings,
+    ));
+    relationship_decoding.merge(decode_container_secrets(
+        object,
+        &identity,
+        &mut relationships,
+        &mut findings,
+    ));
     let memory_swappiness = decode_memory_swappiness(object, evidence, &identity, &mut findings);
+    let is_infra = decode_is_infra(object, &identity, &mut findings);
     Ok((
         identity,
         labels,
-        relationships,
+        relationship_field(relationships, relationship_decoding),
         environment,
-        Vec::new(),
+        ObservationField::NotApplicable,
         None,
-        memory_swappiness,
+        Some(memory_swappiness),
+        Some(configured_image),
+        Some(local_image_id),
+        Some(is_infra),
+        None,
+        None,
         None,
         findings,
         &[
@@ -1183,17 +1114,27 @@ fn decode_container(
 
 fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Id"], &["Name"])?;
-    let labels = labels(object.get("Labels"))?;
     let mut relationships = Vec::new();
     let mut findings = Vec::new();
-    decode_pod_containers(object, &identity, &mut relationships, &mut findings);
-    decode_pod_networks(object, &identity, &mut relationships, &mut findings);
+    let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
+    let mut relationship_decoding = decode_pod_containers(object, &identity, &mut relationships, &mut findings);
+    relationship_decoding.merge(decode_pod_networks(
+        object,
+        &identity,
+        &mut relationships,
+        &mut findings,
+    ));
     Ok((
         identity,
         labels,
-        relationships,
-        Vec::new(),
-        Vec::new(),
+        relationship_field(relationships, relationship_decoding),
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        None,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -1202,17 +1143,47 @@ fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanL
     ))
 }
 
+fn decode_container_configuration(
+    object: &Map<String, Value>,
+    options: AcquisitionOptions,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> (ObservationField<Labels>, ObservationField<ProtectedEnvironment>) {
+    let config = match object.get("Config") {
+        None | Some(Value::Null) => return (ObservationField::Absent, ObservationField::Absent),
+        Some(Value::Object(config)) => config,
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.Config",
+            ));
+            return (ObservationField::Malformed, ObservationField::Malformed);
+        }
+    };
+    let labels = labels(config.get("Labels"), "$.Config.Labels", identity, findings);
+    let (environment, environment_findings) =
+        decode_environment(config.get("Env"), options.environment_values, identity, "$.Config.Env");
+    findings.extend(environment_findings);
+    (labels, environment)
+}
+
 fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["id"], &["name"])?;
-    let labels = labels(object.get("labels"))?;
-    let (network, findings) = decode_network_details(object, &identity);
+    let (network, mut findings) = decode_network_details(object, &identity);
+    let labels = labels(object.get("labels"), "$.labels", &identity, &mut findings);
     Ok((
         identity,
         labels,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
         Some(network),
+        None,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
         findings,
@@ -1223,53 +1194,63 @@ fn decode_network(listed: &ResourceIdentity, object: &Map<String, Value>) -> Pod
 fn decode_network_details(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-) -> (NetworkDetails, Vec<InventoryFinding>) {
+) -> (NetworkDecoded, Vec<InventoryFinding>) {
     let mut findings = Vec::new();
     let internal = match object.get("internal") {
-        Some(value) if value.is_null() => None,
-        Some(value) => {
-            if let Some(value) = value.as_bool() {
-                Some(value)
-            } else {
-                findings.push(InventoryFinding::field(
-                    DiagnosticCode::ResourceMalformed,
-                    identity.clone(),
-                    "$.internal",
-                ));
-                None
-            }
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Bool(value)) => {
+            ObservationField::Observed(ObservedValue::new(*value, ObservationOrigin::Effective))
         }
-        None => None,
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.internal",
+            ));
+            ObservationField::Malformed
+        }
     };
-    let options = if let Ok(options) = string_map(object.get("options")) {
-        options
-    } else {
-        findings.push(InventoryFinding::field(
-            DiagnosticCode::ResourceMalformed,
-            identity.clone(),
-            "$.options",
-        ));
-        BTreeMap::new()
+    let options = match string_map(object.get("options")) {
+        Ok(Some(options)) => ObservationField::Observed(ObservedValue::new(
+            NetworkOptionKeys::new(options.into_keys()),
+            ObservationOrigin::Effective,
+        )),
+        Ok(None) => ObservationField::Absent,
+        Err(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.options",
+            ));
+            ObservationField::Malformed
+        }
     };
     let subnets = match object.get("subnets") {
-        None | Some(Value::Null) => Vec::new(),
+        None | Some(Value::Null) => ObservationField::Absent,
         Some(Value::Array(subnets)) => {
             let mut decoded = Vec::new();
+            let mut malformed = false;
             for (index, subnet) in subnets.iter().enumerate() {
                 let value = subnet
                     .as_object()
                     .and_then(|subnet| required_string(subnet, "subnet").ok());
-                match value {
-                    Some(value) => decoded.push(value.to_owned()),
-                    None => findings.push(InventoryFinding::at_occurrence(
+                if let Some(value) = value {
+                    decoded.push(value.to_owned());
+                } else {
+                    malformed = true;
+                    findings.push(InventoryFinding::at_occurrence(
                         DiagnosticCode::ResourceMalformed,
                         identity.clone(),
                         "$.subnets",
                         index,
-                    )),
+                    ));
                 }
             }
-            decoded
+            if malformed {
+                ObservationField::Malformed
+            } else {
+                ObservationField::Observed(ObservedValue::new(decoded, ObservationOrigin::Effective))
+            }
         }
         Some(_) => {
             findings.push(InventoryFinding::field(
@@ -1277,34 +1258,79 @@ fn decode_network_details(
                 identity.clone(),
                 "$.subnets",
             ));
-            Vec::new()
+            ObservationField::Malformed
         }
     };
-    (
-        NetworkDetails {
-            internal,
-            options,
-            subnets,
-        },
-        findings,
-    )
+    ((internal, options, subnets), findings)
 }
 
 fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Name"], &["Name"])?;
-    let labels = labels(object.get("Labels"))?;
+    let mut findings = Vec::new();
+    let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
+    let uid = decode_volume_owner(object.get("UID"), "$.UID", &identity, &mut findings);
+    let gid = decode_volume_owner(object.get("GID"), "$.GID", &identity, &mut findings);
     Ok((
         identity,
         labels,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
         None,
         None,
         None,
-        Vec::new(),
-        &["Name", "Labels"],
+        None,
+        None,
+        None,
+        Some(uid),
+        Some(gid),
+        findings,
+        &["Name", "Labels", "UID", "GID"],
     ))
+}
+
+fn decode_volume_owner(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<VolumeOwnerIdWireValue> {
+    match value {
+        None => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::VolumeOwnerDefaultAmbiguous,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Observed(ObservedValue::new(
+                VolumeOwnerIdWireValue::WireAbsentMayMeanZero,
+                ObservationOrigin::Effective,
+            ))
+        }
+        Some(Value::Number(value)) => {
+            if let Some(value) = value.as_u64().and_then(|value| u32::try_from(value).ok()) {
+                ObservationField::Observed(ObservedValue::new(
+                    VolumeOwnerIdWireValue::Explicit(VolumeOwnerUnixId::new(value)),
+                    ObservationOrigin::Effective,
+                ))
+            } else {
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    path,
+                ));
+                ObservationField::Malformed
+            }
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
 }
 
 fn decode_image(
@@ -1313,33 +1339,44 @@ fn decode_image(
     options: AcquisitionOptions,
 ) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Id"], &["Names"])?;
-    let labels = labels(object.get("Labels"))?;
     let mut findings = Vec::new();
-    let config = match object.get("Config") {
-        None | Some(Value::Null) => None,
-        Some(Value::Object(config)) => Some(config),
+    let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
+    let (config, config_malformed) = match object.get("Config") {
+        None | Some(Value::Null) => (None, false),
+        Some(Value::Object(config)) => (Some(config), false),
         Some(_) => {
             findings.push(InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Config",
             ));
-            None
+            (None, true)
         }
     };
-    let (environment, mut environment_findings) = decode_environment(
-        config.and_then(|config| config.get("Env")),
-        options.environment_values,
-        &identity,
-    );
-    findings.append(&mut environment_findings);
+    let environment = if config_malformed {
+        ObservationField::Malformed
+    } else {
+        let (environment, mut environment_findings) = decode_environment(
+            config.and_then(|config| config.get("Env")),
+            options.environment_values,
+            &identity,
+            "$.Config.Env",
+        );
+        findings.append(&mut environment_findings);
+        environment
+    };
     let aliases = image_aliases(object.get("Names"), &identity, &mut findings);
     Ok((
         identity,
         labels,
-        Vec::new(),
+        ObservationField::NotApplicable,
         environment,
         aliases,
+        None,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -1354,8 +1391,8 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         .get("Spec")
         .and_then(Value::as_object)
         .ok_or_else(|| Diagnostic::new(DiagnosticCode::ResourceMalformed))?;
-    let labels = labels(spec.get("Labels"))?;
     let mut findings = Vec::new();
+    let labels = labels(spec.get("Labels"), "$.Spec.Labels", &identity, &mut findings);
     if object.contains_key("SecretData") || spec.contains_key("SecretData") {
         findings.push(InventoryFinding::for_resource(
             DiagnosticCode::SecretPayloadDiscarded,
@@ -1363,26 +1400,33 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         ));
     }
     let driver = match spec.get("Driver") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(driver)) if !driver.is_empty() => Some(driver.to_owned()),
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(driver)) => {
+            ObservationField::Observed(ObservedValue::new(driver.to_owned(), ObservationOrigin::Configured))
+        }
         Some(_) => {
             findings.push(InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Spec.Driver",
             ));
-            None
+            ObservationField::Malformed
         }
     };
     Ok((
         identity,
         labels,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
+        ObservationField::NotApplicable,
         None,
         None,
-        driver,
+        None,
+        None,
+        None,
+        Some(driver),
+        None,
+        None,
         findings,
         &["ID", "Spec", "SecretData"],
     ))
@@ -1413,39 +1457,105 @@ fn identity_from_inspect(
     ))
 }
 
+#[derive(Clone, Copy, Default)]
+struct RelationshipDecoding {
+    supplied: bool,
+    malformed: bool,
+}
+
+impl RelationshipDecoding {
+    fn from_field<T>(field: &ObservationField<T>) -> Self {
+        Self {
+            supplied: !matches!(field, ObservationField::Absent | ObservationField::NotApplicable),
+            malformed: matches!(field, ObservationField::Malformed),
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.supplied |= other.supplied;
+        self.malformed |= other.malformed;
+    }
+}
+
+fn append_configured_image_relationship(
+    configured_image: &ObservationField<String>,
+    relationships: &mut Vec<NativeRelationship>,
+) {
+    if let ObservationField::Observed(value) = configured_image {
+        relationships.push(NativeRelationship::new(
+            ResourceKind::Image,
+            value.value(),
+            "$.ImageName",
+        ));
+    }
+}
+
 fn append_optional_relationship(
     object: &Map<String, Value>,
     key: &str,
     kind: ResourceKind,
     path: &str,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
+) -> RelationshipDecoding {
     match object.get(key) {
-        None | Some(Value::Null) => {}
+        None | Some(Value::Null) => RelationshipDecoding::default(),
         Some(Value::String(value)) if !value.is_empty() => {
-            relationships.push(ResourceRelationship::new(kind, value, path));
+            relationships.push(NativeRelationship::new(kind, value, path));
+            RelationshipDecoding {
+                supplied: true,
+                malformed: false,
+            }
         }
-        Some(_) => findings.push(InventoryFinding::field(
-            DiagnosticCode::ResourceMalformed,
-            identity.clone(),
-            path,
-        )),
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            }
+        }
+    }
+}
+
+fn optional_string_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<String> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::String(value)) if !value.is_empty() => {
+            ObservationField::Observed(ObservedValue::new(value.clone(), origin))
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
     }
 }
 
 fn decode_container_networks(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
+) -> RelationshipDecoding {
     let Some(settings) = object.get("NetworkSettings") else {
-        return;
+        return RelationshipDecoding::default();
     };
     if settings.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(settings) = settings.as_object() else {
         findings.push(InventoryFinding::field(
@@ -1453,13 +1563,16 @@ fn decode_container_networks(
             identity.clone(),
             "$.NetworkSettings",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
     let Some(networks) = settings.get("Networks") else {
-        return;
+        return RelationshipDecoding::default();
     };
     if networks.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(networks) = networks.as_object() else {
         findings.push(InventoryFinding::field(
@@ -1467,8 +1580,12 @@ fn decode_container_networks(
             identity.clone(),
             "$.NetworkSettings.Networks",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (name, details) in networks {
         if name.is_empty() || !details.is_object() && !details.is_null() {
             findings.push(InventoryFinding::field(
@@ -1476,25 +1593,32 @@ fn decode_container_networks(
                 identity.clone(),
                 format!("$.NetworkSettings.Networks.{name}"),
             ));
+            malformed = true;
             continue;
         }
-        relationships.push(ResourceRelationship::new(
+        relationships.push(NativeRelationship::new(
             ResourceKind::Network,
             name,
             format!("$.NetworkSettings.Networks.{name}"),
         ));
+    }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
     }
 }
 
 fn decode_mounts(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
-    let Some(mounts) = object.get("Mounts") else { return };
+) -> RelationshipDecoding {
+    let Some(mounts) = object.get("Mounts") else {
+        return RelationshipDecoding::default();
+    };
     if mounts.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(mounts) = mounts.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1502,8 +1626,12 @@ fn decode_mounts(
             identity.clone(),
             "$.Mounts",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (index, mount) in mounts.iter().enumerate() {
         let Some(mount) = mount.as_object() else {
             findings.push(InventoryFinding::at_occurrence(
@@ -1512,44 +1640,56 @@ fn decode_mounts(
                 "$.Mounts",
                 index,
             ));
+            malformed = true;
             continue;
         };
         match mount.get("Type") {
-            Some(Value::String(kind)) if kind == "volume" => match required_string(mount, "Name") {
-                Ok(name) => relationships.push(ResourceRelationship::new(
-                    ResourceKind::Volume,
-                    name,
-                    format!("$.Mounts[{index}].Name"),
-                )),
-                Err(_) => findings.push(InventoryFinding::at_occurrence(
+            Some(Value::String(kind)) if kind == "volume" => {
+                if let Ok(name) = required_string(mount, "Name") {
+                    relationships.push(NativeRelationship::new(
+                        ResourceKind::Volume,
+                        name,
+                        format!("$.Mounts[{index}].Name"),
+                    ));
+                } else {
+                    malformed = true;
+                    findings.push(InventoryFinding::at_occurrence(
+                        DiagnosticCode::ResourceMalformed,
+                        identity.clone(),
+                        "$.Mounts",
+                        index,
+                    ));
+                }
+            }
+            Some(Value::String(_)) => {}
+            _ => {
+                malformed = true;
+                findings.push(InventoryFinding::at_occurrence(
                     DiagnosticCode::ResourceMalformed,
                     identity.clone(),
                     "$.Mounts",
                     index,
-                )),
-            },
-            Some(Value::String(_)) => {}
-            _ => findings.push(InventoryFinding::at_occurrence(
-                DiagnosticCode::ResourceMalformed,
-                identity.clone(),
-                "$.Mounts",
-                index,
-            )),
+                ));
+            }
         }
+    }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
     }
 }
 
 fn decode_dependencies(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
+) -> RelationshipDecoding {
     let Some(dependencies) = object.get("Dependencies") else {
-        return;
+        return RelationshipDecoding::default();
     };
     if dependencies.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(dependencies) = dependencies.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1557,34 +1697,46 @@ fn decode_dependencies(
             identity.clone(),
             "$.Dependencies",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (index, dependency) in dependencies.iter().enumerate() {
-        match dependency.as_str().filter(|value| !value.is_empty()) {
-            Some(value) => relationships.push(ResourceRelationship::new(
+        if let Some(value) = dependency.as_str().filter(|value| !value.is_empty()) {
+            relationships.push(NativeRelationship::new(
                 ResourceKind::Container,
                 value,
                 format!("$.Dependencies[{index}]"),
-            )),
-            None => findings.push(InventoryFinding::at_occurrence(
+            ));
+        } else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Dependencies",
                 index,
-            )),
+            ));
         }
+    }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
     }
 }
 
 fn decode_container_secrets(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
-    let Some(config) = object.get("Config") else { return };
+) -> RelationshipDecoding {
+    let Some(config) = object.get("Config") else {
+        return RelationshipDecoding::default();
+    };
     if config.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(config) = config.as_object() else {
         findings.push(InventoryFinding::field(
@@ -1592,11 +1744,16 @@ fn decode_container_secrets(
             identity.clone(),
             "$.Config",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
-    let Some(secrets) = config.get("Secrets") else { return };
+    let Some(secrets) = config.get("Secrets") else {
+        return RelationshipDecoding::default();
+    };
     if secrets.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(secrets) = secrets.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1604,8 +1761,12 @@ fn decode_container_secrets(
             identity.clone(),
             "$.Config.Secrets",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (index, secret) in secrets.iter().enumerate() {
         let Some(secret) = secret.as_object() else {
             findings.push(InventoryFinding::at_occurrence(
@@ -1614,29 +1775,35 @@ fn decode_container_secrets(
                 "$.Config.Secrets",
                 index,
             ));
+            malformed = true;
             continue;
         };
-        let mut valid = false;
+        let mut references = Vec::new();
+        let mut member_malformed = false;
         for key in ["ID", "Name"] {
             match secret.get(key) {
                 None | Some(Value::Null) => {}
                 Some(Value::String(value)) if !value.is_empty() => {
-                    relationships.push(ResourceRelationship::new(
-                        ResourceKind::Secret,
-                        value,
-                        format!("$.Config.Secrets[{index}].{key}"),
-                    ));
-                    valid = true;
+                    references.push((value.to_owned(), format!("$.Config.Secrets[{index}].{key}")));
                 }
-                Some(_) => findings.push(InventoryFinding::at_occurrence(
-                    DiagnosticCode::ResourceMalformed,
-                    identity.clone(),
-                    "$.Config.Secrets",
-                    index,
-                )),
+                Some(_) => {
+                    member_malformed = true;
+                    findings.push(InventoryFinding::at_occurrence(
+                        DiagnosticCode::ResourceMalformed,
+                        identity.clone(),
+                        "$.Config.Secrets",
+                        index,
+                    ));
+                }
             }
         }
-        if !valid {
+        if let Some(relationship) = (!member_malformed)
+            .then(|| NativeRelationship::coalesced(ResourceKind::Secret, references))
+            .flatten()
+        {
+            relationships.push(relationship);
+        } else {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
@@ -1645,19 +1812,23 @@ fn decode_container_secrets(
             ));
         }
     }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
+    }
 }
 
 fn decode_pod_containers(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
+) -> RelationshipDecoding {
     let Some(containers) = object.get("Containers") else {
-        return;
+        return RelationshipDecoding::default();
     };
     if containers.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(containers) = containers.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1665,37 +1836,49 @@ fn decode_pod_containers(
             identity.clone(),
             "$.Containers",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (index, container) in containers.iter().enumerate() {
-        match container
+        if let Some(id) = container
             .as_object()
             .and_then(|container| required_string(container, "Id").ok())
         {
-            Some(id) => relationships.push(ResourceRelationship::new(
+            relationships.push(NativeRelationship::new(
                 ResourceKind::Container,
                 id,
                 format!("$.Containers[{index}].Id"),
-            )),
-            None => findings.push(InventoryFinding::at_occurrence(
+            ));
+        } else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Containers",
                 index,
-            )),
+            ));
         }
+    }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
     }
 }
 
 fn decode_pod_networks(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
-    relationships: &mut Vec<ResourceRelationship>,
+    relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) {
-    let Some(networks) = object.get("Networks") else { return };
+) -> RelationshipDecoding {
+    let Some(networks) = object.get("Networks") else {
+        return RelationshipDecoding::default();
+    };
     if networks.is_null() {
-        return;
+        return RelationshipDecoding::default();
     }
     let Some(networks) = networks.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1703,22 +1886,32 @@ fn decode_pod_networks(
             identity.clone(),
             "$.Networks",
         ));
-        return;
+        return RelationshipDecoding {
+            supplied: true,
+            malformed: true,
+        };
     };
+    let mut malformed = false;
     for (index, network) in networks.iter().enumerate() {
-        match network.as_str().filter(|name| !name.is_empty()) {
-            Some(name) => relationships.push(ResourceRelationship::new(
+        if let Some(name) = network.as_str().filter(|name| !name.is_empty()) {
+            relationships.push(NativeRelationship::new(
                 ResourceKind::Network,
                 name,
                 format!("$.Networks[{index}]"),
-            )),
-            None => findings.push(InventoryFinding::at_occurrence(
+            ));
+        } else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Networks",
                 index,
-            )),
+            ));
         }
+    }
+    RelationshipDecoding {
+        supplied: true,
+        malformed,
     }
 }
 
@@ -1727,17 +1920,24 @@ fn decode_memory_swappiness(
     evidence: &ResourceEvidence,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
-) -> Option<u64> {
-    let host_config = object.get("HostConfig")?;
+) -> ObservationField<u64> {
+    let Some(host_config) = object.get("HostConfig") else {
+        return ObservationField::Absent;
+    };
+    if host_config.is_null() {
+        return ObservationField::Absent;
+    }
     let Some(host_config) = host_config.as_object() else {
         findings.push(InventoryFinding::field(
             DiagnosticCode::ResourceMalformed,
             identity.clone(),
             "$.HostConfig",
         ));
-        return None;
+        return ObservationField::Malformed;
     };
-    let value = host_config.get("MemorySwappiness")?;
+    let Some(value) = host_config.get("MemorySwappiness") else {
+        return ObservationField::Absent;
+    };
     if value.is_null() {
         if evidence.api_version().starts_with("5.4.") {
             findings.push(InventoryFinding::field(
@@ -1745,18 +1945,19 @@ fn decode_memory_swappiness(
                 identity.clone(),
                 "$.HostConfig.MemorySwappiness",
             ));
+            return ObservationField::VersionInapplicable;
         }
-        return None;
+        return ObservationField::Absent;
     }
     if let Some(value) = value.as_u64() {
-        Some(value)
+        ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective))
     } else {
         findings.push(InventoryFinding::field(
             DiagnosticCode::ResourceMalformed,
             identity.clone(),
             "$.HostConfig.MemorySwappiness",
         ));
-        None
+        ObservationField::Malformed
     }
 }
 
@@ -1764,17 +1965,19 @@ fn decode_is_infra(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
-) -> Option<bool> {
+) -> ObservationField<bool> {
     match object.get("IsInfra") {
-        None | Some(Value::Null) => None,
-        Some(Value::Bool(value)) => Some(*value),
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Bool(value)) => {
+            ObservationField::Observed(ObservedValue::new(*value, ObservationOrigin::Effective))
+        }
         Some(_) => {
             findings.push(InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.IsInfra",
             ));
-            None
+            ObservationField::Malformed
         }
     }
 }
@@ -1783,10 +1986,12 @@ fn image_aliases(
     value: Option<&Value>,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
-) -> Vec<String> {
-    let Some(value) = value else { return Vec::new() };
+) -> ObservationField<Vec<String>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
     if value.is_null() {
-        return Vec::new();
+        return ObservationField::Absent;
     }
     let Some(values) = value.as_array() else {
         findings.push(InventoryFinding::field(
@@ -1794,97 +1999,146 @@ fn image_aliases(
             identity.clone(),
             "$.Names",
         ));
-        return Vec::new();
+        return ObservationField::Malformed;
     };
     let mut aliases = Vec::with_capacity(values.len());
+    let mut malformed = false;
     for (index, value) in values.iter().enumerate() {
-        match value.as_str().filter(|value| !value.is_empty()) {
-            Some(value) => aliases.push(value.to_owned()),
-            None => findings.push(InventoryFinding::at_occurrence(
+        if let Some(value) = value.as_str().filter(|value| !value.is_empty()) {
+            aliases.push(value.to_owned());
+        } else {
+            malformed = true;
+            findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
                 "$.Names",
                 index,
-            )),
+            ));
         }
     }
-    aliases
+    if malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Observed(ObservedValue::new(aliases, ObservationOrigin::LocalResolution))
+    }
+}
+
+fn relationship_field(
+    relationships: Vec<NativeRelationship>,
+    decoding: RelationshipDecoding,
+) -> ObservationField<Vec<NativeRelationship>> {
+    if decoding.malformed {
+        ObservationField::Malformed
+    } else if !decoding.supplied {
+        ObservationField::Absent
+    } else {
+        ObservationField::Observed(ObservedValue::new(relationships, ObservationOrigin::Effective))
+    }
 }
 
 fn decode_environment(
     value: Option<&Value>,
     policy: EnvironmentValuePolicy,
     identity: &ResourceIdentity,
-) -> (Vec<EnvironmentEntry>, Vec<InventoryFinding>) {
+    path: &str,
+) -> (ObservationField<ProtectedEnvironment>, Vec<InventoryFinding>) {
     let Some(value) = value else {
-        return (Vec::new(), Vec::new());
+        return (ObservationField::Absent, Vec::new());
     };
     if value.is_null() {
-        return (Vec::new(), Vec::new());
+        return (ObservationField::Absent, Vec::new());
     }
     let Some(entries) = value.as_array() else {
         return (
-            Vec::new(),
+            ObservationField::Malformed,
             vec![InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
-                "$.Config.Env",
+                path,
             )],
         );
     };
     let mut decoded = Vec::with_capacity(entries.len());
     let mut findings = Vec::new();
+    let mut malformed = false;
     for (index, entry) in entries.iter().enumerate() {
         let Some(entry) = entry.as_str() else {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::EnvironmentMalformed,
                 identity.clone(),
-                "$.Config.Env",
+                path,
                 index,
             ));
             continue;
         };
         let Some((name, value)) = entry.split_once('=') else {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::EnvironmentMalformed,
                 identity.clone(),
-                "$.Config.Env",
+                path,
                 index,
             ));
             continue;
         };
         if name.is_empty() {
+            malformed = true;
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::EnvironmentMalformed,
                 identity.clone(),
-                "$.Config.Env",
+                path,
                 index,
             ));
             continue;
         }
-        decoded.push(EnvironmentEntry {
-            name: name.to_owned(),
-            value: match policy {
-                EnvironmentValuePolicy::Redact => EnvironmentValue::Redacted,
+        decoded.push(ProtectedEnvironmentEntry::new(
+            name.to_owned(),
+            match policy {
+                EnvironmentValuePolicy::Redact => ProtectedEnvironmentValue::Redacted,
                 EnvironmentValuePolicy::Include => {
-                    EnvironmentValue::Included(SensitiveEnvironmentValue::new(value.to_owned()))
+                    ProtectedEnvironmentValue::AuthorizedOpaque(SensitiveEnvironmentValue::new(value.to_owned()))
                 }
             },
-        });
+        ));
     }
-    (decoded, findings)
+    let field = if malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Observed(ObservedValue::new(
+            ProtectedEnvironment::new(decoded),
+            ObservationOrigin::Effective,
+        ))
+    };
+    (field, findings)
 }
 
-fn labels(value: Option<&Value>) -> PodmanLensResult<BTreeMap<String, String>> {
-    string_map(value)
+fn labels(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Labels> {
+    match string_map(value) {
+        Ok(Some(labels)) => ObservationField::Observed(ObservedValue::new(labels, ObservationOrigin::Configured)),
+        Ok(None) => ObservationField::Absent,
+        Err(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+            ));
+            ObservationField::Malformed
+        }
+    }
 }
 
-fn string_map(value: Option<&Value>) -> PodmanLensResult<BTreeMap<String, String>> {
+fn string_map(value: Option<&Value>) -> PodmanLensResult<Option<BTreeMap<String, String>>> {
     let Some(value) = value else {
-        return Ok(BTreeMap::new());
+        return Ok(None);
     };
     if value.is_null() {
-        return Ok(BTreeMap::new());
+        return Ok(None);
     }
     let object = value
         .as_object()
@@ -1897,14 +2151,15 @@ fn string_map(value: Option<&Value>) -> PodmanLensResult<BTreeMap<String, String
                 .map(|value| (key.clone(), value.to_owned()))
                 .ok_or_else(|| Diagnostic::new(DiagnosticCode::ResourceMalformed))
         })
-        .collect()
+        .collect::<PodmanLensResult<BTreeMap<_, _>>>()
+        .map(Some)
 }
 
 struct UnknownFieldCollector<'a> {
     resource: &'a ResourceIdentity,
     evidence: &'a ResourceEvidence,
     limit: usize,
-    fields: Vec<UnknownNativeField>,
+    fields: Vec<UnmodelledField>,
     overflowed: bool,
 }
 
@@ -1924,16 +2179,16 @@ impl<'a> UnknownFieldCollector<'a> {
             self.overflowed = true;
             return false;
         }
-        self.fields.push(UnknownNativeField::new(
+        self.fields.push(UnmodelledField::new(
             path(),
-            value,
+            json_value_kind(value),
             self.resource.clone(),
             self.evidence.clone(),
         ));
         true
     }
 
-    fn finish(self) -> (Vec<UnknownNativeField>, bool) {
+    fn finish(self) -> (Vec<UnmodelledField>, bool) {
         (self.fields, self.overflowed)
     }
 }
@@ -2086,6 +2341,73 @@ fn optional_string<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a 
 
 fn optional_string_any<'a>(object: &'a Map<String, Value>, keys: &[&str]) -> Option<&'a str> {
     keys.iter().find_map(|key| optional_string(object, key))
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::items_after_test_module)]
+mod typed_observation_constructor_tests {
+    use super::*;
+
+    fn header(kind: ResourceKind) -> ObservationHeader {
+        let capability = capability_catalogue().expect("embedded capability catalogue").remove(0);
+        ObservationHeader::complete(
+            ResourceIdentity::new(kind, format!("{kind:?}-id"), None),
+            ResourceEvidence {
+                engine_version: "6.1.0".to_owned(),
+                api_version: "6.1.0".to_owned(),
+                capability,
+            },
+            Vec::new(),
+            Vec::new(),
+            UnmodelledCompleteness::Complete,
+        )
+    }
+
+    #[test]
+    fn kind_safe_resource_observation_constructor_accepts_every_matching_detail_and_rejects_mismatches() {
+        let details = [
+            ResourceDetails::Container(ContainerObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
+            ResourceDetails::Pod(PodObservation::new(ObservationField::Absent, ObservationField::Absent)),
+            ResourceDetails::Network(NetworkObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
+            ResourceDetails::Volume(VolumeObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
+            ResourceDetails::Image(ImageObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
+            ResourceDetails::Secret(SecretObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
+        ];
+        for detail in details {
+            assert!(ResourceObservation::try_new(header(detail.kind()), detail).is_ok());
+        }
+
+        let error = ResourceObservation::try_new(
+            header(ResourceKind::Container),
+            ResourceDetails::Pod(PodObservation::new(ObservationField::Absent, ObservationField::Absent)),
+        )
+        .expect_err("kind mismatch must be a structured construction failure");
+        assert_eq!(error.code(), DiagnosticCode::ResourceMalformed);
+    }
 }
 
 fn first_string(value: Option<&Value>) -> Option<&str> {

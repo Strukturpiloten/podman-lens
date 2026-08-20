@@ -7,6 +7,20 @@
   "$defs": {
     "schema_version": { "const": 1 },
     "resource_kind": { "enum": ["container", "pod", "network", "volume", "image", "secret"] },
+    "observation_field_state": {
+      "enum": [
+        "absent",
+        "observed",
+        "unavailable",
+        "malformed",
+        "version_inapplicable",
+        "not_applicable",
+        "unmodelled"
+      ]
+    },
+    "observation_origin": {
+      "enum": ["configured", "effective", "runtime_assigned", "local_resolution"]
+    },
     "identity": {
       "type": "object",
       "required": ["kind", "id", "name"],
@@ -76,39 +90,80 @@
       },
       "additionalProperties": false
     },
-    "relationship": {
+    "field_state": {
       "type": "object",
-      "required": ["kind", "target_id", "field_path"],
+      "required": ["state", "origin"],
       "properties": {
-        "kind": { "$ref": "#/$defs/resource_kind" },
-        "target_id": { "type": "string" },
-        "field_path": { "type": "string" }
+        "state": { "$ref": "#/$defs/observation_field_state" },
+        "origin": { "anyOf": [{ "$ref": "#/$defs/observation_origin" }, { "type": "null" }] }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "observed" } } },
+          "then": { "properties": { "origin": { "$ref": "#/$defs/observation_origin" } } },
+          "else": { "properties": { "origin": { "type": "null" } } }
+        }
+      ]
+    },
+    "field_count": {
+      "type": "object",
+      "required": ["state", "origin", "count"],
+      "properties": {
+        "state": { "$ref": "#/$defs/observation_field_state" },
+        "origin": { "anyOf": [{ "$ref": "#/$defs/observation_origin" }, { "type": "null" }] },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "observed" } } },
+          "then": { "properties": { "origin": { "$ref": "#/$defs/observation_origin" } } },
+          "else": { "properties": { "origin": { "type": "null" }, "count": { "const": 0 } } }
+        }
+      ]
     },
     "environment_entry": {
       "type": "object",
       "required": ["name", "value_state"],
       "properties": {
         "name": { "type": "string" },
-        "value_state": { "enum": ["redacted", "included_redacted"] }
+        "value_state": { "enum": ["redacted", "authorized_opaque_redacted"] }
       },
       "additionalProperties": false
+    },
+    "protected_environment": {
+      "type": "object",
+      "required": ["state", "origin", "entries"],
+      "properties": {
+        "state": { "$ref": "#/$defs/observation_field_state" },
+        "origin": { "anyOf": [{ "$ref": "#/$defs/observation_origin" }, { "type": "null" }] },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/environment_entry" } }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "observed" } } },
+          "then": { "properties": { "origin": { "$ref": "#/$defs/observation_origin" } } },
+          "else": { "properties": { "origin": { "type": "null" }, "entries": { "maxItems": 0 } } }
+        }
+      ]
     },
     "network": {
       "type": "object",
-      "required": ["internal", "option_count", "subnets"],
+      "required": ["internal", "options", "subnets"],
       "properties": {
-        "internal": { "type": ["boolean", "null"] },
-        "option_count": { "type": "integer", "minimum": 0 },
-        "subnets": { "type": "array", "items": { "type": "string" } }
+        "internal": { "$ref": "#/$defs/field_state" },
+        "options": { "$ref": "#/$defs/field_count" },
+        "subnets": { "$ref": "#/$defs/field_count" }
       },
       "additionalProperties": false
     },
-    "unknown_native_field": {
+    "unmodelled_field": {
       "type": "object",
-      "required": ["path", "json_kind", "resource", "evidence"],
+      "required": ["id", "path", "json_kind", "resource", "evidence"],
       "properties": {
+        "id": { "type": "string", "pattern": "^podman\\.native\\.[a-z0-9-]+(?:\\.[a-z0-9-]+)*$" },
         "path": { "type": "string" },
         "json_kind": { "enum": ["null", "boolean", "number", "string", "array", "object"] },
         "resource": { "$ref": "#/$defs/identity" },
@@ -127,48 +182,313 @@
       },
       "additionalProperties": false
     },
-    "record": {
+    "volume_owner": {
+      "type": "object",
+      "required": ["state", "origin", "wire_value"],
+      "properties": {
+        "state": { "$ref": "#/$defs/observation_field_state" },
+        "origin": { "anyOf": [{ "$ref": "#/$defs/observation_origin" }, { "type": "null" }] },
+        "wire_value": {
+          "anyOf": [{ "enum": ["wire_absent_may_mean_zero", "explicit"] }, { "type": "null" }]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "observed" } } },
+          "then": {
+            "properties": {
+              "origin": { "$ref": "#/$defs/observation_origin" },
+              "wire_value": { "enum": ["wire_absent_may_mean_zero", "explicit"] }
+            }
+          },
+          "else": {
+            "properties": { "origin": { "type": "null" }, "wire_value": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "detail_base": {
       "type": "object",
       "required": [
-        "identity",
-        "observation_state",
-        "label_count",
+        "kind",
+        "labels",
+        "configured_image",
+        "local_image_id",
         "relationships",
         "environment",
         "image_aliases",
         "network",
         "memory_swappiness",
-        "is_infra",
+        "infra",
         "secret_driver",
-        "unknown_fields",
+        "volume_uid",
+        "volume_gid"
+      ],
+      "properties": {
+        "kind": { "$ref": "#/$defs/resource_kind" },
+        "labels": { "$ref": "#/$defs/field_count" },
+        "configured_image": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "local_image_id": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "relationships": { "anyOf": [{ "$ref": "#/$defs/field_count" }, { "type": "null" }] },
+        "environment": {
+          "anyOf": [{ "$ref": "#/$defs/protected_environment" }, { "type": "null" }]
+        },
+        "image_aliases": { "anyOf": [{ "$ref": "#/$defs/field_count" }, { "type": "null" }] },
+        "network": { "anyOf": [{ "$ref": "#/$defs/network" }, { "type": "null" }] },
+        "memory_swappiness": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "infra": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "secret_driver": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "volume_uid": { "anyOf": [{ "$ref": "#/$defs/volume_owner" }, { "type": "null" }] },
+        "volume_gid": { "anyOf": [{ "$ref": "#/$defs/volume_owner" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "container_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "container" },
+            "configured_image": { "$ref": "#/$defs/field_state" },
+            "local_image_id": { "$ref": "#/$defs/field_state" },
+            "relationships": { "$ref": "#/$defs/field_count" },
+            "environment": { "$ref": "#/$defs/protected_environment" },
+            "memory_swappiness": { "$ref": "#/$defs/field_state" },
+            "infra": { "$ref": "#/$defs/field_state" },
+            "image_aliases": { "type": "null" },
+            "network": { "type": "null" },
+            "secret_driver": { "type": "null" },
+            "volume_uid": { "type": "null" },
+            "volume_gid": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "pod_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "pod" },
+            "relationships": { "$ref": "#/$defs/field_count" },
+            "configured_image": { "type": "null" },
+            "local_image_id": { "type": "null" },
+            "environment": { "type": "null" },
+            "image_aliases": { "type": "null" },
+            "network": { "type": "null" },
+            "memory_swappiness": { "type": "null" },
+            "infra": { "type": "null" },
+            "secret_driver": { "type": "null" },
+            "volume_uid": { "type": "null" },
+            "volume_gid": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "network_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "network" },
+            "network": { "$ref": "#/$defs/network" },
+            "configured_image": { "type": "null" },
+            "local_image_id": { "type": "null" },
+            "relationships": { "type": "null" },
+            "environment": { "type": "null" },
+            "image_aliases": { "type": "null" },
+            "memory_swappiness": { "type": "null" },
+            "infra": { "type": "null" },
+            "secret_driver": { "type": "null" },
+            "volume_uid": { "type": "null" },
+            "volume_gid": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "volume_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "volume" },
+            "volume_uid": { "$ref": "#/$defs/volume_owner" },
+            "volume_gid": { "$ref": "#/$defs/volume_owner" },
+            "configured_image": { "type": "null" },
+            "local_image_id": { "type": "null" },
+            "relationships": { "type": "null" },
+            "environment": { "type": "null" },
+            "image_aliases": { "type": "null" },
+            "network": { "type": "null" },
+            "memory_swappiness": { "type": "null" },
+            "infra": { "type": "null" },
+            "secret_driver": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "image_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "image" },
+            "environment": { "$ref": "#/$defs/protected_environment" },
+            "image_aliases": { "$ref": "#/$defs/field_count" },
+            "configured_image": { "type": "null" },
+            "local_image_id": { "type": "null" },
+            "relationships": { "type": "null" },
+            "network": { "type": "null" },
+            "memory_swappiness": { "type": "null" },
+            "infra": { "type": "null" },
+            "secret_driver": { "type": "null" },
+            "volume_uid": { "type": "null" },
+            "volume_gid": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "secret_details": {
+      "allOf": [
+        { "$ref": "#/$defs/detail_base" },
+        {
+          "properties": {
+            "kind": { "const": "secret" },
+            "secret_driver": { "$ref": "#/$defs/field_state" },
+            "configured_image": { "type": "null" },
+            "local_image_id": { "type": "null" },
+            "relationships": { "type": "null" },
+            "environment": { "type": "null" },
+            "image_aliases": { "type": "null" },
+            "network": { "type": "null" },
+            "memory_swappiness": { "type": "null" },
+            "infra": { "type": "null" },
+            "volume_uid": { "type": "null" },
+            "volume_gid": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "details": {
+      "oneOf": [
+        { "$ref": "#/$defs/container_details" },
+        { "$ref": "#/$defs/pod_details" },
+        { "$ref": "#/$defs/network_details" },
+        { "$ref": "#/$defs/volume_details" },
+        { "$ref": "#/$defs/image_details" },
+        { "$ref": "#/$defs/secret_details" }
+      ]
+    },
+    "observation_header": {
+      "type": "object",
+      "required": [
+        "identity",
+        "state",
+        "unmodelled_completeness",
+        "unmodelled_fields",
         "findings",
         "evidence"
       ],
       "properties": {
         "identity": { "$ref": "#/$defs/identity" },
-        "observation_state": { "enum": ["complete", "partial"] },
-        "label_count": { "type": "integer", "minimum": 0 },
-        "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
-        "environment": { "type": "array", "items": { "$ref": "#/$defs/environment_entry" } },
-        "image_aliases": { "type": "array", "items": { "type": "string" } },
-        "network": { "anyOf": [{ "$ref": "#/$defs/network" }, { "type": "null" }] },
-        "memory_swappiness": { "type": ["integer", "null"], "minimum": 0 },
-        "is_infra": { "type": ["boolean", "null"] },
-        "secret_driver": { "type": ["string", "null"] },
-        "unknown_fields": { "type": "array", "items": { "$ref": "#/$defs/unknown_native_field" } },
+        "state": { "enum": ["complete", "unavailable", "malformed"] },
+        "unmodelled_completeness": { "enum": ["complete", "incomplete"] },
+        "unmodelled_fields": { "type": "array", "items": { "$ref": "#/$defs/unmodelled_field" } },
         "findings": { "type": "array", "items": { "$ref": "#/$defs/inventory_finding" } },
         "evidence": { "$ref": "#/$defs/evidence" }
       },
       "additionalProperties": false
     },
+    "observation": {
+      "type": "object",
+      "required": ["header", "details"],
+      "properties": {
+        "header": { "$ref": "#/$defs/observation_header" },
+        "details": { "$ref": "#/$defs/details" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "container" } } } }
+              }
+            }
+          },
+          "then": {
+            "properties": { "details": { "properties": { "kind": { "const": "container" } } } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "pod" } } } }
+              }
+            }
+          },
+          "then": { "properties": { "details": { "properties": { "kind": { "const": "pod" } } } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "network" } } } }
+              }
+            }
+          },
+          "then": {
+            "properties": { "details": { "properties": { "kind": { "const": "network" } } } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "volume" } } } }
+              }
+            }
+          },
+          "then": {
+            "properties": { "details": { "properties": { "kind": { "const": "volume" } } } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "image" } } } }
+              }
+            }
+          },
+          "then": {
+            "properties": { "details": { "properties": { "kind": { "const": "image" } } } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "header": {
+                "properties": { "identity": { "properties": { "kind": { "const": "secret" } } } }
+              }
+            }
+          },
+          "then": {
+            "properties": { "details": { "properties": { "kind": { "const": "secret" } } } }
+          }
+        }
+      ]
+    },
     "inventory_section": {
       "type": "object",
-      "required": ["kind", "available", "findings", "records"],
+      "required": ["kind", "availability", "findings", "observations"],
       "properties": {
         "kind": { "$ref": "#/$defs/resource_kind" },
-        "available": { "type": "boolean" },
+        "availability": { "enum": ["available", "unavailable", "malformed"] },
         "findings": { "type": "array", "items": { "$ref": "#/$defs/inventory_finding" } },
-        "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+        "observations": { "type": "array", "items": { "$ref": "#/$defs/observation" } }
       },
       "additionalProperties": false
     },
@@ -227,10 +547,10 @@
     },
     "dependency_evidence": {
       "type": "object",
-      "required": ["kind", "field_path"],
+      "required": ["kind", "field_paths"],
       "properties": {
         "kind": { "const": "native_relationship" },
-        "field_path": { "type": "string" }
+        "field_paths": { "type": "array", "minItems": 1, "items": { "type": "string" } }
       },
       "additionalProperties": false
     },

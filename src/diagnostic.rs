@@ -102,6 +102,8 @@ pub enum DiagnosticCode {
     NativeFieldCoverageUnavailable,
     /// An image source is valid but cannot be assumed portable across target installations.
     ImagePortabilityManual,
+    /// An omitted native volume owner ID may mean Podman's canonical zero default.
+    VolumeOwnerDefaultAmbiguous,
 }
 
 impl DiagnosticCode {
@@ -157,6 +159,7 @@ impl DiagnosticCode {
             Self::RenderingUnsupported => "PLN0046",
             Self::NativeFieldCoverageUnavailable => "PLN0047",
             Self::ImagePortabilityManual => "PLN0048",
+            Self::VolumeOwnerDefaultAmbiguous => "PLN0049",
         }
     }
 }
@@ -275,6 +278,9 @@ impl Diagnostic {
                 }
                 DiagnosticCode::ImagePortabilityManual => {
                     "the image source needs a manual portability decision before it can be acquired"
+                }
+                DiagnosticCode::VolumeOwnerDefaultAmbiguous => {
+                    "an omitted native volume owner ID may mean Podman's canonical zero default"
                 }
             },
         }

@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    Diagnostic, DiagnosticCode, InventorySection, ResourceIdentity, ResourceInventory, ResourceKind, ResourceRecord,
+    Diagnostic, DiagnosticCode, InventorySection, ObservationField, ResourceIdentity, ResourceInventory, ResourceKind,
+    ResourceObservation,
 };
 
 const DOCKER_PROJECT: &str = "com.docker.compose.project";
@@ -206,16 +207,16 @@ impl LabelSelector {
 pub enum DependencyEvidence {
     /// A concrete native relationship from an inspect response.
     NativeRelationship {
-        /// Source field that asserted the relationship.
-        field_path: String,
+        /// Every source field that jointly asserted this relationship.
+        field_paths: Vec<String>,
     },
 }
 impl std::fmt::Debug for DependencyEvidence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NativeRelationship { field_path } => f
+            Self::NativeRelationship { field_paths } => f
                 .debug_struct("NativeRelationship")
-                .field("field_path", field_path)
+                .field("field_paths", field_paths)
                 .finish(),
         }
     }
@@ -589,8 +590,8 @@ pub fn discover(inventory: &ResourceInventory, request: &DiscoveryRequest) -> Re
     let records = inventory
         .sections()
         .iter()
-        .flat_map(InventorySection::records)
-        .map(|record| (record.identity().clone(), record))
+        .flat_map(InventorySection::observations)
+        .map(|observation| (observation.header().identity().clone(), observation))
         .collect::<BTreeMap<_, _>>();
     let mut findings = advisory_label_findings(&records);
     let ownership = compose_ownership_index(&records);
@@ -629,9 +630,8 @@ pub fn discover(inventory: &ResourceInventory, request: &DiscoveryRequest) -> Re
         let matched = records
             .iter()
             .filter(|(_, record)| {
-                record
-                    .labels()
-                    .get(&selector.name)
+                observed_labels(record)
+                    .and_then(|labels| labels.get(&selector.name))
                     .is_some_and(|actual| selector.value.as_ref().is_none_or(|expected| actual == expected))
             })
             .map(|(identity, _)| identity.clone())
@@ -855,8 +855,57 @@ enum SelectorResolution {
     Many,
 }
 
+fn relationship_state_blocks_discovery(
+    relationships: &ObservationField<Vec<crate::observation::NativeRelationship>>,
+) -> bool {
+    matches!(
+        relationships,
+        ObservationField::Unavailable
+            | ObservationField::Malformed
+            | ObservationField::VersionInapplicable
+            | ObservationField::NotApplicable
+            | ObservationField::Unmodelled(_)
+    )
+}
+
+fn observed_relationships(record: &ResourceObservation) -> Option<&[crate::observation::NativeRelationship]> {
+    match record.relationships()? {
+        ObservationField::Observed(value) => Some(value.value()),
+        _ => None,
+    }
+}
+
+fn observed_aliases(record: &ResourceObservation) -> Option<&[String]> {
+    match record.image_aliases()? {
+        ObservationField::Observed(value) => Some(value.value()),
+        _ => None,
+    }
+}
+
+fn observed_labels(record: &ResourceObservation) -> Option<&crate::Labels> {
+    match record.labels() {
+        ObservationField::Observed(value) => Some(value.value()),
+        _ => None,
+    }
+}
+
+fn is_eligible_unpodded_container(record: &ResourceObservation) -> bool {
+    match record.details() {
+        crate::ResourceDetails::Container(container) => match container.infra() {
+            ObservationField::Absent => true,
+            ObservationField::Observed(value) => !*value.value(),
+            ObservationField::Unavailable
+            | ObservationField::Malformed
+            | ObservationField::VersionInapplicable
+            | ObservationField::NotApplicable
+            | ObservationField::Unmodelled(_) => false,
+        },
+        _ => false,
+    }
+}
+
 fn resolve_selector(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
     selector: &ResourceSelector,
 ) -> SelectorResolution {
     let matched = records
@@ -866,7 +915,8 @@ fn resolve_selector(
                 && (identity.id() == selector.reference
                     || identity.name() == Some(selector.reference.as_str())
                     || (selector.kind == ResourceKind::Image
-                        && record.image_aliases().iter().any(|alias| alias == &selector.reference)))
+                        && observed_aliases(record)
+                            .is_some_and(|aliases| aliases.iter().any(|alias| alias == &selector.reference))))
         })
         .map(|(identity, _)| identity.clone())
         .collect::<Vec<_>>();
@@ -878,48 +928,107 @@ fn resolve_selector(
 }
 
 fn collect_dependencies(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
     findings: &mut Vec<DiscoveryFinding>,
 ) -> Vec<ResourceDependency> {
-    let mut collected = BTreeSet::new();
+    let mut collected = BTreeMap::<(ResourceIdentity, ResourceIdentity), BTreeSet<String>>::new();
     for (identity, record) in records {
-        for relationship in record.relationships() {
-            if identity.kind() == ResourceKind::Pod && relationship.kind() == ResourceKind::Container {
+        let Some(relationships) = observed_relationships(record) else {
+            if record.relationships().is_some_and(relationship_state_blocks_discovery) {
+                findings.push(DiscoveryFinding::resource(
+                    DiagnosticCode::RelationshipConflict,
+                    identity.clone(),
+                ));
+            }
+            continue;
+        };
+        for relationship in relationships {
+            if identity.kind() == ResourceKind::Pod && relationship.kind == ResourceKind::Container {
                 continue;
             }
-            match resolve_reference_count(records, relationship.kind(), relationship.target_id()) {
-                SelectorResolution::One(prerequisite) => {
-                    collected.insert((identity.clone(), prerequisite, relationship.field_path().to_owned()));
+            match resolve_relationship_reference(records, relationship) {
+                RelationshipReferenceResolution::One(prerequisite) => {
+                    collected
+                        .entry((identity.clone(), prerequisite))
+                        .or_default()
+                        .extend(relationship.field_paths.iter().cloned());
                 }
-                SelectorResolution::None => findings.push(DiscoveryFinding {
-                    code: DiagnosticCode::UnresolvedRelationship,
-                    resource: Some(identity.clone()),
-                    selector: None,
-                    label_selector: None,
-                    field_path: Some(relationship.field_path().to_owned()),
-                }),
-                SelectorResolution::Many => findings.push(DiscoveryFinding {
-                    code: DiagnosticCode::RelationshipAmbiguous,
-                    resource: Some(identity.clone()),
-                    selector: None,
-                    label_selector: None,
-                    field_path: Some(relationship.field_path().to_owned()),
-                }),
+                RelationshipReferenceResolution::None => findings.extend(relationship.field_paths.iter().cloned().map(
+                    |field_path| DiscoveryFinding {
+                        code: DiagnosticCode::UnresolvedRelationship,
+                        resource: Some(identity.clone()),
+                        selector: None,
+                        label_selector: None,
+                        field_path: Some(field_path),
+                    },
+                )),
+                RelationshipReferenceResolution::Many => findings.extend(relationship.field_paths.iter().cloned().map(
+                    |field_path| DiscoveryFinding {
+                        code: DiagnosticCode::RelationshipAmbiguous,
+                        resource: Some(identity.clone()),
+                        selector: None,
+                        label_selector: None,
+                        field_path: Some(field_path),
+                    },
+                )),
+                RelationshipReferenceResolution::Conflict => findings.extend(
+                    relationship
+                        .field_paths
+                        .iter()
+                        .cloned()
+                        .map(|field_path| DiscoveryFinding {
+                            code: DiagnosticCode::RelationshipConflict,
+                            resource: Some(identity.clone()),
+                            selector: None,
+                            label_selector: None,
+                            field_path: Some(field_path),
+                        }),
+                ),
             }
         }
     }
     collected
         .into_iter()
-        .map(|(dependent, prerequisite, field_path)| ResourceDependency {
+        .map(|((dependent, prerequisite), field_paths)| ResourceDependency {
             dependent,
             prerequisite,
-            evidence: DependencyEvidence::NativeRelationship { field_path },
+            evidence: DependencyEvidence::NativeRelationship {
+                field_paths: field_paths.into_iter().collect(),
+            },
         })
         .collect()
 }
 
+enum RelationshipReferenceResolution {
+    One(ResourceIdentity),
+    None,
+    Many,
+    Conflict,
+}
+
+fn resolve_relationship_reference(
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
+    relationship: &crate::observation::NativeRelationship,
+) -> RelationshipReferenceResolution {
+    let mut resolved = BTreeSet::new();
+    for reference in &relationship.references {
+        match resolve_reference_count(records, relationship.kind, reference) {
+            SelectorResolution::One(identity) => {
+                resolved.insert(identity);
+            }
+            SelectorResolution::None => return RelationshipReferenceResolution::None,
+            SelectorResolution::Many => return RelationshipReferenceResolution::Many,
+        }
+    }
+    match resolved.into_iter().collect::<Vec<_>>().as_slice() {
+        [identity] => RelationshipReferenceResolution::One(identity.clone()),
+        [] => RelationshipReferenceResolution::None,
+        _ => RelationshipReferenceResolution::Conflict,
+    }
+}
+
 fn resolve_reference_count(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
     kind: ResourceKind,
     reference: &str,
 ) -> SelectorResolution {
@@ -929,7 +1038,9 @@ fn resolve_reference_count(
             identity.kind() == kind
                 && (identity.id() == reference
                     || identity.name() == Some(reference)
-                    || (kind == ResourceKind::Image && record.image_aliases().iter().any(|alias| alias == reference)))
+                    || (kind == ResourceKind::Image
+                        && observed_aliases(record)
+                            .is_some_and(|aliases| aliases.iter().any(|alias| alias == reference))))
         })
         .map(|(identity, _)| identity.clone())
         .collect::<Vec<_>>();
@@ -960,18 +1071,19 @@ fn is_shared_kind(kind: ResourceKind) -> bool {
 
 fn eligible_all_root(
     identity: &ResourceIdentity,
-    record: &ResourceRecord,
+    record: &ResourceObservation,
     reverse: &BTreeMap<ResourceIdentity, BTreeSet<ResourceIdentity>>,
     ownership: Option<&String>,
 ) -> bool {
     match identity.kind() {
         ResourceKind::Pod => true,
         ResourceKind::Container => {
-            record.is_infra() != Some(true)
-                && !record
-                    .relationships()
-                    .iter()
-                    .any(|relationship| relationship.kind() == ResourceKind::Pod)
+            is_eligible_unpodded_container(record)
+                && !observed_relationships(record).is_some_and(|relationships| {
+                    relationships
+                        .iter()
+                        .any(|relationship| relationship.kind == ResourceKind::Pod)
+                })
         }
         ResourceKind::Network | ResourceKind::Volume | ResourceKind::Secret => !reverse.contains_key(identity),
         ResourceKind::Image => ownership.is_some(),
@@ -979,7 +1091,7 @@ fn eligible_all_root(
 }
 
 fn resolve_network_boundaries(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
     request: &DiscoveryRequest,
     findings: &mut Vec<DiscoveryFinding>,
 ) -> BTreeMap<String, ResourceIdentity> {
@@ -1007,46 +1119,60 @@ fn resolve_network_boundaries(
 }
 
 fn grouping_edges(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
     ownership: &BTreeMap<ResourceIdentity, String>,
     dependencies: &[ResourceDependency],
     findings: &mut Vec<DiscoveryFinding>,
 ) -> Vec<GroupingEdge> {
     let mut edges = BTreeMap::<(ResourceIdentity, ResourceIdentity, GroupingEvidence), BTreeSet<String>>::new();
     for (identity, record) in records {
-        for relationship in record.relationships() {
+        let Some(relationships) = observed_relationships(record) else {
+            continue;
+        };
+        for relationship in relationships {
             let membership = matches!(
-                (identity.kind(), relationship.kind()),
+                (identity.kind(), relationship.kind),
                 (ResourceKind::Pod, ResourceKind::Container) | (ResourceKind::Container, ResourceKind::Pod)
             );
             if membership {
-                match resolve_reference_count(records, relationship.kind(), relationship.target_id()) {
-                    SelectorResolution::One(member) => insert_grouping_edge(
+                match resolve_relationship_reference(records, relationship) {
+                    RelationshipReferenceResolution::One(member) => insert_grouping_edge(
                         &mut edges,
                         identity,
                         &member,
                         GroupingEvidence::PodMembership,
-                        Some(relationship.field_path()),
+                        relationship.field_paths.first().map(String::as_str),
                     ),
-                    SelectorResolution::None if identity.kind() == ResourceKind::Pod => {
+                    RelationshipReferenceResolution::None if identity.kind() == ResourceKind::Pod => {
                         findings.push(DiscoveryFinding {
                             code: DiagnosticCode::UnresolvedRelationship,
                             resource: Some(identity.clone()),
                             selector: None,
                             label_selector: None,
-                            field_path: Some(relationship.field_path().to_owned()),
+                            field_path: relationship.field_paths.first().cloned(),
                         });
                     }
-                    SelectorResolution::Many if identity.kind() == ResourceKind::Pod => {
+                    RelationshipReferenceResolution::Many if identity.kind() == ResourceKind::Pod => {
                         findings.push(DiscoveryFinding {
                             code: DiagnosticCode::RelationshipAmbiguous,
                             resource: Some(identity.clone()),
                             selector: None,
                             label_selector: None,
-                            field_path: Some(relationship.field_path().to_owned()),
+                            field_path: relationship.field_paths.first().cloned(),
                         });
                     }
-                    SelectorResolution::None | SelectorResolution::Many => {}
+                    RelationshipReferenceResolution::Conflict if identity.kind() == ResourceKind::Pod => {
+                        findings.push(DiscoveryFinding {
+                            code: DiagnosticCode::RelationshipConflict,
+                            resource: Some(identity.clone()),
+                            selector: None,
+                            label_selector: None,
+                            field_path: relationship.field_paths.first().cloned(),
+                        });
+                    }
+                    RelationshipReferenceResolution::None
+                    | RelationshipReferenceResolution::Many
+                    | RelationshipReferenceResolution::Conflict => {}
                 }
             }
         }
@@ -1056,14 +1182,16 @@ fn grouping_edges(
             (edge.dependent.kind(), edge.prerequisite.kind()),
             (ResourceKind::Container, ResourceKind::Container)
         ) {
-            let DependencyEvidence::NativeRelationship { field_path } = &edge.evidence;
-            insert_grouping_edge(
-                &mut edges,
-                &edge.dependent,
-                &edge.prerequisite,
-                GroupingEvidence::ContainerDependency,
-                Some(field_path),
-            );
+            let DependencyEvidence::NativeRelationship { field_paths } = &edge.evidence;
+            for field_path in field_paths {
+                insert_grouping_edge(
+                    &mut edges,
+                    &edge.dependent,
+                    &edge.prerequisite,
+                    GroupingEvidence::ContainerDependency,
+                    Some(field_path),
+                );
+            }
         }
     }
     let mut by_project = BTreeMap::<String, Vec<ResourceIdentity>>::new();
@@ -1175,7 +1303,7 @@ fn grouped_members(
     groups
 }
 
-fn advisory_label_findings(records: &BTreeMap<ResourceIdentity, &ResourceRecord>) -> Vec<DiscoveryFinding> {
+fn advisory_label_findings(records: &BTreeMap<ResourceIdentity, &ResourceObservation>) -> Vec<DiscoveryFinding> {
     records
         .iter()
         .filter_map(|(identity, record)| {
@@ -1187,7 +1315,7 @@ fn advisory_label_findings(records: &BTreeMap<ResourceIdentity, &ResourceRecord>
 }
 
 fn compose_ownership_index(
-    records: &BTreeMap<ResourceIdentity, &ResourceRecord>,
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
 ) -> BTreeMap<ResourceIdentity, String> {
     records
         .iter()
@@ -1200,7 +1328,7 @@ fn compose_ownership_index(
         .collect()
 }
 
-fn compose_label_status(record: &ResourceRecord) -> Result<Option<String>, DiagnosticCode> {
+fn compose_label_status(record: &ResourceObservation) -> Result<Option<String>, DiagnosticCode> {
     let docker = label_pair(record, DOCKER_PROJECT, DOCKER_SERVICE)?;
     let podman = label_pair(record, PODMAN_PROJECT, PODMAN_SERVICE)?;
     let docker_hash = optional_label(record, DOCKER_CONFIG_HASH)?;
@@ -1230,8 +1358,8 @@ fn compose_label_status(record: &ResourceRecord) -> Result<Option<String>, Diagn
     }
 }
 
-fn optional_label(record: &ResourceRecord, key: &str) -> Result<Option<String>, DiagnosticCode> {
-    match record.labels().get(key) {
+fn optional_label(record: &ResourceObservation, key: &str) -> Result<Option<String>, DiagnosticCode> {
+    match observed_labels(record).and_then(|labels| labels.get(key)) {
         None => Ok(None),
         Some(value) if value.is_empty() => Err(DiagnosticCode::AdvisoryLabelIncomplete),
         Some(value) => Ok(Some(value.clone())),
@@ -1239,11 +1367,16 @@ fn optional_label(record: &ResourceRecord, key: &str) -> Result<Option<String>, 
 }
 
 fn label_pair(
-    record: &ResourceRecord,
+    record: &ResourceObservation,
     project: &str,
     service: &str,
 ) -> Result<Option<(String, String)>, DiagnosticCode> {
-    match (record.labels().get(project), record.labels().get(service)) {
+    let labels = match record.labels() {
+        ObservationField::Absent => return Ok(None),
+        ObservationField::Observed(value) => value.value(),
+        _ => return Err(DiagnosticCode::AdvisoryLabelIncomplete),
+    };
+    match (labels.get(project), labels.get(service)) {
         (None, None) => Ok(None),
         (Some(project), Some(service)) if !project.is_empty() && !service.is_empty() => {
             Ok(Some((project.clone(), service.clone())))

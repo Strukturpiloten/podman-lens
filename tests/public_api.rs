@@ -19,9 +19,9 @@ use podman_lens::{
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
     LibpodResponse, LibpodTransport, LibpodTransportFuture, NativeFieldCoverageClassification,
-    NativeFieldCoveragePlane, OpaqueReference, ResourceInventory, ResourceKind, ResourceSelector, SshConnection,
-    TransportError, UnixConnection, acquire_inventory, artifact::deployment_v1, discover, probe_libpod_service,
-    snapshot::v1,
+    NativeFieldCoveragePlane, OpaqueReference, ResourceDetails, ResourceInventory, ResourceKind, ResourceObservation,
+    ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, artifact::deployment_v1,
+    discover, probe_libpod_service, snapshot::v1,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -40,6 +40,21 @@ fn consume_inventory_snapshot(source: &ResourceInventory) {
     let snapshot = v1::inventory(source);
     assert_eq!(snapshot.schema_version(), v1::SCHEMA_VERSION);
     drop(serde_json::to_string(&snapshot));
+}
+
+fn consume_typed_observation(source: &ResourceObservation) {
+    let _ = source.header().state();
+    let _ = source.header().unmodelled_completeness();
+    if let ResourceDetails::Container(container) = source.details() {
+        let _ = container
+            .configured_image()
+            .observed()
+            .map(|value| (value.value(), value.origin()));
+        let _ = container
+            .local_image_id()
+            .observed()
+            .map(|value| (value.value(), value.origin()));
+    }
 }
 
 fn consume_graph_contract(
@@ -120,7 +135,7 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0038"
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
-            && entry.public_contract() == "ResourceRecord::unknown_fields_complete"
+            && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-OUT-0015"
@@ -230,6 +245,7 @@ fn external_consumer_can_use_the_stable_input_and_snapshot_contracts() -> Result
     assert_eq!(request.network_boundary_overrides().count(), 1);
 
     let _ = consume_inventory_snapshot;
+    let _ = consume_typed_observation;
     let _ = consume_graph_contract;
     Ok(())
 }

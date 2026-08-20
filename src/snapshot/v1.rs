@@ -5,11 +5,14 @@
 //! environment values, secret material, connection details, raw unknown JSON, label values,
 //! driver-option values, and Compose ownership values.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::{
     DependencyEvidence, DiscoveryExplanationKind, DiscoveryRootOrigin, GroupingEvidence, JsonValueKind,
-    ObservationState, ResourceGraph, ResourceIdentity, ResourceInventory, ResourceKind,
+    ObservationField, ResourceDetails, ResourceGraph, ResourceIdentity, ResourceInventory, ResourceKind,
+    ResourceObservation, UnmodelledCompleteness,
 };
 
 /// The schema version emitted by every version 1 snapshot.
@@ -52,9 +55,13 @@ impl InventorySnapshot {
                 .iter()
                 .map(|section| InventorySectionSnapshot {
                     kind: resource_kind(section.kind()),
-                    available: section.available(),
+                    availability: match section.availability() {
+                        crate::InventorySectionAvailability::Available => "available",
+                        crate::InventorySectionAvailability::Unavailable => "unavailable",
+                        crate::InventorySectionAvailability::Malformed => "malformed",
+                    },
                     findings: section.findings().iter().map(inventory_finding).collect(),
-                    records: section.records().iter().map(record).collect(),
+                    observations: section.observations().iter().map(observation).collect(),
                 })
                 .collect(),
         }
@@ -117,9 +124,9 @@ impl GraphSnapshot {
                     dependent: identity(dependency.dependent()),
                     prerequisite: identity(dependency.prerequisite()),
                     evidence: match dependency.evidence() {
-                        DependencyEvidence::NativeRelationship { field_path } => DependencyEvidenceSnapshot {
+                        DependencyEvidence::NativeRelationship { field_paths } => DependencyEvidenceSnapshot {
                             kind: "native_relationship",
-                            field_path: field_path.clone(),
+                            field_paths: field_paths.clone(),
                         },
                     },
                 })
@@ -184,24 +191,23 @@ struct ServiceSnapshot {
 #[derive(Debug, Serialize)]
 struct InventorySectionSnapshot {
     kind: &'static str,
-    available: bool,
+    availability: &'static str,
     findings: Vec<InventoryFindingSnapshot>,
-    records: Vec<ResourceRecordSnapshot>,
+    observations: Vec<ResourceObservationSnapshot>,
 }
 
 #[derive(Debug, Serialize)]
-struct ResourceRecordSnapshot {
+struct ResourceObservationSnapshot {
+    header: ObservationHeaderSnapshot,
+    details: ResourceDetailsSnapshot,
+}
+
+#[derive(Debug, Serialize)]
+struct ObservationHeaderSnapshot {
     identity: ResourceIdentitySnapshot,
-    observation_state: &'static str,
-    label_count: usize,
-    relationships: Vec<ResourceRelationshipSnapshot>,
-    environment: Vec<EnvironmentEntrySnapshot>,
-    image_aliases: Vec<String>,
-    network: Option<NetworkSnapshot>,
-    memory_swappiness: Option<u64>,
-    is_infra: Option<bool>,
-    secret_driver: Option<String>,
-    unknown_fields: Vec<UnknownNativeFieldSnapshot>,
+    state: &'static str,
+    unmodelled_completeness: &'static str,
+    unmodelled_fields: Vec<UnmodelledFieldSnapshot>,
     findings: Vec<InventoryFindingSnapshot>,
     evidence: ResourceEvidenceSnapshot,
 }
@@ -214,10 +220,49 @@ struct ResourceIdentitySnapshot {
 }
 
 #[derive(Debug, Serialize)]
-struct ResourceRelationshipSnapshot {
+struct UnmodelledFieldSnapshot {
+    id: String,
+    path: String,
+    json_kind: &'static str,
+    resource: ResourceIdentitySnapshot,
+    evidence: ResourceEvidenceSnapshot,
+}
+
+#[derive(Debug, Serialize)]
+struct ResourceDetailsSnapshot {
     kind: &'static str,
-    target_id: String,
-    field_path: String,
+    labels: FieldCountSnapshot,
+    configured_image: Option<FieldStateSnapshot>,
+    local_image_id: Option<FieldStateSnapshot>,
+    relationships: Option<FieldCountSnapshot>,
+    environment: Option<ProtectedEnvironmentSnapshot>,
+    image_aliases: Option<FieldCountSnapshot>,
+    network: Option<NetworkSnapshot>,
+    memory_swappiness: Option<FieldStateSnapshot>,
+    infra: Option<FieldStateSnapshot>,
+    secret_driver: Option<FieldStateSnapshot>,
+    volume_uid: Option<VolumeOwnerFieldSnapshot>,
+    volume_gid: Option<VolumeOwnerFieldSnapshot>,
+}
+
+#[derive(Debug, Serialize)]
+struct FieldStateSnapshot {
+    state: &'static str,
+    origin: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+struct FieldCountSnapshot {
+    #[serde(flatten)]
+    field: FieldStateSnapshot,
+    count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct ProtectedEnvironmentSnapshot {
+    #[serde(flatten)]
+    field: FieldStateSnapshot,
+    entries: Vec<EnvironmentEntrySnapshot>,
 }
 
 #[derive(Debug, Serialize)]
@@ -228,17 +273,16 @@ struct EnvironmentEntrySnapshot {
 
 #[derive(Debug, Serialize)]
 struct NetworkSnapshot {
-    internal: Option<bool>,
-    option_count: usize,
-    subnets: Vec<String>,
+    internal: FieldStateSnapshot,
+    options: FieldCountSnapshot,
+    subnets: FieldCountSnapshot,
 }
 
 #[derive(Debug, Serialize)]
-struct UnknownNativeFieldSnapshot {
-    path: String,
-    json_kind: &'static str,
-    resource: ResourceIdentitySnapshot,
-    evidence: ResourceEvidenceSnapshot,
+struct VolumeOwnerFieldSnapshot {
+    #[serde(flatten)]
+    field: FieldStateSnapshot,
+    wire_value: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -293,7 +337,7 @@ struct ResourceDependencySnapshot {
 #[derive(Debug, Serialize)]
 struct DependencyEvidenceSnapshot {
     kind: &'static str,
-    field_path: String,
+    field_paths: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -328,52 +372,205 @@ struct RootOriginSnapshot {
     position: Option<usize>,
 }
 
-fn record(source: &crate::ResourceRecord) -> ResourceRecordSnapshot {
-    ResourceRecordSnapshot {
-        identity: identity(source.identity()),
-        observation_state: observation_state(source.state()),
-        label_count: source.labels().len(),
-        relationships: source
-            .relationships()
-            .iter()
-            .map(|relationship| ResourceRelationshipSnapshot {
-                kind: resource_kind(relationship.kind()),
-                target_id: relationship.target_id().to_owned(),
-                field_path: relationship.field_path().to_owned(),
-            })
-            .collect(),
-        environment: source
-            .environment()
+fn observation(source: &ResourceObservation) -> ResourceObservationSnapshot {
+    let header = source.header();
+    ResourceObservationSnapshot {
+        header: ObservationHeaderSnapshot {
+            identity: identity(header.identity()),
+            state: match header.state() {
+                crate::ResourceObservationState::Complete => "complete",
+                crate::ResourceObservationState::Unavailable => "unavailable",
+                crate::ResourceObservationState::Malformed => "malformed",
+            },
+            unmodelled_completeness: match header.unmodelled_completeness() {
+                UnmodelledCompleteness::Complete => "complete",
+                UnmodelledCompleteness::Incomplete => "incomplete",
+            },
+            unmodelled_fields: header
+                .unmodelled_fields()
+                .iter()
+                .map(|field| UnmodelledFieldSnapshot {
+                    id: field.id().as_str().to_owned(),
+                    path: field.path().to_owned(),
+                    json_kind: json_value_kind(field.json_kind()),
+                    resource: identity(field.resource()),
+                    evidence: evidence(field.evidence()),
+                })
+                .collect(),
+            findings: header.findings().iter().map(inventory_finding).collect(),
+            evidence: evidence(header.evidence()),
+        },
+        details: details(source.details()),
+    }
+}
+
+fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
+    match source {
+        ResourceDetails::Container(value) => ResourceDetailsSnapshot {
+            kind: "container",
+            labels: label_summary(value.labels()),
+            configured_image: Some(field_summary(value.configured_image())),
+            local_image_id: Some(field_summary(value.local_image_id())),
+            relationships: Some(collection_summary(value.relationships(), Vec::len)),
+            environment: Some(environment(value.environment())),
+            image_aliases: None,
+            network: None,
+            memory_swappiness: Some(field_summary(value.memory_swappiness())),
+            infra: Some(field_summary(value.infra())),
+            secret_driver: None,
+            volume_uid: None,
+            volume_gid: None,
+        },
+        ResourceDetails::Pod(value) => ResourceDetailsSnapshot {
+            kind: "pod",
+            labels: label_summary(value.labels()),
+            configured_image: None,
+            local_image_id: None,
+            relationships: Some(collection_summary(value.relationships(), Vec::len)),
+            environment: None,
+            image_aliases: None,
+            network: None,
+            memory_swappiness: None,
+            infra: None,
+            secret_driver: None,
+            volume_uid: None,
+            volume_gid: None,
+        },
+        ResourceDetails::Network(value) => ResourceDetailsSnapshot {
+            kind: "network",
+            labels: label_summary(value.labels()),
+            configured_image: None,
+            local_image_id: None,
+            relationships: None,
+            environment: None,
+            image_aliases: None,
+            network: Some(NetworkSnapshot {
+                internal: field_summary(value.internal()),
+                options: collection_summary(value.options(), crate::NetworkOptionKeys::len),
+                subnets: collection_summary(value.subnets(), Vec::len),
+            }),
+            memory_swappiness: None,
+            infra: None,
+            secret_driver: None,
+            volume_uid: None,
+            volume_gid: None,
+        },
+        ResourceDetails::Volume(value) => ResourceDetailsSnapshot {
+            kind: "volume",
+            labels: label_summary(value.labels()),
+            configured_image: None,
+            local_image_id: None,
+            relationships: None,
+            environment: None,
+            image_aliases: None,
+            network: None,
+            memory_swappiness: None,
+            infra: None,
+            secret_driver: None,
+            volume_uid: Some(volume_owner(value.uid())),
+            volume_gid: Some(volume_owner(value.gid())),
+        },
+        ResourceDetails::Image(value) => ResourceDetailsSnapshot {
+            kind: "image",
+            labels: label_summary(value.labels()),
+            configured_image: None,
+            local_image_id: None,
+            relationships: None,
+            environment: Some(environment(value.environment())),
+            image_aliases: Some(collection_summary(value.aliases(), Vec::len)),
+            network: None,
+            memory_swappiness: None,
+            infra: None,
+            secret_driver: None,
+            volume_uid: None,
+            volume_gid: None,
+        },
+        ResourceDetails::Secret(value) => ResourceDetailsSnapshot {
+            kind: "secret",
+            labels: label_summary(value.labels()),
+            configured_image: None,
+            local_image_id: None,
+            relationships: None,
+            environment: None,
+            image_aliases: None,
+            network: None,
+            memory_swappiness: None,
+            infra: None,
+            secret_driver: Some(field_summary(value.driver())),
+            volume_uid: None,
+            volume_gid: None,
+        },
+    }
+}
+
+fn label_summary(value: &ObservationField<crate::Labels>) -> FieldCountSnapshot {
+    collection_summary(value, BTreeMap::len)
+}
+
+fn collection_summary<T>(value: &ObservationField<T>, count: impl FnOnce(&T) -> usize) -> FieldCountSnapshot {
+    let count = value.observed().map_or(0, |observed| count(observed.value()));
+    FieldCountSnapshot {
+        field: field_summary(value),
+        count,
+    }
+}
+
+fn field_summary<T>(value: &ObservationField<T>) -> FieldStateSnapshot {
+    FieldStateSnapshot {
+        state: field_state(value),
+        origin: value.observed().map(|value| observation_origin(value.origin())),
+    }
+}
+
+fn field_state<T>(value: &ObservationField<T>) -> &'static str {
+    match value {
+        ObservationField::Absent => "absent",
+        ObservationField::Observed(_) => "observed",
+        ObservationField::Unavailable => "unavailable",
+        ObservationField::Malformed => "malformed",
+        ObservationField::VersionInapplicable => "version_inapplicable",
+        ObservationField::NotApplicable => "not_applicable",
+        ObservationField::Unmodelled(_) => "unmodelled",
+    }
+}
+fn observation_origin(value: crate::ObservationOrigin) -> &'static str {
+    match value {
+        crate::ObservationOrigin::Configured => "configured",
+        crate::ObservationOrigin::Effective => "effective",
+        crate::ObservationOrigin::RuntimeAssigned => "runtime_assigned",
+        crate::ObservationOrigin::LocalResolution => "local_resolution",
+    }
+}
+
+fn environment(value: &ObservationField<crate::ProtectedEnvironment>) -> ProtectedEnvironmentSnapshot {
+    let entries = value.observed().map_or_else(Vec::new, |environment| {
+        environment
+            .value()
+            .entries()
             .iter()
             .map(|entry| EnvironmentEntrySnapshot {
                 name: entry.name().to_owned(),
                 value_state: match entry.value() {
-                    crate::EnvironmentValue::Redacted => "redacted",
-                    crate::EnvironmentValue::Included(_) => "included_redacted",
+                    crate::ProtectedEnvironmentValue::Redacted => "redacted",
+                    crate::ProtectedEnvironmentValue::AuthorizedOpaque(_) => "authorized_opaque_redacted",
                 },
             })
-            .collect(),
-        image_aliases: source.image_aliases().to_vec(),
-        network: source.network().map(|network| NetworkSnapshot {
-            internal: network.internal(),
-            option_count: network.options().len(),
-            subnets: network.subnets().to_vec(),
-        }),
-        memory_swappiness: source.memory_swappiness(),
-        is_infra: source.is_infra(),
-        secret_driver: source.secret_driver().map(str::to_owned),
-        unknown_fields: source
-            .unknown_fields()
-            .iter()
-            .map(|field| UnknownNativeFieldSnapshot {
-                path: field.path().to_owned(),
-                json_kind: json_value_kind(field.json_kind()),
-                resource: identity(field.resource()),
-                evidence: evidence(field.evidence()),
-            })
-            .collect(),
-        findings: source.findings().iter().map(inventory_finding).collect(),
-        evidence: evidence(source.evidence()),
+            .collect()
+    });
+    ProtectedEnvironmentSnapshot {
+        field: field_summary(value),
+        entries,
+    }
+}
+
+fn volume_owner(value: &ObservationField<crate::VolumeOwnerIdWireValue>) -> VolumeOwnerFieldSnapshot {
+    let wire_value = value.observed().map(|value| match value.value() {
+        crate::VolumeOwnerIdWireValue::WireAbsentMayMeanZero => "wire_absent_may_mean_zero",
+        crate::VolumeOwnerIdWireValue::Explicit(_) => "explicit",
+    });
+    VolumeOwnerFieldSnapshot {
+        field: field_summary(value),
+        wire_value,
     }
 }
 
@@ -427,13 +624,6 @@ fn resource_kind(kind: ResourceKind) -> &'static str {
         ResourceKind::Volume => "volume",
         ResourceKind::Image => "image",
         ResourceKind::Secret => "secret",
-    }
-}
-
-fn observation_state(state: ObservationState) -> &'static str {
-    match state {
-        ObservationState::Complete => "complete",
-        ObservationState::Partial => "partial",
     }
 }
 

@@ -24,14 +24,14 @@ availability, or an unsupported coverage classification. Every row is compared t
 expected metadata; syntactically plausible substitutions are not accepted.
 
 An accepted object is never a blanket acceptance for its descendants. A typed member is modeled;
-every other direct member is retained as `UnknownNativeField` metadata and receives `PLN0023`.
+every other direct member is retained as `UnmodelledField` metadata and receives `PLN0023`.
 `HostConfig.MemorySwappiness` is the initial enforced example. `Secret.Spec.Driver` is an explicit
 typed metadata field. Secret payload material remains a manual, redacted boundary and is never
 retained.
 
-Unknown metadata remains bounded. `ResourceRecord::unknown_fields_complete()` is false for a
-partial inspection or whenever `PLN0021` reports overflow. Consumers must not mistake the retained
-slice for complete native configuration in either case.
+Unknown metadata remains bounded. `ObservationHeader::unmodelled_completeness()` is incomplete for
+an unavailable or malformed inspection or whenever `PLN0021` reports overflow. Consumers must not
+mistake the retained slice for complete native configuration in either case.
 
 ## Consequences
 

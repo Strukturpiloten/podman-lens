@@ -6,6 +6,7 @@ have a demonstrated public-contract boundary.
 | Path                   | Responsibility                                                         |
 | ---------------------- | ---------------------------------------------------------------------- |
 | `src/`                 | Public library and private implementation modules                      |
+| `src/observation.rs`   | Typed resource headers, field states, provenance, and protected values |
 | `src/snapshot/`        | Versioned serialization-only always-redacted observation snapshots     |
 | `src/artifact/`        | Versioned serialization-only deployment artifact contracts             |
 | `src/deployment.rs`    | Typed deployment intent and ordered transport-neutral semantics        |

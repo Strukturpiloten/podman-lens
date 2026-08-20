@@ -27,8 +27,11 @@ an ASCII alphanumeric first character followed only by ASCII alphanumeric charac
 underscores, or hyphens. It can never represent a URI, endpoint, socket path, credential, token,
 whitespace, colon, slash, backslash, or `@` detail.
 
-An incompatible shape change requires a new versioned module and schema. A schema version never
-silently changes meaning.
+After the first PodmanLens release, an incompatible shape change requires a new versioned module
+and schema. Before that release, the unreleased `snapshot::v1` contract may be reset directly with
+its schema and goldens. M7-A uses that allowance to replace generic records with typed observation
+headers and redacted detail summaries; no compatibility projection is retained. Once published, a
+schema version never silently changes meaning.
 
 ## Consequences
 
@@ -37,7 +40,10 @@ silently changes meaning.
 - Snapshot redaction is independent of acquisition policy and covered by distinctive leak tests.
 - Deployment artifacts preserve only a safe connection selector, never a connection endpoint,
   credential detail, secret material, or sensitive-input reference.
-- Snapshots still contain operational metadata such as resource identities, image aliases,
-  environment variable names, subnets, and evidence URLs. They are redacted, not anonymous.
+- Snapshots retain resource identities, environment variable names, evidence URLs, and source
+  field paths. Image aliases and network subnets are intentionally represented only by counts:
+  their spellings can reveal private registry, topology, or addressing information. This
+  deliberately supersedes the earlier retain-values wording; snapshots are redacted, not
+  anonymous.
 - Replaying or importing snapshots is outside the initial contract and can be designed separately
   only if a concrete need appears.

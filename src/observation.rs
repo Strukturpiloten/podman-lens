@@ -1,0 +1,964 @@
+//! Typed, provenance-aware observations at the Podman native input boundary.
+//!
+//! This module deliberately models what the selected Podman service reported; it does not infer
+//! desired deployment intent.  In particular, runtime-assigned addresses, local image IDs and
+//! current lifecycle state never share a type with configured facts.  BoxFerry-facing adapters
+//! must make an explicit mapping decision for every [`ObservationOrigin`].
+
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
+
+use crate::{
+    Diagnostic, DiagnosticCode, InventoryFinding, JsonValueKind, ResourceEvidence, ResourceIdentity, ResourceKind,
+    SensitiveEnvironmentValue,
+};
+
+/// The observation state of one native field.
+///
+/// `Absent` means that the reviewed wire field was absent or `null`; it never means malformed,
+/// unavailable, inapplicable, or omitted from the native model.  Those states are represented
+/// separately so an adapter cannot turn a decoder failure into an intentional empty value.
+#[derive(Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ObservationField<T> {
+    /// The field was absent from an otherwise decoded response.
+    Absent,
+    /// The field was decoded and carries its source disposition.
+    Observed(ObservedValue<T>),
+    /// The containing resource or section could not be acquired.
+    Unavailable,
+    /// The field was present but could not be decoded according to its reviewed shape.
+    Malformed,
+    /// The reviewed native version does not give this field a usable meaning.
+    VersionInapplicable,
+    /// The field has no meaning for this resource kind.
+    NotApplicable,
+    /// The field was deliberately retained only as bounded unmodelled metadata.
+    Unmodelled(UnmodelledFieldId),
+}
+
+impl<T> fmt::Debug for ObservationField<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("ObservationField")
+            .field(&match self {
+                Self::Absent => "absent",
+                Self::Observed(_) => "observed",
+                Self::Unavailable => "unavailable",
+                Self::Malformed => "malformed",
+                Self::VersionInapplicable => "version_inapplicable",
+                Self::NotApplicable => "not_applicable",
+                Self::Unmodelled(id) => id.as_str(),
+            })
+            .finish()
+    }
+}
+
+impl<T> ObservationField<T> {
+    /// Returns the observed value only when the field decoded successfully.
+    #[must_use]
+    pub const fn observed(&self) -> Option<&ObservedValue<T>> {
+        match self {
+            Self::Observed(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns whether this field contains a usable observation.
+    #[must_use]
+    pub const fn is_observed(&self) -> bool {
+        matches!(self, Self::Observed(_))
+    }
+}
+
+/// Provenance that prevents observed runtime facts from becoming desired intent accidentally.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ObservationOrigin {
+    /// An explicit setting declared in the native resource configuration.
+    Configured,
+    /// A native effective value that may incorporate Podman defaults.
+    Effective,
+    /// A value allocated by the runtime, such as an address or a live state.
+    RuntimeAssigned,
+    /// A local resolver result, such as a resolved image ID.
+    LocalResolution,
+}
+
+/// A successfully decoded value and its non-promotable provenance.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObservedValue<T> {
+    value: T,
+    origin: ObservationOrigin,
+}
+
+impl<T> fmt::Debug for ObservedValue<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ObservedValue")
+            .field("origin", &self.origin)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> ObservedValue<T> {
+    /// Creates an observed value with explicit provenance.
+    #[must_use]
+    pub const fn new(value: T, origin: ObservationOrigin) -> Self {
+        Self { value, origin }
+    }
+
+    /// Returns the value exactly as observed.
+    #[must_use]
+    pub const fn value(&self) -> &T {
+        &self.value
+    }
+
+    /// Returns the source disposition of the value.
+    #[must_use]
+    pub const fn origin(&self) -> ObservationOrigin {
+        self.origin
+    }
+}
+
+/// Stable semantic identifier for bounded metadata not modelled by this release.
+///
+/// The identifier is intentionally independent from a JSON spelling.  The accompanying
+/// [`UnmodelledField`] records its observed JSON path and kind, but never the raw value.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum UnmodelledFieldId {
+    /// Container `HostConfig` data outside the bounded typed subset.
+    ContainerHostConfig,
+    /// Container secret-grant metadata outside the bounded typed subset.
+    ContainerSecretGrant,
+    /// Container configuration data outside the bounded typed subset.
+    ContainerConfig,
+    /// Container network-settings data outside the bounded typed subset.
+    ContainerNetworkSettings,
+    /// Container mount data outside the bounded typed subset.
+    ContainerMount,
+    /// Other container inspect data outside the bounded typed subset.
+    ContainerTopLevel,
+    /// Pod membership data outside the bounded typed subset.
+    PodMember,
+    /// Other pod inspect data outside the bounded typed subset.
+    PodTopLevel,
+    /// Network subnet data outside the bounded typed subset.
+    NetworkSubnet,
+    /// Other network inspect data outside the bounded typed subset.
+    NetworkTopLevel,
+    /// Volume inspect data outside the bounded typed subset.
+    VolumeTopLevel,
+    /// Image configuration data outside the bounded typed subset.
+    ImageConfig,
+    /// Other image inspect data outside the bounded typed subset.
+    ImageTopLevel,
+    /// Secret specification metadata outside the bounded typed subset.
+    SecretSpec,
+    /// Other secret inspect data outside the bounded typed subset.
+    SecretTopLevel,
+}
+
+impl UnmodelledFieldId {
+    /// Returns the stable semantic identifier.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ContainerHostConfig => "podman.native.container.host-config",
+            Self::ContainerSecretGrant => "podman.native.container.secret-grant",
+            Self::ContainerConfig => "podman.native.container.config",
+            Self::ContainerNetworkSettings => "podman.native.container.network-settings",
+            Self::ContainerMount => "podman.native.container.mount",
+            Self::ContainerTopLevel => "podman.native.container.top-level",
+            Self::PodMember => "podman.native.pod.member",
+            Self::PodTopLevel => "podman.native.pod.top-level",
+            Self::NetworkSubnet => "podman.native.network.subnet",
+            Self::NetworkTopLevel => "podman.native.network.top-level",
+            Self::VolumeTopLevel => "podman.native.volume.top-level",
+            Self::ImageConfig => "podman.native.image.config",
+            Self::ImageTopLevel => "podman.native.image.top-level",
+            Self::SecretSpec => "podman.native.secret.spec",
+            Self::SecretTopLevel => "podman.native.secret.top-level",
+        }
+    }
+}
+
+/// Bounded, redacted metadata for one native field that remains unmodelled.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnmodelledField {
+    id: UnmodelledFieldId,
+    path: String,
+    json_kind: JsonValueKind,
+    resource: ResourceIdentity,
+    evidence: ResourceEvidence,
+}
+
+impl UnmodelledField {
+    pub(crate) fn new(
+        path: String,
+        json_kind: JsonValueKind,
+        resource: ResourceIdentity,
+        evidence: ResourceEvidence,
+    ) -> Self {
+        Self {
+            id: semantic_unmodelled_id(resource.kind(), &path),
+            path,
+            json_kind,
+            resource,
+            evidence,
+        }
+    }
+
+    /// Returns the stable semantic ID, never a raw native value.
+    #[must_use]
+    pub fn id(&self) -> &UnmodelledFieldId {
+        &self.id
+    }
+
+    /// Returns the observed JSON path.
+    #[must_use]
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// Returns the observed JSON value kind.
+    #[must_use]
+    pub const fn json_kind(&self) -> JsonValueKind {
+        self.json_kind
+    }
+
+    /// Returns the carrying resource identity.
+    #[must_use]
+    pub fn resource(&self) -> &ResourceIdentity {
+        &self.resource
+    }
+
+    /// Returns immutable version evidence for this observation.
+    #[must_use]
+    pub fn evidence(&self) -> &ResourceEvidence {
+        &self.evidence
+    }
+}
+
+fn semantic_unmodelled_id(kind: ResourceKind, path: &str) -> UnmodelledFieldId {
+    match (kind, path) {
+        (ResourceKind::Container, value) if value.starts_with("$.HostConfig") => UnmodelledFieldId::ContainerHostConfig,
+        (ResourceKind::Container, value) if value.starts_with("$.Config.Secrets") => {
+            UnmodelledFieldId::ContainerSecretGrant
+        }
+        (ResourceKind::Container, value) if value.starts_with("$.Config") => UnmodelledFieldId::ContainerConfig,
+        (ResourceKind::Container, value) if value.starts_with("$.NetworkSettings") => {
+            UnmodelledFieldId::ContainerNetworkSettings
+        }
+        (ResourceKind::Container, value) if value.starts_with("$.Mounts") => UnmodelledFieldId::ContainerMount,
+        (ResourceKind::Pod, value) if value.starts_with("$.Containers") => UnmodelledFieldId::PodMember,
+        (ResourceKind::Network, value) if value.starts_with("$.subnets") => UnmodelledFieldId::NetworkSubnet,
+        (ResourceKind::Image, value) if value.starts_with("$.Config") => UnmodelledFieldId::ImageConfig,
+        (ResourceKind::Secret, value) if value.starts_with("$.Spec") => UnmodelledFieldId::SecretSpec,
+        (ResourceKind::Container, _) => UnmodelledFieldId::ContainerTopLevel,
+        (ResourceKind::Pod, _) => UnmodelledFieldId::PodTopLevel,
+        (ResourceKind::Network, _) => UnmodelledFieldId::NetworkTopLevel,
+        (ResourceKind::Volume, _) => UnmodelledFieldId::VolumeTopLevel,
+        (ResourceKind::Image, _) => UnmodelledFieldId::ImageTopLevel,
+        (ResourceKind::Secret, _) => UnmodelledFieldId::SecretTopLevel,
+    }
+}
+
+/// Completeness state for bounded unmodelled metadata.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnmodelledCompleteness {
+    /// All direct unmodelled fields were retained within configured bounds.
+    Complete,
+    /// The observation is partial or the retention budget overflowed.
+    Incomplete,
+}
+
+/// Acquisition state of one resource observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ResourceObservationState {
+    /// The inspected response decoded according to the current native contract.
+    Complete,
+    /// The resource could not be acquired during the non-atomic inventory read.
+    Unavailable,
+    /// The resource inspect response was malformed or contradicted the list identity.
+    Malformed,
+}
+
+/// Resource-wide observation information shared by every detail variant.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ObservationHeader {
+    identity: ResourceIdentity,
+    state: ResourceObservationState,
+    evidence: ResourceEvidence,
+    findings: Vec<InventoryFinding>,
+    unmodelled: Vec<UnmodelledField>,
+    unmodelled_completeness: UnmodelledCompleteness,
+}
+
+impl ObservationHeader {
+    pub(crate) fn complete(
+        identity: ResourceIdentity,
+        evidence: ResourceEvidence,
+        findings: Vec<InventoryFinding>,
+        unmodelled: Vec<UnmodelledField>,
+        unmodelled_completeness: UnmodelledCompleteness,
+    ) -> Self {
+        Self {
+            identity,
+            state: ResourceObservationState::Complete,
+            evidence,
+            findings,
+            unmodelled,
+            unmodelled_completeness,
+        }
+    }
+
+    pub(crate) fn incomplete(
+        identity: ResourceIdentity,
+        evidence: ResourceEvidence,
+        state: ResourceObservationState,
+        findings: Vec<InventoryFinding>,
+    ) -> Self {
+        Self {
+            identity,
+            state,
+            evidence,
+            findings,
+            unmodelled: Vec::new(),
+            unmodelled_completeness: UnmodelledCompleteness::Incomplete,
+        }
+    }
+
+    /// Returns the stable native identity.
+    #[must_use]
+    pub fn identity(&self) -> &ResourceIdentity {
+        &self.identity
+    }
+
+    /// Returns the typed non-atomic acquisition state for this resource.
+    #[must_use]
+    pub const fn state(&self) -> ResourceObservationState {
+        self.state
+    }
+
+    /// Returns immutable source/version evidence.
+    #[must_use]
+    pub fn evidence(&self) -> &ResourceEvidence {
+        &self.evidence
+    }
+
+    /// Returns redacted structured findings for this resource.
+    #[must_use]
+    pub fn findings(&self) -> &[InventoryFinding] {
+        &self.findings
+    }
+
+    pub(crate) fn findings_mut(&mut self) -> &mut Vec<InventoryFinding> {
+        &mut self.findings
+    }
+
+    /// Returns bounded unmodelled metadata without raw values.
+    #[must_use]
+    pub fn unmodelled_fields(&self) -> &[UnmodelledField] {
+        &self.unmodelled
+    }
+
+    /// Returns whether bounded metadata accounts for all unmodelled fields.
+    #[must_use]
+    pub const fn unmodelled_completeness(&self) -> UnmodelledCompleteness {
+        self.unmodelled_completeness
+    }
+}
+
+/// A relationship used internally by canonical discovery derivation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NativeRelationship {
+    pub(crate) kind: ResourceKind,
+    /// One relationship can retain several native references when the wire format carries an
+    /// identifier and a name for the same grant.  Resolution requires every supplied reference
+    /// to select the same target; discovery must never choose one spelling silently.
+    pub(crate) references: Vec<String>,
+    /// Every source location that asserted this one native relationship.
+    pub(crate) field_paths: Vec<String>,
+}
+
+impl NativeRelationship {
+    pub(crate) fn new(kind: ResourceKind, target_id: impl Into<String>, field_path: impl Into<String>) -> Self {
+        Self {
+            kind,
+            references: vec![target_id.into()],
+            field_paths: vec![field_path.into()],
+        }
+    }
+
+    pub(crate) fn coalesced(
+        kind: ResourceKind,
+        references: impl IntoIterator<Item = (String, String)>,
+    ) -> Option<Self> {
+        let mut values = Vec::new();
+        let mut paths = Vec::new();
+        for (value, path) in references {
+            if !values.contains(&value) {
+                values.push(value);
+            }
+            paths.push(path);
+        }
+        (!values.is_empty()).then_some(Self {
+            kind,
+            references: values,
+            field_paths: paths,
+        })
+    }
+}
+
+/// A protected runtime environment observation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtectedEnvironment {
+    entries: Vec<ProtectedEnvironmentEntry>,
+}
+
+impl ProtectedEnvironment {
+    pub(crate) fn new(entries: Vec<ProtectedEnvironmentEntry>) -> Self {
+        Self { entries }
+    }
+
+    /// Returns variable names and protected value states in source order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProtectedEnvironmentEntry] {
+        &self.entries
+    }
+}
+
+/// One protected runtime environment name/value-state pair.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtectedEnvironmentEntry {
+    name: String,
+    value: ProtectedEnvironmentValue,
+}
+
+impl ProtectedEnvironmentEntry {
+    pub(crate) fn new(name: String, value: ProtectedEnvironmentValue) -> Self {
+        Self { name, value }
+    }
+
+    /// Returns the variable name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the protected state, never a public deployment value.
+    #[must_use]
+    pub fn value(&self) -> &ProtectedEnvironmentValue {
+        &self.value
+    }
+}
+
+/// Protected runtime environment value state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ProtectedEnvironmentValue {
+    /// The source value is deliberately not retained.
+    Redacted,
+    /// An explicitly authorized opaque value; formatting and snapshots remain redacted.
+    AuthorizedOpaque(SensitiveEnvironmentValue),
+}
+
+/// A bounded configured label collection.
+pub type Labels = BTreeMap<String, String>;
+
+/// Container-specific native observations.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ContainerObservation {
+    labels: ObservationField<Labels>,
+    configured_image: ObservationField<String>,
+    local_image_id: ObservationField<String>,
+    relationships: ObservationField<Vec<NativeRelationship>>,
+    environment: ObservationField<ProtectedEnvironment>,
+    memory_swappiness: ObservationField<u64>,
+    infra: ObservationField<bool>,
+}
+
+macro_rules! observation_debug {
+    ($type:ty, $($field:ident),+ $(,)?) => {
+        impl fmt::Debug for $type {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut debug = formatter.debug_struct(stringify!($type));
+                $(debug.field(stringify!($field), &self.$field);)+
+                debug.finish()
+            }
+        }
+    };
+}
+
+observation_debug!(
+    ContainerObservation,
+    labels,
+    configured_image,
+    local_image_id,
+    relationships,
+    environment,
+    memory_swappiness,
+    infra
+);
+
+impl ContainerObservation {
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        configured_image: ObservationField<String>,
+        local_image_id: ObservationField<String>,
+        relationships: ObservationField<Vec<NativeRelationship>>,
+        environment: ObservationField<ProtectedEnvironment>,
+        memory_swappiness: ObservationField<u64>,
+        infra: ObservationField<bool>,
+    ) -> Self {
+        Self {
+            labels,
+            configured_image,
+            local_image_id,
+            relationships,
+            environment,
+            memory_swappiness,
+            infra,
+        }
+    }
+
+    /// Returns the configured container labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    /// Returns the configured image spelling or its observation state.
+    ///
+    /// This is the only container image observation that discovery may use as a dependency edge.
+    #[must_use]
+    pub fn configured_image(&self) -> &ObservationField<String> {
+        &self.configured_image
+    }
+    /// Returns the locally resolved image identity or its observation state.
+    ///
+    /// A local image ID proves what this Podman service used; it is not deployment intent.
+    #[must_use]
+    pub fn local_image_id(&self) -> &ObservationField<String> {
+        &self.local_image_id
+    }
+    /// Returns protected runtime environment observations or their observation state.
+    #[must_use]
+    pub fn environment(&self) -> &ObservationField<ProtectedEnvironment> {
+        &self.environment
+    }
+    /// Returns the configured memory-swappiness value or its observation state.
+    #[must_use]
+    pub fn memory_swappiness(&self) -> &ObservationField<u64> {
+        &self.memory_swappiness
+    }
+    /// Returns the infra-container marker or its observation state.
+    #[must_use]
+    pub fn infra(&self) -> &ObservationField<bool> {
+        &self.infra
+    }
+    pub(crate) fn relationships(&self) -> &ObservationField<Vec<NativeRelationship>> {
+        &self.relationships
+    }
+}
+
+/// Pod-specific native observations.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PodObservation {
+    labels: ObservationField<Labels>,
+    relationships: ObservationField<Vec<NativeRelationship>>,
+}
+observation_debug!(PodObservation, labels, relationships);
+
+impl PodObservation {
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        relationships: ObservationField<Vec<NativeRelationship>>,
+    ) -> Self {
+        Self { labels, relationships }
+    }
+    /// Returns the configured pod labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    pub(crate) fn relationships(&self) -> &ObservationField<Vec<NativeRelationship>> {
+        &self.relationships
+    }
+}
+
+/// Network-specific native observations.
+#[derive(Clone, Eq, PartialEq)]
+pub struct NetworkObservation {
+    labels: ObservationField<Labels>,
+    internal: ObservationField<bool>,
+    options: ObservationField<NetworkOptionKeys>,
+    subnets: ObservationField<Vec<String>>,
+}
+
+impl NetworkObservation {
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        internal: ObservationField<bool>,
+        options: ObservationField<NetworkOptionKeys>,
+        subnets: ObservationField<Vec<String>>,
+    ) -> Self {
+        Self {
+            labels,
+            internal,
+            options,
+            subnets,
+        }
+    }
+    /// Returns the configured network labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    /// Returns the network-internal flag or its observation state.
+    #[must_use]
+    pub fn internal(&self) -> &ObservationField<bool> {
+        &self.internal
+    }
+    /// Returns only network option keys; native option values may contain credentials and are
+    /// never exposed through the public observation contract.
+    #[must_use]
+    pub fn options(&self) -> &ObservationField<NetworkOptionKeys> {
+        &self.options
+    }
+    /// Returns configured subnet spellings or their observation state.
+    #[must_use]
+    pub fn subnets(&self) -> &ObservationField<Vec<String>> {
+        &self.subnets
+    }
+}
+observation_debug!(NetworkObservation, labels, internal, options, subnets);
+
+/// Public, value-free network option observation.
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NetworkOptionKeys(BTreeSet<String>);
+
+impl NetworkOptionKeys {
+    pub(crate) fn new(keys: impl IntoIterator<Item = String>) -> Self {
+        Self(keys.into_iter().collect())
+    }
+
+    /// Returns observed option keys in deterministic order, without their values.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
+    /// Returns the number of observed option keys.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether no option keys were observed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for NetworkOptionKeys {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("NetworkOptionKeys")
+            .field("count", &self.len())
+            .finish()
+    }
+}
+
+/// The native wire representation of a volume owner ID.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VolumeOwnerIdWireValue {
+    /// Podman's reviewed `omitempty` wire shape omitted the property, which canonically may mean
+    /// the Podman default of zero.
+    WireAbsentMayMeanZero,
+    /// A concrete numeric value was present, including literal zero.
+    Explicit(UnixId),
+}
+
+/// Bounded Unix user or group identifier from a native volume response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UnixId(u32);
+
+impl UnixId {
+    pub(crate) const fn new(value: u32) -> Self {
+        Self(value)
+    }
+    /// Returns the literal value reported by Podman.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// Volume-specific native observations.
+#[derive(Clone, Eq, PartialEq)]
+pub struct VolumeObservation {
+    labels: ObservationField<Labels>,
+    uid: ObservationField<VolumeOwnerIdWireValue>,
+    gid: ObservationField<VolumeOwnerIdWireValue>,
+}
+observation_debug!(VolumeObservation, labels, uid, gid);
+
+impl VolumeObservation {
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        uid: ObservationField<VolumeOwnerIdWireValue>,
+        gid: ObservationField<VolumeOwnerIdWireValue>,
+    ) -> Self {
+        Self { labels, uid, gid }
+    }
+    /// Returns the configured volume labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    /// Returns the wire-level volume UID observation or its observation state.
+    #[must_use]
+    pub fn uid(&self) -> &ObservationField<VolumeOwnerIdWireValue> {
+        &self.uid
+    }
+    /// Returns the wire-level volume GID observation or its observation state.
+    #[must_use]
+    pub fn gid(&self) -> &ObservationField<VolumeOwnerIdWireValue> {
+        &self.gid
+    }
+}
+
+/// Image-specific native observations.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ImageObservation {
+    labels: ObservationField<Labels>,
+    aliases: ObservationField<Vec<String>>,
+    environment: ObservationField<ProtectedEnvironment>,
+}
+observation_debug!(ImageObservation, labels, aliases, environment);
+
+impl ImageObservation {
+    pub(crate) fn new(
+        labels: ObservationField<Labels>,
+        aliases: ObservationField<Vec<String>>,
+        environment: ObservationField<ProtectedEnvironment>,
+    ) -> Self {
+        Self {
+            labels,
+            aliases,
+            environment,
+        }
+    }
+    /// Returns the configured image labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    /// Returns locally resolved image aliases or their observation state.
+    #[must_use]
+    pub fn aliases(&self) -> &ObservationField<Vec<String>> {
+        &self.aliases
+    }
+    /// Returns protected image-environment observations or their observation state.
+    #[must_use]
+    pub fn environment(&self) -> &ObservationField<ProtectedEnvironment> {
+        &self.environment
+    }
+}
+
+/// Secret metadata observations.  Secret payload bytes are never represented.
+#[derive(Clone, Eq, PartialEq)]
+pub struct SecretObservation {
+    labels: ObservationField<Labels>,
+    driver: ObservationField<String>,
+}
+observation_debug!(SecretObservation, labels, driver);
+
+impl SecretObservation {
+    pub(crate) fn new(labels: ObservationField<Labels>, driver: ObservationField<String>) -> Self {
+        Self { labels, driver }
+    }
+    /// Returns the configured secret labels or their observation state.
+    #[must_use]
+    pub fn labels(&self) -> &ObservationField<Labels> {
+        &self.labels
+    }
+    /// Returns the secret-driver metadata or its observation state.
+    #[must_use]
+    pub fn driver(&self) -> &ObservationField<String> {
+        &self.driver
+    }
+}
+
+/// Resource-kind-specific observation payload.
+#[derive(Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ResourceDetails {
+    /// Container-only fields.
+    Container(ContainerObservation),
+    /// Pod-only fields.
+    Pod(PodObservation),
+    /// Network-only fields.
+    Network(NetworkObservation),
+    /// Volume-only fields.
+    Volume(VolumeObservation),
+    /// Image-only fields.
+    Image(ImageObservation),
+    /// Secret metadata-only fields.
+    Secret(SecretObservation),
+}
+
+impl fmt::Debug for ResourceDetails {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Container(value) => formatter
+                .debug_tuple("ResourceDetails::Container")
+                .field(value)
+                .finish(),
+            Self::Pod(value) => formatter.debug_tuple("ResourceDetails::Pod").field(value).finish(),
+            Self::Network(value) => formatter.debug_tuple("ResourceDetails::Network").field(value).finish(),
+            Self::Volume(value) => formatter.debug_tuple("ResourceDetails::Volume").field(value).finish(),
+            Self::Image(value) => formatter.debug_tuple("ResourceDetails::Image").field(value).finish(),
+            Self::Secret(value) => formatter.debug_tuple("ResourceDetails::Secret").field(value).finish(),
+        }
+    }
+}
+
+impl ResourceDetails {
+    /// Returns the exact resource kind carried by this variant.
+    #[must_use]
+    pub const fn kind(&self) -> ResourceKind {
+        match self {
+            Self::Container(_) => ResourceKind::Container,
+            Self::Pod(_) => ResourceKind::Pod,
+            Self::Network(_) => ResourceKind::Network,
+            Self::Volume(_) => ResourceKind::Volume,
+            Self::Image(_) => ResourceKind::Image,
+            Self::Secret(_) => ResourceKind::Secret,
+        }
+    }
+}
+
+/// One complete or partial typed native resource observation.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ResourceObservation {
+    header: ObservationHeader,
+    details: ResourceDetails,
+}
+
+impl ResourceObservation {
+    pub(crate) fn try_new(header: ObservationHeader, details: ResourceDetails) -> Result<Self, Diagnostic> {
+        if header.identity().kind() != details.kind() {
+            return Err(Diagnostic::new(DiagnosticCode::ResourceMalformed));
+        }
+        Ok(Self { header, details })
+    }
+
+    pub(crate) fn incomplete(header: ObservationHeader) -> Self {
+        let details = incomplete_details(header.identity().kind(), header.state());
+        Self { header, details }
+    }
+
+    /// Returns resource-wide identity, evidence, findings, and completeness information.
+    #[must_use]
+    pub fn header(&self) -> &ObservationHeader {
+        &self.header
+    }
+    /// Returns a kind-safe resource-specific payload.
+    #[must_use]
+    pub fn details(&self) -> &ResourceDetails {
+        &self.details
+    }
+
+    pub(crate) fn header_mut(&mut self) -> &mut ObservationHeader {
+        &mut self.header
+    }
+
+    pub(crate) fn relationships(&self) -> Option<&ObservationField<Vec<NativeRelationship>>> {
+        match &self.details {
+            ResourceDetails::Container(value) => Some(value.relationships()),
+            ResourceDetails::Pod(value) => Some(value.relationships()),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn labels(&self) -> &ObservationField<Labels> {
+        match &self.details {
+            ResourceDetails::Container(value) => value.labels(),
+            ResourceDetails::Pod(value) => value.labels(),
+            ResourceDetails::Network(value) => value.labels(),
+            ResourceDetails::Volume(value) => value.labels(),
+            ResourceDetails::Image(value) => value.labels(),
+            ResourceDetails::Secret(value) => value.labels(),
+        }
+    }
+
+    pub(crate) fn image_aliases(&self) -> Option<&ObservationField<Vec<String>>> {
+        match &self.details {
+            ResourceDetails::Image(value) => Some(value.aliases()),
+            _ => None,
+        }
+    }
+}
+
+fn incomplete_field<T>(state: ResourceObservationState) -> ObservationField<T> {
+    if state == ResourceObservationState::Malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Unavailable
+    }
+}
+
+fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> ResourceDetails {
+    match kind {
+        ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
+        ResourceKind::Pod => {
+            ResourceDetails::Pod(PodObservation::new(incomplete_field(state), incomplete_field(state)))
+        }
+        ResourceKind::Network => ResourceDetails::Network(NetworkObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
+        ResourceKind::Volume => ResourceDetails::Volume(VolumeObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
+        ResourceKind::Image => ResourceDetails::Image(ImageObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
+        ResourceKind::Secret => {
+            ResourceDetails::Secret(SecretObservation::new(incomplete_field(state), incomplete_field(state)))
+        }
+    }
+}
+
+impl fmt::Debug for ResourceObservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ResourceObservation")
+            .field("identity", self.header.identity())
+            .field("state", &self.header.state())
+            .field("finding_count", &self.header.findings().len())
+            .field("unmodelled_field_count", &self.header.unmodelled_fields().len())
+            .field("detail_kind", &self.details.kind())
+            .finish()
+    }
+}

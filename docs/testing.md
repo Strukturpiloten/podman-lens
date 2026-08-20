@@ -40,7 +40,13 @@ The coverage ledger is parsed as a strict public two-plane catalogue with 38 inp
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
 become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
-overflow or partial inspection makes `ResourceRecord::unknown_fields_complete()` false.
+overflow or an incomplete observation makes `ObservationHeader::unmodelled_completeness()`
+incomplete. M7-A coverage exercises every `ObservationField` state through public acquisition,
+kind-safe detail access, malformed label localization for all resource kinds, typed section/resource
+availability, coalesced secret ID/name grants with dual graph evidence, configured-versus-local
+image conflicts, and protected-value redaction in debug and snapshots. Volume owner coverage
+distinguishes omitted wire IDs from literal zero and rejects null, negative, non-numeric, and
+out-of-range IDs.
 
 M6-B3a tests cover public and redacted shell/direct health-command forms, timing and startup-health
 dependency, logging driver/label rules, explicit security false values and conflicts, bounded CPU,

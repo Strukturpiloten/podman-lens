@@ -87,7 +87,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -100,7 +100,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -113,7 +113,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "ContainerObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -126,7 +126,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::environment",
+        "ContainerObservation::environment",
         "PLN0019",
         "tests::inventory::explicit_environment_inclusion_is_opaque_and_preserves_duplicate_order",
         "tests::inventory::environment_boundaries_preserve_valid_entries_and_report_every_bad_occurrence"
@@ -139,7 +139,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container_secrets",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -152,7 +152,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ContainerObservation::local_image_id",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -165,7 +165,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ContainerObservation::configured_image",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -178,7 +178,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -191,7 +191,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_container_networks",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -204,7 +204,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_mounts",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -217,7 +217,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_dependencies",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -230,7 +230,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_memory_swappiness",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::memory_swappiness",
+        "ContainerObservation::memory_swappiness",
         "PLN0022",
         "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values",
         "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values"
@@ -243,7 +243,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::unknown_nested_fields",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::unknown_fields",
+        "ObservationHeader::unmodelled_fields",
         "PLN0023",
         "tests::inventory::host_config_members_not_yet_modeled_are_retained_as_unknown_metadata",
         "tests::inventory::unknown_fields_are_bounded_per_record_and_across_the_inventory"
@@ -256,7 +256,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_is_infra",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::is_infra",
+        "ContainerObservation::infra",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -269,7 +269,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_pod",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -282,7 +282,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_pod",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -295,7 +295,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_pod",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "PodObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -308,7 +308,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_pod_containers",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -321,7 +321,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_pod_networks",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::relationships",
+        "ResourceGraph::dependencies",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -334,7 +334,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -347,7 +347,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -360,7 +360,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "NetworkObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -373,7 +373,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network_details",
         "not_applicable",
         "not_applicable",
-        "NetworkDetails::internal",
+        "NetworkObservation::internal",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -386,7 +386,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network_details",
         "not_applicable",
         "not_applicable",
-        "NetworkDetails::options",
+        "NetworkObservation::options",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -399,7 +399,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_network_details",
         "not_applicable",
         "not_applicable",
-        "NetworkDetails::subnets",
+        "NetworkObservation::subnets",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -412,7 +412,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_volume",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -425,7 +425,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_volume",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "VolumeObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -438,7 +438,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_image",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -451,7 +451,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_image",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::image_aliases",
+        "ImageObservation::aliases",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -464,7 +464,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_image",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "ImageObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -477,7 +477,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_image",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::environment",
+        "ImageObservation::environment",
         "PLN0019",
         "tests::inventory::explicit_environment_inclusion_is_opaque_and_preserves_duplicate_order",
         "tests::inventory::environment_boundaries_preserve_valid_entries_and_report_every_bad_occurrence"
@@ -490,7 +490,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -503,7 +503,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::identity",
+        "ObservationHeader::identity",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::every_inspect_status_and_shape_failure_retains_a_partial_stable_identity"
@@ -516,7 +516,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::labels",
+        "SecretObservation::labels",
         "PLN0017",
         "tests::inventory::acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -529,7 +529,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::secret_driver",
+        "SecretObservation::driver",
         "PLN0017",
         "tests::inventory::secret_driver_is_modeled_without_unsupported_metadata",
         "tests::inventory::modeled_nested_boundaries_report_the_precise_path_without_hiding_the_record"
@@ -542,7 +542,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::findings",
+        "ObservationHeader::findings",
         "PLN0018",
         "tests::inventory::secret_payload_is_discarded_from_metadata_inspection",
         "tests::inventory::secret_payload_is_discarded_from_metadata_inspection"
@@ -555,7 +555,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::findings",
+        "ObservationHeader::findings",
         "PLN0018",
         "tests::inventory::secret_payload_is_discarded_from_metadata_inspection",
         "tests::inventory::secret_payload_is_discarded_from_metadata_inspection"
@@ -568,7 +568,7 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::unknown_top_level",
         "not_applicable",
         "not_applicable",
-        "ResourceRecord::unknown_fields_complete",
+        "ObservationHeader::unmodelled_completeness",
         "PLN0021",
         "tests::inventory::unknown_fields_are_bounded_per_record_and_across_the_inventory",
         "tests::input_corpus::malformed_corpus_is_structured_and_bounded_never_panics"
@@ -1432,7 +1432,7 @@ mod tests {
             ("planner", "deployment::plan"),
             ("cli_renderer", "render::deployment"),
             ("libpod_renderer", "render::deployment"),
-            ("public_contract", "ResourceRecord::findings"),
+            ("public_contract", "ObservationHeader::findings"),
             ("finding", "PLN0046"),
             (
                 "positive_test",

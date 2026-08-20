@@ -105,13 +105,13 @@ async fn secret_driver_is_typed_not_unsupported_in_inventory_snapshots() -> Resu
         .ok_or("inventory snapshot sections must be an array")?
         .iter()
         .find(|section| section["kind"] == "secret")
-        .and_then(|section| section["records"].as_array())
-        .and_then(|records| records.first())
-        .ok_or("inventory snapshot must contain the secret record")?;
-    assert_eq!(secret["secret_driver"], "file");
-    assert_eq!(secret["unknown_fields"], json!([]));
+        .and_then(|section| section["observations"].as_array())
+        .and_then(|observations| observations.first())
+        .ok_or("inventory snapshot must contain the secret observation")?;
+    assert_eq!(secret["details"]["secret_driver"]["state"], "observed");
+    assert_eq!(secret["header"]["unmodelled_fields"], json!([]));
     assert!(
-        secret["findings"]
+        secret["header"]["findings"]
             .as_array()
             .ok_or("secret snapshot findings must be an array")?
             .iter()
@@ -141,7 +141,11 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
         .build(&schema)?;
     let inventory = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
     let graph = golden_value(include_str!("../fixtures/snapshots/graph-v1.json"))?;
-    assert!(validator.is_valid(&inventory));
+    assert!(
+        validator.is_valid(&inventory),
+        "inventory errors: {:?}",
+        validator.iter_errors(&inventory).collect::<Vec<_>>()
+    );
     assert!(validator.is_valid(&graph));
 
     let mut missing_required = graph.clone();
@@ -183,9 +187,53 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     sections[1] = sections[0].clone();
     assert!(!validator.is_valid(&duplicate_section));
 
+    let mut unexpected_field_summary_property = inventory.clone();
+    unexpected_field_summary_property["sections"][0]["observations"][0]["details"]["labels"]["unexpected"] =
+        json!(true);
+    assert!(!validator.is_valid(&unexpected_field_summary_property));
+
     let mut invalid_uri = inventory;
-    invalid_uri["sections"][0]["records"][0]["evidence"]["evidence_source"] = json!("not a URI");
+    invalid_uri["sections"][0]["observations"][0]["header"]["evidence"]["evidence_source"] = json!("not a URI");
     assert!(!validator.is_valid(&invalid_uri));
+
+    let mut mismatched_detail_kind = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    mismatched_detail_kind["sections"][0]["observations"][0]["details"]["kind"] = json!("pod");
+    assert!(!validator.is_valid(&mismatched_detail_kind));
+
+    let mut irrelevant_typed_payload = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    irrelevant_typed_payload["sections"][0]["observations"][0]["details"]["image_aliases"] = json!({
+        "state": "observed",
+        "origin": "local_resolution",
+        "count": 1
+    });
+    assert!(!validator.is_valid(&irrelevant_typed_payload));
+
+    let mut missing_required_container_payload = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    missing_required_container_payload["sections"][0]["observations"][0]["details"]["environment"] = json!(null);
+    assert!(!validator.is_valid(&missing_required_container_payload));
+
+    let mut observed_without_origin = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    observed_without_origin["sections"][0]["observations"][0]["details"]["labels"]["origin"] = json!(null);
+    assert!(!validator.is_valid(&observed_without_origin));
+
+    let mut absent_with_origin = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    absent_with_origin["sections"][0]["observations"][1]["details"]["labels"]["origin"] = json!("configured");
+    assert!(!validator.is_valid(&absent_with_origin));
+
+    let mut absent_with_nonzero_count = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    absent_with_nonzero_count["sections"][0]["observations"][1]["details"]["labels"]["count"] = json!(1);
+    assert!(!validator.is_valid(&absent_with_nonzero_count));
+
+    let mut absent_with_environment_entries = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    absent_with_environment_entries["sections"][0]["observations"][0]["details"]["environment"]["state"] =
+        json!("absent");
+    absent_with_environment_entries["sections"][0]["observations"][0]["details"]["environment"]["origin"] = json!(null);
+    assert!(!validator.is_valid(&absent_with_environment_entries));
+
+    let mut absent_with_volume_wire_value = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    absent_with_volume_wire_value["sections"][3]["observations"][0]["details"]["volume_uid"]["state"] = json!("absent");
+    absent_with_volume_wire_value["sections"][3]["observations"][0]["details"]["volume_uid"]["origin"] = json!(null);
+    assert!(!validator.is_valid(&absent_with_volume_wire_value));
     Ok(())
 }
 

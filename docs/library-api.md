@@ -111,12 +111,13 @@ all-or-nothing `PLN0046` outcome and never expose an environment name, value, or
 
 `DeploymentRendering::shell_script` is generated solely from those argument arrays, requires
 explicit secret file paths, and safely names every external prerequisite in a review comment.
-Rendering accepts only an identical engine/API version listed in its committed v4 renderer evidence.
+Rendering accepts only an identical engine/API version listed in its committed v5 renderer evidence.
 Each reviewed line carries exact CLI, model, and handler provenance for every rendered setting.
 Pod membership, unpodded-container topology, typed named-volume mounts, and the bounded public
-container settings are exact. Populated M6-B2 networking fields remain fail-closed until their
-per-release evidence is recorded. Secret attachments remain unmodelled because their target and
-option semantics are not yet retained.
+container settings are exact. The bounded M6-B2 networking subset is also exact with committed
+per-release Podman and common-module evidence. Container network order and non-unicast route types
+need Podman 6.0 or newer; lower reviewed targets return a field-level finding and no output. Secret
+attachments remain unmodelled because their target and option semantics are not yet retained.
 For the exact basic topology that is already rendered, Libpod create bodies use the native Go
 member spelling `Networks`; the lowercase JSON member is not emitted.
 

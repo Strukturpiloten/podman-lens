@@ -62,7 +62,7 @@ declared values use `PublicLabelValue`, `PublicEnvironmentValue`, and
 observed sensitive values is provided. These
 M6-B1b makes the bounded public subset exact across the reviewed releases: command follows the
 image; entrypoint uses a JSON-array CLI flag; public labels and environment values retain declared
-CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v4 catalogue
+CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v5 catalogue
 requires revision-pinned CLI, model, and handler evidence for every emitted field. Inline and
 external environment variants remain all-or-nothing redacted `PLN0046` outcomes. Pod-member
 hostnames fail planning and pod-member restart policies remain `PLN0046`; bind/tmpfs mounts, ports,
@@ -76,9 +76,11 @@ attachments, ports, DNS, host aliases, or network order. An explicit container n
 be a permutation of all attached networks. M6-B2 does not claim runtime-assigned addresses,
 arbitrary network drivers/options, or unmanaged network namespace modes. Routes retain an optional
 native metric. Static attachment addresses require an explicitly rootful target context at planning
-time; unknown and rootless contexts produce field-level findings. Until the per-release
-common-module evidence matrix is complete, populated networking output remains fail-closed rather
-than being called exact.
+time; unknown and rootless contexts produce field-level findings. The v5 per-release Podman and
+common-module evidence matrix makes this bounded subset exact. Container network order and
+non-unicast route types are intentionally target-gated to Podman 6.0+; runtime-assigned addresses,
+multi-IP attachments, port ranges, interface names, arbitrary driver/options, and unmanaged
+namespace modes remain explicit later-ledger work.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

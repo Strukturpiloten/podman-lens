@@ -62,6 +62,7 @@ struct ReviewedRenderingOperation {
 #[serde(deny_unknown_fields)]
 struct ReviewedFieldEvidence {
     field: RenderedField,
+    availability: FieldAvailability,
     operation: RenderingOperationCategory,
     cli: CliFieldClaim,
     libpod: LibpodFieldClaim,
@@ -70,12 +71,19 @@ struct ReviewedFieldEvidence {
     handler_source: SourceReference,
 }
 
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum FieldAvailability {
+    Exact,
+    Unsupported,
+}
+
 /// One immutable source location backing a rendering claim.
 ///
 /// URLs are deliberately not accepted here: they obscure repository ownership and permit a
-/// revision from one repository to be paired with a path from another. The parser constructs a
-/// URL only after it has checked this structured, repository-aware form against the canonical
-/// field matrix.
+/// revision from one repository to be paired with a path from another. The parser validates this
+/// structured repository, revision, path, and module information against the canonical field
+/// matrix.
 #[derive(Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct SourceReference {
@@ -116,7 +124,7 @@ struct LibpodFieldClaim {
     json_member: LibpodBodyMember,
 }
 
-#[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "kebab-case")]
 enum RenderingOperationCategory {
     NetworkCreate,
@@ -159,9 +167,14 @@ enum RenderedField {
     PodInfraNamedVolumeMount,
     ContainerNetworkAttachment,
     PodNetworkAttachment,
-    NetworkAlias,
-    NetworkStaticIp,
-    NetworkStaticMac,
+    ContainerNetworkAlias,
+    PodNetworkAlias,
+    ContainerNetworkStaticIpv4,
+    PodNetworkStaticIpv4,
+    ContainerNetworkStaticIpv6,
+    PodNetworkStaticIpv6,
+    ContainerNetworkStaticMac,
+    PodNetworkStaticMac,
     ContainerPortMapping,
     PodPortMapping,
     ContainerDnsServers,
@@ -176,7 +189,9 @@ enum RenderedField {
     NetworkIpamSubnet,
     NetworkIpamGateway,
     NetworkIpamRange,
-    NetworkRoute,
+    NetworkRouteDestination,
+    NetworkRouteGateway,
+    NetworkRouteMetric,
     NetworkRouteTypeUnicast,
     NetworkRouteTypeBlackhole,
     NetworkRouteTypeUnreachable,
@@ -270,6 +285,17 @@ enum LibpodBodyMember {
     Env,
     RestartPolicy,
     Volumes,
+    #[serde(rename = "Networks")]
+    Networks,
+    Portmappings,
+    DnsServer,
+    DnsSearch,
+    DnsOption,
+    Hostadd,
+    #[serde(rename = "networkOrder")]
+    NetworkOrder,
+    Subnets,
+    Routes,
 }
 
 /// Exactness of a rendered operation or plan.
@@ -601,7 +627,8 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
         if blocked_resources.contains(operation.id().resource()) {
             continue;
         }
-        let unsupported_fields = unsupported_fields(operation.resource_intent(), plan.target().execution_context());
+        let unsupported_fields =
+            unsupported_fields(operation.resource_intent(), &version, plan.target().execution_context());
         if !unsupported_fields.is_empty() {
             blocked_resources.insert(operation.id().resource().clone());
             findings.extend(unsupported_fields.into_iter().map(|field| {
@@ -663,7 +690,10 @@ fn render_operation(
                 cli_suffix,
                 RenderedHttpMethod::Post,
                 format!("/v{version}/libpod/networks/create"),
-                RenderedHttpBody::Json(network_create_configuration(network)),
+                RenderedHttpBody::Json(network_create_configuration(
+                    network,
+                    supports_network_route_type(version),
+                )),
                 None,
             )
         }
@@ -898,7 +928,7 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
     let capabilities = crate::capability_catalogue().map_err(|_| ())?;
-    if catalogue.schema_version != 4
+    if catalogue.schema_version != 5
         || catalogue.provenance.trim().is_empty()
         || catalogue.reviewed_lines.len() != capabilities.len()
     {
@@ -1063,6 +1093,25 @@ fn validated_field_evidence(line: &ReviewedRenderingLine) -> bool {
     line.field_evidence.len() == expected_rendered_fields().len()
         && observed == expected_rendered_fields()
         && line.field_evidence.iter().all(|evidence| {
+            if evidence.availability != expected_field_availability(evidence.field, &line.version) {
+                return false;
+            }
+            if let Some((operation, flag, shape, member, cli_source, model_sources, handler_source)) =
+                expected_network_field_claim(evidence.field)
+            {
+                return evidence.operation == operation
+                    && evidence.cli.flag == flag
+                    && evidence.cli.value_shape == shape
+                    && evidence.libpod.json_member == member
+                    && source_matches_network_evidence(&evidence.cli_source, line, cli_source)
+                    && evidence.model_sources.len() == model_sources.len()
+                    && evidence
+                        .model_sources
+                        .iter()
+                        .zip(model_sources)
+                        .all(|(source, expected)| source_matches_network_evidence(source, line, *expected))
+                    && source_matches_network_evidence(&evidence.handler_source, line, handler_source);
+            }
             let (operation, flag, shape, member, cli_path, model_paths, handler_path) =
                 expected_field_claim(evidence.field);
             evidence.operation == operation
@@ -1080,6 +1129,20 @@ fn validated_field_evidence(line: &ReviewedRenderingLine) -> bool {
         })
 }
 
+fn expected_field_availability(field: RenderedField, version: &str) -> FieldAvailability {
+    match field {
+        RenderedField::ContainerNetworkOrder
+        | RenderedField::NetworkRouteTypeBlackhole
+        | RenderedField::NetworkRouteTypeUnreachable
+        | RenderedField::NetworkRouteTypeProhibit
+            if !supports_network_order(version) =>
+        {
+            FieldAvailability::Unsupported
+        }
+        _ => FieldAvailability::Exact,
+    }
+}
+
 fn expected_rendered_fields() -> BTreeSet<RenderedField> {
     [
         RenderedField::ContainerCommand,
@@ -1092,6 +1155,37 @@ fn expected_rendered_fields() -> BTreeSet<RenderedField> {
         RenderedField::ContainerRestartPolicy,
         RenderedField::ContainerNamedVolumeMount,
         RenderedField::PodInfraNamedVolumeMount,
+        RenderedField::ContainerNetworkAttachment,
+        RenderedField::PodNetworkAttachment,
+        RenderedField::ContainerNetworkAlias,
+        RenderedField::PodNetworkAlias,
+        RenderedField::ContainerNetworkStaticIpv4,
+        RenderedField::PodNetworkStaticIpv4,
+        RenderedField::ContainerNetworkStaticIpv6,
+        RenderedField::PodNetworkStaticIpv6,
+        RenderedField::ContainerNetworkStaticMac,
+        RenderedField::PodNetworkStaticMac,
+        RenderedField::ContainerPortMapping,
+        RenderedField::PodPortMapping,
+        RenderedField::ContainerDnsServers,
+        RenderedField::ContainerDnsSearch,
+        RenderedField::ContainerDnsOptions,
+        RenderedField::PodDnsServers,
+        RenderedField::PodDnsSearch,
+        RenderedField::PodDnsOptions,
+        RenderedField::ContainerHostAlias,
+        RenderedField::PodHostAlias,
+        RenderedField::ContainerNetworkOrder,
+        RenderedField::NetworkIpamSubnet,
+        RenderedField::NetworkIpamGateway,
+        RenderedField::NetworkIpamRange,
+        RenderedField::NetworkRouteDestination,
+        RenderedField::NetworkRouteGateway,
+        RenderedField::NetworkRouteMetric,
+        RenderedField::NetworkRouteTypeUnicast,
+        RenderedField::NetworkRouteTypeBlackhole,
+        RenderedField::NetworkRouteTypeUnreachable,
+        RenderedField::NetworkRouteTypeProhibit,
     ]
     .into_iter()
     .collect()
@@ -1204,7 +1298,223 @@ fn expected_field_claim(
             POD_VOLUME_MODEL,
             "pkg/api/handlers/libpod/pods.go",
         ),
-        _ => unreachable!("B2 fields remain fail-closed until their evidence matrix is enabled"),
+        _ => unreachable!("networking fields are handled by the dedicated evidence matrix"),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ExpectedNetworkSource {
+    Podman(&'static str),
+    Common,
+}
+
+type NetworkFieldClaim = (
+    RenderingOperationCategory,
+    Option<CliFlag>,
+    CliValueShape,
+    LibpodBodyMember,
+    ExpectedNetworkSource,
+    &'static [ExpectedNetworkSource],
+    ExpectedNetworkSource,
+);
+
+#[allow(clippy::too_many_lines)] // The finite M6-B2 field matrix is deliberately audit-friendly.
+fn expected_network_field_claim(field: RenderedField) -> Option<NetworkFieldClaim> {
+    const CONTAINER_NETWORK: &[ExpectedNetworkSource] = &[
+        ExpectedNetworkSource::Podman("pkg/specgen/specgen.go"),
+        ExpectedNetworkSource::Common,
+    ];
+    const POD_NETWORK: &[ExpectedNetworkSource] = &[
+        ExpectedNetworkSource::Podman("pkg/specgen/podspecgen.go"),
+        ExpectedNetworkSource::Common,
+    ];
+    const CONTAINER_NETWORK_CONFIG: &[ExpectedNetworkSource] =
+        &[ExpectedNetworkSource::Podman("pkg/specgen/specgen.go")];
+    const POD_NETWORK_CONFIG: &[ExpectedNetworkSource] = &[ExpectedNetworkSource::Podman("pkg/specgen/podspecgen.go")];
+    const CONTAINER_NETWORK_ORDER: &[ExpectedNetworkSource] = &[
+        ExpectedNetworkSource::Podman("pkg/specgen/specgen.go"),
+        ExpectedNetworkSource::Podman("pkg/specgen/namespaces.go"),
+    ];
+    const NETWORK: &[ExpectedNetworkSource] = &[ExpectedNetworkSource::Common];
+    const CONTAINER_HANDLER: ExpectedNetworkSource =
+        ExpectedNetworkSource::Podman("pkg/api/handlers/libpod/containers_create.go");
+    const POD_HANDLER: ExpectedNetworkSource = ExpectedNetworkSource::Podman("pkg/api/handlers/libpod/pods.go");
+    const NETWORK_HANDLER: ExpectedNetworkSource = ExpectedNetworkSource::Podman("pkg/api/handlers/libpod/networks.go");
+    let container_network = |shape| {
+        (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Network),
+            shape,
+            LibpodBodyMember::Networks,
+            ExpectedNetworkSource::Podman("cmd/podman/common/netflags.go"),
+            CONTAINER_NETWORK,
+            CONTAINER_HANDLER,
+        )
+    };
+    let pod_network = |shape| {
+        (
+            RenderingOperationCategory::PodCreate,
+            Some(CliFlag::Network),
+            shape,
+            LibpodBodyMember::Networks,
+            ExpectedNetworkSource::Podman("cmd/podman/pods/create.go"),
+            POD_NETWORK,
+            POD_HANDLER,
+        )
+    };
+    let container_network_config = |flag, shape, member| {
+        (
+            RenderingOperationCategory::ContainerCreate,
+            Some(flag),
+            shape,
+            member,
+            ExpectedNetworkSource::Podman("cmd/podman/common/netflags.go"),
+            CONTAINER_NETWORK_CONFIG,
+            CONTAINER_HANDLER,
+        )
+    };
+    let pod_network_config = |flag, shape, member| {
+        (
+            RenderingOperationCategory::PodCreate,
+            Some(flag),
+            shape,
+            member,
+            ExpectedNetworkSource::Podman("cmd/podman/pods/create.go"),
+            POD_NETWORK_CONFIG,
+            POD_HANDLER,
+        )
+    };
+    let network_create = |flag, shape, member| {
+        (
+            RenderingOperationCategory::NetworkCreate,
+            Some(flag),
+            shape,
+            member,
+            ExpectedNetworkSource::Podman("cmd/podman/networks/create.go"),
+            NETWORK,
+            NETWORK_HANDLER,
+        )
+    };
+    Some(match field {
+        RenderedField::ContainerNetworkAttachment => container_network(CliValueShape::NetworkAttachment),
+        RenderedField::PodNetworkAttachment => pod_network(CliValueShape::NetworkAttachment),
+        RenderedField::ContainerNetworkAlias => container_network(CliValueShape::NetworkAlias),
+        RenderedField::PodNetworkAlias => pod_network(CliValueShape::NetworkAlias),
+        RenderedField::ContainerNetworkStaticIpv4 | RenderedField::ContainerNetworkStaticIpv6 => {
+            container_network(CliValueShape::StaticIp)
+        }
+        RenderedField::PodNetworkStaticIpv4 | RenderedField::PodNetworkStaticIpv6 => {
+            pod_network(CliValueShape::StaticIp)
+        }
+        RenderedField::ContainerNetworkStaticMac => container_network(CliValueShape::StaticMac),
+        RenderedField::PodNetworkStaticMac => pod_network(CliValueShape::StaticMac),
+        RenderedField::ContainerPortMapping => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Publish),
+            CliValueShape::PortMapping,
+            LibpodBodyMember::Portmappings,
+            ExpectedNetworkSource::Podman("cmd/podman/common/netflags.go"),
+            CONTAINER_NETWORK,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::PodPortMapping => (
+            RenderingOperationCategory::PodCreate,
+            Some(CliFlag::Publish),
+            CliValueShape::PortMapping,
+            LibpodBodyMember::Portmappings,
+            ExpectedNetworkSource::Podman("cmd/podman/pods/create.go"),
+            POD_NETWORK,
+            POD_HANDLER,
+        ),
+        RenderedField::ContainerDnsServers => {
+            container_network_config(CliFlag::Dns, CliValueShape::DnsServer, LibpodBodyMember::DnsServer)
+        }
+        RenderedField::ContainerDnsSearch => container_network_config(
+            CliFlag::DnsSearch,
+            CliValueShape::DnsSearch,
+            LibpodBodyMember::DnsSearch,
+        ),
+        RenderedField::ContainerDnsOptions => container_network_config(
+            CliFlag::DnsOption,
+            CliValueShape::DnsOption,
+            LibpodBodyMember::DnsOption,
+        ),
+        RenderedField::PodDnsServers => {
+            pod_network_config(CliFlag::Dns, CliValueShape::DnsServer, LibpodBodyMember::DnsServer)
+        }
+        RenderedField::PodDnsSearch => pod_network_config(
+            CliFlag::DnsSearch,
+            CliValueShape::DnsSearch,
+            LibpodBodyMember::DnsSearch,
+        ),
+        RenderedField::PodDnsOptions => pod_network_config(
+            CliFlag::DnsOption,
+            CliValueShape::DnsOption,
+            LibpodBodyMember::DnsOption,
+        ),
+        RenderedField::ContainerHostAlias => {
+            container_network_config(CliFlag::AddHost, CliValueShape::HostAlias, LibpodBodyMember::Hostadd)
+        }
+        RenderedField::PodHostAlias => {
+            pod_network_config(CliFlag::AddHost, CliValueShape::HostAlias, LibpodBodyMember::Hostadd)
+        }
+        RenderedField::ContainerNetworkOrder => (
+            RenderingOperationCategory::ContainerCreate,
+            Some(CliFlag::Network),
+            CliValueShape::NetworkOrder,
+            LibpodBodyMember::NetworkOrder,
+            ExpectedNetworkSource::Podman("cmd/podman/common/netflags.go"),
+            CONTAINER_NETWORK_ORDER,
+            CONTAINER_HANDLER,
+        ),
+        RenderedField::NetworkIpamSubnet => {
+            network_create(CliFlag::Subnet, CliValueShape::NetworkSubnet, LibpodBodyMember::Subnets)
+        }
+        RenderedField::NetworkIpamGateway => network_create(
+            CliFlag::Gateway,
+            CliValueShape::NetworkGateway,
+            LibpodBodyMember::Subnets,
+        ),
+        RenderedField::NetworkIpamRange => network_create(
+            CliFlag::IpRange,
+            CliValueShape::NetworkIpRange,
+            LibpodBodyMember::Subnets,
+        ),
+        RenderedField::NetworkRouteDestination
+        | RenderedField::NetworkRouteGateway
+        | RenderedField::NetworkRouteMetric
+        | RenderedField::NetworkRouteTypeUnicast
+        | RenderedField::NetworkRouteTypeBlackhole
+        | RenderedField::NetworkRouteTypeUnreachable
+        | RenderedField::NetworkRouteTypeProhibit => {
+            network_create(CliFlag::Route, CliValueShape::NetworkRoute, LibpodBodyMember::Routes)
+        }
+        _ => return None,
+    })
+}
+
+fn source_matches_network_evidence(
+    source: &SourceReference,
+    line: &ReviewedRenderingLine,
+    expected: ExpectedNetworkSource,
+) -> bool {
+    match expected {
+        ExpectedNetworkSource::Podman(path) => source_matches_podman(source, &line.revision, path),
+        ExpectedNetworkSource::Common => {
+            source.repository == line.common_module.repository
+                && source.revision == line.common_module.revision
+                && source.path == common_model_source_path(line)
+                && source.module.as_ref() == Some(&line.common_module)
+                && is_lowercase_sha40(&source.revision)
+        }
+    }
+}
+
+fn common_model_source_path(line: &ReviewedRenderingLine) -> &'static str {
+    match line.version.as_str() {
+        "5.4.0" | "5.5.0" | "5.6.0" => "libnetwork/types/network.go",
+        "5.7.0" | "5.8.6" | "6.0.0" | "6.1.0" => "common/libnetwork/types/network.go",
+        _ => unreachable!("reviewed renderer versions are validated before field evidence"),
     }
 }
 
@@ -1283,19 +1593,19 @@ fn valid_common_module(version: &str, module: &ModulePin) -> bool {
             "c007f37a6c55a53a7d41419d094c815bf2e46ca3"
         ) | (
             "5.7.0",
-            SourceRepository::PodmanContainerToolsContainerLibs,
+            SourceRepository::ContainersContainerLibs,
             "go.podman.io/common",
             "v0.66.0",
             "8163ca799c317e3dea886be7228406ec8cf06abc"
         ) | (
             "5.8.6",
-            SourceRepository::PodmanContainerToolsContainerLibs,
+            SourceRepository::ContainersContainerLibs,
             "go.podman.io/common",
             "v0.67.1",
             "c8b7f74383aa8bac5a84118db1a6fa870602af63"
         ) | (
             "6.0.0",
-            SourceRepository::PodmanContainerToolsContainerLibs,
+            SourceRepository::ContainersContainerLibs,
             "go.podman.io/common",
             "v0.68.0",
             "bb6a37c8946a977f24a8eed4d97b2dc3608cd05e"
@@ -1330,36 +1640,30 @@ fn managed_image_sources(plan: &DeploymentPlan) -> BTreeMap<DeploymentResourceId
         .collect()
 }
 
-fn unsupported_fields(resource: &DeploymentResource, context: crate::TargetExecutionContext) -> Vec<&'static str> {
+fn unsupported_fields(
+    resource: &DeploymentResource,
+    version: &str,
+    context: crate::TargetExecutionContext,
+) -> Vec<&'static str> {
     match resource {
         DeploymentResource::Network(network) => {
             let mut fields = Vec::new();
-            if !network.subnets().is_empty() {
-                fields.push("subnets");
-            }
-            if !network.routes().is_empty() {
-                fields.push("routes");
+            if !supports_network_route_type(version)
+                && network
+                    .routes()
+                    .iter()
+                    .any(|route| route.route_type() != RouteType::Unicast)
+            {
+                fields.push("routes.route_type");
             }
             fields
         }
         DeploymentResource::Pod(pod) => {
             let mut fields = Vec::new();
-            if pod.networks().iter().any(network_attachment_has_options) {
-                fields.push("networks.attachment_options");
-            }
             if context != crate::TargetExecutionContext::Rootful
                 && pod.networks().iter().any(network_attachment_has_static_address)
             {
                 fields.push("networks.static_address_requires_rootful");
-            }
-            if !pod.ports().is_empty() {
-                fields.push("ports");
-            }
-            if dns_is_configured(pod.dns()) {
-                fields.push("dns");
-            }
-            if !pod.host_aliases().is_empty() {
-                fields.push("host_aliases");
             }
             fields
         }
@@ -1384,24 +1688,12 @@ fn unsupported_fields(resource: &DeploymentResource, context: crate::TargetExecu
             if container.pod().is_some() && container.network_order().is_some() {
                 fields.push("network_order");
             }
-            if container.networks().iter().any(network_attachment_has_options) {
-                fields.push("networks.attachment_options");
-            }
             if context != crate::TargetExecutionContext::Rootful
                 && container.networks().iter().any(network_attachment_has_static_address)
             {
                 fields.push("networks.static_address_requires_rootful");
             }
-            if !container.ports().is_empty() {
-                fields.push("ports");
-            }
-            if dns_is_configured(container.dns()) {
-                fields.push("dns");
-            }
-            if !container.host_aliases().is_empty() {
-                fields.push("host_aliases");
-            }
-            if container.network_order().is_some() {
+            if container.network_order().is_some() && !supports_network_order(version) {
                 fields.push("network_order");
             }
             if !container.secrets().is_empty() {
@@ -1432,19 +1724,16 @@ fn unsupported_fields(resource: &DeploymentResource, context: crate::TargetExecu
     }
 }
 
-fn network_attachment_has_options(attachment: &NetworkAttachment) -> bool {
-    !attachment.aliases().is_empty()
-        || attachment.static_ipv4().is_some()
-        || attachment.static_ipv6().is_some()
-        || attachment.static_mac().is_some()
-}
-
 fn network_attachment_has_static_address(attachment: &NetworkAttachment) -> bool {
     attachment.static_ipv4().is_some() || attachment.static_ipv6().is_some() || attachment.static_mac().is_some()
 }
 
-fn dns_is_configured(dns: &crate::DnsConfiguration) -> bool {
-    !dns.servers().is_empty() || !dns.search().is_empty() || !dns.options().is_empty()
+fn supports_network_order(version: &str) -> bool {
+    matches!(version, "6.0.0" | "6.1.0")
+}
+
+fn supports_network_route_type(version: &str) -> bool {
+    supports_network_order(version)
 }
 
 fn append_network_arguments(
@@ -1678,10 +1967,14 @@ fn network_route_cli_value(route: &NetworkRoute) -> String {
         RouteType::Unreachable => "unreachable".to_owned(),
         RouteType::Prohibit => "prohibit".to_owned(),
     };
-    format!("{},{}", route.destination().as_str(), next_hop)
+    let mut value = format!("{},{}", route.destination().as_str(), next_hop);
+    if let Some(metric) = route.metric() {
+        let _ = write!(value, ",{metric}");
+    }
+    value
 }
 
-fn network_create_configuration(network: &NetworkIntent) -> Value {
+fn network_create_configuration(network: &NetworkIntent, supports_route_type: bool) -> Value {
     let mut body = Map::new();
     body.insert("name".to_owned(), Value::String(network.identity().name().to_owned()));
     if !network.subnets().is_empty() {
@@ -1725,13 +2018,18 @@ fn network_create_configuration(network: &NetworkIntent) -> Value {
                         if let Some(gateway) = route.gateway() {
                             value.insert("gateway".to_owned(), Value::String(gateway.to_string()));
                         }
-                        let route_type = match route.route_type() {
-                            RouteType::Unicast => "unicast",
-                            RouteType::Blackhole => "blackhole",
-                            RouteType::Unreachable => "unreachable",
-                            RouteType::Prohibit => "prohibit",
-                        };
-                        value.insert("route_type".to_owned(), Value::String(route_type.to_owned()));
+                        if let Some(metric) = route.metric() {
+                            value.insert("metric".to_owned(), json!(metric));
+                        }
+                        if supports_route_type {
+                            let route_type = match route.route_type() {
+                                RouteType::Unicast => "unicast",
+                                RouteType::Blackhole => "blackhole",
+                                RouteType::Unreachable => "unreachable",
+                                RouteType::Prohibit => "prohibit",
+                            };
+                            value.insert("route_type".to_owned(), Value::String(route_type.to_owned()));
+                        }
                         Value::Object(value)
                     })
                     .collect(),
@@ -2104,17 +2402,102 @@ mod tests {
     }
 
     #[test]
+    fn renderer_catalogue_rejects_b2_field_mutations_and_fabricated_pre_six_support() {
+        const FIRST_B2_FIELD: usize = 10;
+        const NETWORK_ORDER_FIELD: usize = 30;
+        const ROUTE_TYPE_BLACKHOLE_FIELD: usize = 38;
+
+        let mut missing = decoded_catalogue();
+        missing["reviewed_lines"][0]["field_evidence"]
+            .as_array_mut()
+            .expect("field evidence")
+            .remove(FIRST_B2_FIELD);
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing)).is_err());
+
+        let mut duplicate = decoded_catalogue();
+        let fields = duplicate["reviewed_lines"][0]["field_evidence"]
+            .as_array_mut()
+            .expect("field evidence");
+        fields.push(fields[FIRST_B2_FIELD].clone());
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&duplicate)).is_err());
+
+        for (path, value) in [
+            (["operation", "", ""], serde_json::json!("pod-create")),
+            (["cli", "flag", ""], serde_json::json!("--publish")),
+            (["cli", "value_shape", ""], serde_json::json!("port-mapping")),
+            (["libpod", "json_member", ""], serde_json::json!("portmappings")),
+        ] {
+            let mut mutated = decoded_catalogue();
+            let field = &mut mutated["reviewed_lines"][0]["field_evidence"][FIRST_B2_FIELD];
+            if path[1].is_empty() {
+                field[path[0]] = value;
+            } else if path[2].is_empty() {
+                field[path[0]][path[1]] = value;
+            }
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&mutated)).is_err());
+        }
+
+        for (path, value) in [
+            (["repository", ""], serde_json::json!("containers-podman")),
+            (["revision", ""], serde_json::json!("main")),
+            (["path", ""], serde_json::json!("libnetwork/types/fabricated.go")),
+            (
+                ["module", "revision"],
+                serde_json::json!("0000000000000000000000000000000000000000"),
+            ),
+        ] {
+            let mut mutated = decoded_catalogue();
+            let source = &mut mutated["reviewed_lines"][0]["field_evidence"][FIRST_B2_FIELD]["model_sources"][1];
+            if path[1].is_empty() {
+                source[path[0]] = value;
+            } else {
+                source[path[0]][path[1]] = value;
+            }
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&mutated)).is_err());
+        }
+
+        let mut fabricated_pre_six_support = decoded_catalogue();
+        fabricated_pre_six_support["reviewed_lines"][0]["field_evidence"][NETWORK_ORDER_FIELD]["availability"] =
+            serde_json::json!("exact");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&fabricated_pre_six_support)).is_err());
+
+        let mut fabricated_pre_six_route_type = decoded_catalogue();
+        fabricated_pre_six_route_type["reviewed_lines"][0]["field_evidence"][ROUTE_TYPE_BLACKHOLE_FIELD]["availability"] =
+            serde_json::json!("exact");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&fabricated_pre_six_route_type)).is_err());
+
+        for line_index in [3, 4, 5] {
+            let mut substituted_repository = decoded_catalogue();
+            substituted_repository["reviewed_lines"][line_index]["field_evidence"][FIRST_B2_FIELD]["model_sources"]
+                [1]["repository"] = serde_json::json!("containers-common");
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&substituted_repository)).is_err());
+        }
+
+        for line_index in [3, 4, 5, 6] {
+            let mut wrong_common_path = decoded_catalogue();
+            wrong_common_path["reviewed_lines"][line_index]["field_evidence"][FIRST_B2_FIELD]["model_sources"][1]["path"] =
+                serde_json::json!("libnetwork/types/network.go");
+            assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_common_path)).is_err());
+        }
+
+        let mut missing_network_order_wire_model = decoded_catalogue();
+        missing_network_order_wire_model["reviewed_lines"][5]["field_evidence"][NETWORK_ORDER_FIELD]["model_sources"]
+            [0]["path"] = serde_json::json!("pkg/specgen/namespaces.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&missing_network_order_wire_model)).is_err());
+    }
+
+    #[test]
     fn renderer_catalogue_rejects_unknown_and_duplicate_json_keys() {
         let unknown = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 4,",
-            "\"schema_version\": 4, \"unexpected\": true,",
+            "\"schema_version\": 5,",
+            "\"schema_version\": 5, \"unexpected\": true,",
             1,
         );
         assert!(parse_renderer_catalogue(&unknown).is_err());
 
         let duplicate_root = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 4,",
-            "\"schema_version\": 4, \"schema_version\": 4,",
+            "\"schema_version\": 5,",
+            "\"schema_version\": 5, \"schema_version\": 5,",
             1,
         );
         assert!(parse_renderer_catalogue(&duplicate_root).is_err());

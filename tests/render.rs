@@ -790,17 +790,40 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
     );
 }
 
+#[allow(clippy::too_many_lines)] // One byte-exact end-to-end matrix keeps every B2 wire value together.
 #[test]
-fn populated_networking_intent_fails_closed_until_the_evidence_catalogue_covers_it() {
+fn populated_networking_intent_is_rendered_exactly_with_cli_and_libpod_forms() {
     let network = id(ResourceKind::Network, "application-network");
     let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
     let container = id(ResourceKind::Container, "application");
     let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
-    network_intent
-        .add_subnet(NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24").expect("subnet")))
-        .expect("subnet");
+    let mut subnet = NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24").expect("subnet"));
+    subnet
+        .set_gateway("192.0.2.1".parse().expect("gateway"))
+        .expect("gateway");
+    subnet
+        .set_range(
+            "192.0.2.10".parse().expect("range start"),
+            "192.0.2.20".parse().expect("range end"),
+        )
+        .expect("range");
+    network_intent.add_subnet(subnet).expect("subnet");
+    let mut route = NetworkRoute::new(
+        NetworkCidr::new("198.51.100.0/24").expect("destination"),
+        Some("192.0.2.1".parse().expect("gateway")),
+        RouteType::Unicast,
+    )
+    .expect("route");
+    route.set_metric(42).expect("metric");
+    network_intent.add_route(route).expect("route");
     let mut attachment = NetworkAttachment::new(network.clone()).expect("attachment");
     attachment.add_alias("application").expect("alias");
+    attachment
+        .set_static_ipv4("192.0.2.50".parse().expect("static IPv4"))
+        .expect("static IPv4");
+    attachment
+        .set_static_ipv6("2001:db8::50".parse().expect("static IPv6"))
+        .expect("static IPv6");
     attachment
         .set_static_mac(podman_lens::StaticMacAddress::new("02:42:ac:11:00:02").expect("mac"))
         .expect("mac");
@@ -810,10 +833,41 @@ fn populated_networking_intent_fails_closed_until_the_evidence_catalogue_covers_
         .add_port(PortMapping::new(None, 8080, 80, PortProtocol::Tcp).expect("port"))
         .expect("port");
     container_intent
+        .add_port(
+            PortMapping::new(
+                Some("192.0.2.10".parse().expect("IPv4 bind")),
+                5353,
+                5353,
+                PortProtocol::Udp,
+            )
+            .expect("port"),
+        )
+        .expect("port");
+    container_intent
+        .add_port(
+            PortMapping::new(
+                Some("2001:db8::10".parse().expect("IPv6 bind")),
+                9899,
+                9899,
+                PortProtocol::Sctp,
+            )
+            .expect("port"),
+        )
+        .expect("port");
+    container_intent
         .add_host_alias(HostAlias::new("192.0.2.53".parse().expect("host"), "database.test").expect("alias"))
+        .expect("host alias");
+    container_intent
+        .add_host_alias(HostAlias::new("2001:db8::53".parse().expect("host"), "database-v6.test").expect("alias"))
         .expect("host alias");
     let dns: &mut DnsConfiguration = container_intent.dns_mut();
     dns.add_server("192.0.2.53".parse().expect("dns")).expect("dns");
+    dns.add_server("2001:db8::53".parse().expect("dns")).expect("dns");
+    dns.add_search("example.test").expect("search");
+    dns.add_option("ndots:2").expect("option");
+    container_intent
+        .set_network_order(vec![network.clone()])
+        .expect("network order");
     let mut selected_target = target("6.1.0", "6.1.0");
     selected_target.set_execution_context(TargetExecutionContext::Rootful);
     let mut intent = DeploymentIntent::new(selected_target);
@@ -824,57 +878,397 @@ fn populated_networking_intent_fails_closed_until_the_evidence_catalogue_covers_
     intent.add_resource(DeploymentResource::Container(container_intent));
     let plan = plan_deployment(&intent).plan().cloned().expect("plan");
     let outcome = render_deployment(&plan);
-    assert!(!outcome.is_success());
-    let fields = outcome
-        .findings()
+    let rendering = outcome.rendering().expect("exact rendering");
+    let network = rendering
+        .operations()
         .iter()
-        .filter_map(podman_lens::RenderingFinding::field)
-        .collect::<Vec<_>>();
-    for field in ["dns", "host_aliases", "networks.attachment_options", "ports", "subnets"] {
-        assert!(fields.contains(&field), "missing {field}: {fields:?}");
+        .find(|operation| {
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["network", "create"])
+        })
+        .expect("network create");
+    assert_eq!(
+        network.cli().argv(),
+        [
+            "network",
+            "create",
+            "--subnet",
+            "192.0.2.0/24",
+            "--gateway",
+            "192.0.2.1",
+            "--ip-range",
+            "192.0.2.10-192.0.2.20",
+            "--route",
+            "198.51.100.0/24,192.0.2.1,42",
+            "application-network"
+        ]
+    );
+    assert_eq!(
+        network.libpod().body(),
+        &RenderedHttpBody::Json(serde_json::json!({
+            "name": "application-network",
+            "subnets": [{"subnet": "192.0.2.0/24", "gateway": "192.0.2.1", "lease_range": {"start_ip": "192.0.2.10", "end_ip": "192.0.2.20"}}],
+            "routes": [{"destination": "198.51.100.0/24", "gateway": "192.0.2.1", "metric": 42, "route_type": "unicast"}],
+        }))
+    );
+    let container = rendering
+        .operations()
+        .iter()
+        .find(|operation| {
+            operation
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["container", "create"])
+        })
+        .expect("container create");
+    assert!(container.cli().argv().windows(2).any(|args| {
+        args == [
+            "--network",
+            "application-network:alias=application,ip=192.0.2.50,ip6=2001:db8::50,mac=02:42:ac:11:00:02",
+        ]
+    }));
+    assert!(
+        container
+            .cli()
+            .argv()
+            .windows(2)
+            .any(|args| args == ["--publish", "[2001:db8::10]:9899:9899/sctp"])
+    );
+    assert_eq!(
+        container.libpod().body(),
+        &RenderedHttpBody::Json(serde_json::json!({
+            "image": "registry.example.invalid/team/application:1",
+            "Networks": {"application-network": {"aliases": ["application"], "static_ips": ["192.0.2.50", "2001:db8::50"], "static_mac": "02:42:ac:11:00:02"}},
+            "portmappings": [
+                {"host_ip": "", "host_port": 8080, "container_port": 80, "range": 1, "protocol": "tcp"},
+                {"host_ip": "192.0.2.10", "host_port": 5353, "container_port": 5353, "range": 1, "protocol": "udp"},
+                {"host_ip": "2001:db8::10", "host_port": 9899, "container_port": 9899, "range": 1, "protocol": "sctp"},
+            ],
+            "dns_server": ["192.0.2.53", "2001:db8::53"], "dns_search": ["example.test"], "dns_option": ["ndots:2"],
+            "hostadd": ["database.test:192.0.2.53", "database-v6.test:2001:db8::53"],
+            "networkOrder": ["application-network"],
+        }))
+    );
+}
+
+#[allow(clippy::too_many_lines)] // The target matrix is intentionally visible in one test.
+#[test]
+fn basic_unpodded_networking_is_exact_for_every_reviewed_release() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let network = id(ResourceKind::Network, "network");
+        let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
+        let container = id(ResourceKind::Container, "application");
+        let mut attachment = NetworkAttachment::new(network.clone()).expect("attachment");
+        attachment.add_alias("application").expect("alias");
+        attachment
+            .set_static_ipv4("192.0.2.50".parse().expect("IPv4"))
+            .expect("IPv4");
+        attachment
+            .set_static_ipv6("2001:db8::50".parse().expect("IPv6"))
+            .expect("IPv6");
+        attachment
+            .set_static_mac(podman_lens::StaticMacAddress::new("02:42:ac:11:00:02").expect("MAC"))
+            .expect("MAC");
+        let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
+        let mut subnet = NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24").expect("subnet"));
+        subnet
+            .set_gateway("192.0.2.1".parse().expect("gateway"))
+            .expect("gateway");
+        subnet
+            .set_range(
+                "192.0.2.10".parse().expect("range start"),
+                "192.0.2.20".parse().expect("range end"),
+            )
+            .expect("range");
+        network_intent.add_subnet(subnet).expect("subnet");
+        let mut route = NetworkRoute::new(
+            NetworkCidr::new("198.51.100.0/24").expect("destination"),
+            Some("192.0.2.1".parse().expect("gateway")),
+            RouteType::Unicast,
+        )
+        .expect("route");
+        route.set_metric(42).expect("metric");
+        network_intent.add_route(route).expect("route");
+        let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+        container_intent.add_network(attachment).expect("network");
+        container_intent
+            .add_port(PortMapping::new(None, 8080, 80, PortProtocol::Tcp).expect("port"))
+            .expect("port");
+        container_intent
+            .add_port(
+                PortMapping::new(
+                    Some("192.0.2.10".parse().expect("IPv4 bind")),
+                    5353,
+                    5353,
+                    PortProtocol::Udp,
+                )
+                .expect("port"),
+            )
+            .expect("port");
+        container_intent
+            .add_port(
+                PortMapping::new(
+                    Some("2001:db8::10".parse().expect("IPv6 bind")),
+                    9899,
+                    9899,
+                    PortProtocol::Sctp,
+                )
+                .expect("port"),
+            )
+            .expect("port");
+        container_intent
+            .add_host_alias(HostAlias::new("2001:db8::53".parse().expect("host"), "database.test").expect("host"))
+            .expect("host");
+        let dns = container_intent.dns_mut();
+        dns.add_server("2001:db8::53".parse().expect("DNS")).expect("DNS");
+        dns.add_search("example.test").expect("search");
+        dns.add_option("ndots:2").expect("option");
+        let mut selected_target = target(version, version);
+        selected_target.set_execution_context(TargetExecutionContext::Rootful);
+        let mut intent = DeploymentIntent::new(selected_target);
+        intent.add_resource(DeploymentResource::Network(network_intent));
+        intent.add_resource(DeploymentResource::Image(
+            ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Container(container_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let rendering = render_deployment(&plan).rendering().cloned().expect("exact rendering");
+        let container = rendering
+            .operations()
+            .iter()
+            .find(|operation| {
+                operation
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|args| args == ["container", "create"])
+            })
+            .expect("container create");
+        assert!(container.cli().argv().windows(2).any(|args| {
+            args == [
+                "--network",
+                "network:alias=application,ip=192.0.2.50,ip6=2001:db8::50,mac=02:42:ac:11:00:02",
+            ]
+        }));
+        for args in [
+            ["--publish", "8080:80/tcp"],
+            ["--publish", "192.0.2.10:5353:5353/udp"],
+            ["--publish", "[2001:db8::10]:9899:9899/sctp"],
+            ["--dns", "2001:db8::53"],
+            ["--dns-search", "example.test"],
+            ["--dns-option", "ndots:2"],
+            ["--add-host", "database.test:2001:db8::53"],
+        ] {
+            assert!(container.cli().argv().windows(2).any(|observed| observed == args));
+        }
+        assert!(
+            matches!(container.libpod().body(), RenderedHttpBody::Json(body) if body["Networks"] == serde_json::json!({"network": {"aliases": ["application"], "static_ips": ["192.0.2.50", "2001:db8::50"], "static_mac": "02:42:ac:11:00:02"}}) && body["portmappings"] == serde_json::json!([
+            {"host_ip": "", "host_port": 8080, "container_port": 80, "range": 1, "protocol": "tcp"},
+            {"host_ip": "192.0.2.10", "host_port": 5353, "container_port": 5353, "range": 1, "protocol": "udp"},
+            {"host_ip": "2001:db8::10", "host_port": 9899, "container_port": 9899, "range": 1, "protocol": "sctp"},
+        ]) && body["dns_server"] == serde_json::json!(["2001:db8::53"]) && body["dns_search"] == serde_json::json!(["example.test"]) && body["dns_option"] == serde_json::json!(["ndots:2"]) && body["hostadd"] == serde_json::json!(["database.test:2001:db8::53"]))
+        );
+        let network = rendering.operations().first().expect("network create");
+        assert!(
+            network
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["--subnet", "192.0.2.0/24"])
+        );
+        assert!(
+            network
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["--gateway", "192.0.2.1"])
+        );
+        assert!(
+            network
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["--ip-range", "192.0.2.10-192.0.2.20"])
+        );
+        assert!(
+            network
+                .cli()
+                .argv()
+                .windows(2)
+                .any(|args| args == ["--route", "198.51.100.0/24,192.0.2.1,42"])
+        );
+        assert!(
+            matches!(network.libpod().body(), RenderedHttpBody::Json(body) if body["subnets"] == serde_json::json!([{"subnet": "192.0.2.0/24", "gateway": "192.0.2.1", "lease_range": {"start_ip": "192.0.2.10", "end_ip": "192.0.2.20"}}]) && body["routes"][0]["destination"] == "198.51.100.0/24" && body["routes"][0]["gateway"] == "192.0.2.1" && body["routes"][0]["metric"] == 42 && if matches!(version, "6.0.0" | "6.1.0") { body["routes"][0]["route_type"] == "unicast" } else { body["routes"][0].get("route_type").is_none() })
+        );
+    }
+}
+
+#[allow(clippy::too_many_lines)] // Pod namespace ownership and its wire output are one invariant.
+#[test]
+fn pod_owned_networking_renders_on_the_infra_container() {
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        let network = id(ResourceKind::Network, "network");
+        let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
+        let pod = id(ResourceKind::Pod, "application-pod");
+        let member = id(ResourceKind::Container, "application");
+        let mut attachment = NetworkAttachment::new(network.clone()).expect("attachment");
+        attachment.add_alias("application").expect("alias");
+        attachment
+            .set_static_ipv4("192.0.2.50".parse().expect("IPv4"))
+            .expect("IPv4");
+        attachment
+            .set_static_ipv6("2001:db8::50".parse().expect("IPv6"))
+            .expect("IPv6");
+        attachment
+            .set_static_mac(podman_lens::StaticMacAddress::new("02:42:ac:11:00:02").expect("MAC"))
+            .expect("MAC");
+        let mut pod_intent = PodIntent::new(pod.clone()).expect("pod");
+        pod_intent.add_network(attachment).expect("network");
+        pod_intent
+            .add_port(
+                PortMapping::new(
+                    Some("2001:db8::10".parse().expect("bind")),
+                    8443,
+                    443,
+                    PortProtocol::Sctp,
+                )
+                .expect("port"),
+            )
+            .expect("port");
+        pod_intent
+            .add_host_alias(HostAlias::new("2001:db8::53".parse().expect("host"), "database.test").expect("host"))
+            .expect("host");
+        let dns = pod_intent.dns_mut();
+        dns.add_server("2001:db8::53".parse().expect("DNS")).expect("DNS");
+        dns.add_search("example.test").expect("search");
+        dns.add_option("ndots:2").expect("option");
+        pod_intent.add_member(member.clone()).expect("member");
+        let mut member_intent = ContainerIntent::new(member, image.clone()).expect("container");
+        member_intent.set_pod(pod.clone()).expect("pod");
+        let mut selected_target = target(version, version);
+        selected_target.set_execution_context(TargetExecutionContext::Rootful);
+        let mut intent = DeploymentIntent::new(selected_target);
+        intent.add_resource(DeploymentResource::Network(
+            NetworkIntent::new(network).expect("network"),
+        ));
+        intent.add_resource(DeploymentResource::Image(
+            ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Pod(pod_intent));
+        intent.add_resource(DeploymentResource::Container(member_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let rendering = render_deployment(&plan).rendering().cloned().expect("exact rendering");
+        let pod = rendering
+            .operations()
+            .iter()
+            .find(|operation| operation.cli().argv().windows(2).any(|args| args == ["pod", "create"]))
+            .expect("pod create");
+        assert!(pod.cli().argv().windows(2).any(|args| {
+            args == [
+                "--network",
+                "network:alias=application,ip=192.0.2.50,ip6=2001:db8::50,mac=02:42:ac:11:00:02",
+            ]
+        }));
+        for args in [
+            ["--publish", "[2001:db8::10]:8443:443/sctp"],
+            ["--dns", "2001:db8::53"],
+            ["--dns-search", "example.test"],
+            ["--dns-option", "ndots:2"],
+            ["--add-host", "database.test:2001:db8::53"],
+        ] {
+            assert!(pod.cli().argv().windows(2).any(|observed| observed == args));
+        }
+        assert!(
+            matches!(pod.libpod().body(), RenderedHttpBody::Json(body) if body["Networks"] == serde_json::json!({"network": {"aliases": ["application"], "static_ips": ["192.0.2.50", "2001:db8::50"], "static_mac": "02:42:ac:11:00:02"}}) && body["portmappings"] == serde_json::json!([{"host_ip": "2001:db8::10", "host_port": 8443, "container_port": 443, "range": 1, "protocol": "sctp"}]) && body["dns_server"] == serde_json::json!(["2001:db8::53"]) && body["dns_search"] == serde_json::json!(["example.test"]) && body["dns_option"] == serde_json::json!(["ndots:2"]) && body["hostadd"] == serde_json::json!(["database.test:2001:db8::53"]))
+        );
+    }
+}
+
+#[test]
+fn every_non_unicast_route_type_is_exact_from_podman_six() {
+    for version in ["6.0.0", "6.1.0"] {
+        for (route_type, spelling) in [
+            (RouteType::Blackhole, "blackhole"),
+            (RouteType::Unreachable, "unreachable"),
+            (RouteType::Prohibit, "prohibit"),
+        ] {
+            let network = id(ResourceKind::Network, "network");
+            let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
+            network_intent
+                .add_route(
+                    NetworkRoute::new(
+                        NetworkCidr::new("198.51.100.0/24").expect("destination"),
+                        None,
+                        route_type,
+                    )
+                    .expect("route"),
+                )
+                .expect("route");
+            let mut intent = DeploymentIntent::new(target(version, version));
+            intent.add_resource(DeploymentResource::Network(network_intent));
+            let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+            let rendering = render_deployment(&plan).rendering().cloned().expect("exact rendering");
+            let network = rendering.operations().first().expect("network create");
+            assert!(
+                network
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|args| args == ["--route", &format!("198.51.100.0/24,{spelling}")])
+            );
+            assert!(
+                matches!(network.libpod().body(), RenderedHttpBody::Json(body) if body["routes"][0]["route_type"] == spelling)
+            );
+        }
     }
 }
 
 #[test]
 fn networking_target_boundaries_block_inexact_rendering() {
-    let network = id(ResourceKind::Network, "network");
-    let image = id(ResourceKind::Image, "registry.example.invalid/image:1");
-    let container = id(ResourceKind::Container, "container");
-    let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
-    network_intent
-        .add_route(
-            NetworkRoute::new(
-                NetworkCidr::new("198.51.100.0/24").expect("destination"),
-                None,
-                RouteType::Unreachable,
+    for version in ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6"] {
+        let network = id(ResourceKind::Network, "network");
+        let image = id(ResourceKind::Image, "registry.example.invalid/image:1");
+        let container = id(ResourceKind::Container, "container");
+        let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
+        network_intent
+            .add_route(
+                NetworkRoute::new(
+                    NetworkCidr::new("198.51.100.0/24").expect("destination"),
+                    None,
+                    RouteType::Unreachable,
+                )
+                .expect("route"),
             )
-            .expect("route"),
-        )
-        .expect("route");
-    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
-    container_intent
-        .add_network(NetworkAttachment::new(network.clone()).expect("attachment"))
-        .expect("network");
-    container_intent
-        .set_network_order(vec![network.clone()])
-        .expect("order");
-    let mut intent = DeploymentIntent::new(target("5.8.6", "5.8.6"));
-    intent.add_resource(DeploymentResource::Network(network_intent));
-    intent.add_resource(DeploymentResource::Image(
-        ImageIntent::new(image, "registry.example.invalid/team/image:1").expect("image"),
-    ));
-    intent.add_resource(DeploymentResource::Container(container_intent));
-    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
-    let outcome = render_deployment(&plan);
-    assert!(!outcome.is_success());
-    assert_eq!(
-        outcome
-            .findings()
-            .iter()
-            .filter_map(podman_lens::RenderingFinding::field)
-            .collect::<Vec<_>>(),
-        ["network_order", "routes"]
-    );
+            .expect("route");
+        let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+        container_intent
+            .add_network(NetworkAttachment::new(network.clone()).expect("attachment"))
+            .expect("network");
+        container_intent
+            .set_network_order(vec![network.clone()])
+            .expect("order");
+        let mut intent = DeploymentIntent::new(target(version, version));
+        intent.add_resource(DeploymentResource::Network(network_intent));
+        intent.add_resource(DeploymentResource::Image(
+            ImageIntent::new(image, "registry.example.invalid/team/image:1").expect("image"),
+        ));
+        intent.add_resource(DeploymentResource::Container(container_intent));
+        let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+        let outcome = render_deployment(&plan);
+        assert!(!outcome.is_success());
+        assert_eq!(
+            outcome
+                .findings()
+                .iter()
+                .filter_map(podman_lens::RenderingFinding::field)
+                .collect::<Vec<_>>(),
+            ["network_order", "routes.route_type"]
+        );
+    }
 }
 
 #[test]
@@ -1132,7 +1526,7 @@ fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result
 fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Result<(), Box<dyn std::error::Error>> {
     let evidence: serde_json::Value =
         serde_json::from_str(include_str!("../catalogue/v1/podman-deployment-rendering.json"))?;
-    assert_eq!(evidence["schema_version"], 4);
+    assert_eq!(evidence["schema_version"], 5);
     let lines = evidence["reviewed_lines"].as_array().expect("lines");
     assert_eq!(lines.len(), 7);
     assert_eq!(
@@ -1152,7 +1546,7 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
         let operations = line["operations"].as_array().expect("operations");
         let fields = line["field_evidence"].as_array().expect("field evidence");
         assert_eq!(operations.len(), 8);
-        assert_eq!(fields.len(), 10);
+        assert_eq!(fields.len(), 41);
         for operation in operations {
             for source in ["cli_source", "libpod_endpoint_source"] {
                 assert_eq!(operation[source]["repository"], "containers-podman");
@@ -1167,20 +1561,22 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
             }
         }
         for field in fields {
+            assert!(matches!(field["availability"].as_str(), Some("exact" | "unsupported")));
             for source in ["cli_source", "handler_source"] {
                 assert_eq!(field[source]["repository"], "containers-podman");
                 assert_eq!(field[source]["revision"], revision);
                 assert!(field[source]["module"].is_null());
             }
-            assert!(
-                field["model_sources"]
-                    .as_array()
-                    .is_some_and(
-                        |sources| sources.iter().all(|source| source["repository"] == "containers-podman"
-                            && source["revision"] == revision
-                            && source["module"].is_null())
-                    )
-            );
+            assert!(field["model_sources"].as_array().is_some_and(|sources| {
+                sources.iter().all(|source| {
+                    (source["repository"] == "containers-podman"
+                        && source["revision"] == revision
+                        && source["module"].is_null())
+                        || (source["repository"] == line["common_module"]["repository"]
+                            && source["revision"] == line["common_module"]["revision"]
+                            && source["module"] == line["common_module"])
+                })
+            }));
         }
     }
     Ok(())

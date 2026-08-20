@@ -143,16 +143,21 @@ remain external; only a redacted external material reference is available to M6.
       field with `PLN0046`.
 - [x] M6-B1b: Render command, entrypoint, user, workdir, unpodded hostname, explicitly public
       labels and environment values, restart policy, and named-volume mounts exactly to CLI and
-      Libpod forms for every reviewed release. Require the v4 per-field source matrix before
-      rendering, reject ambiguous mount CLI spellings, and keep sensitive environment variants
+      Libpod forms for every reviewed release. Require its per-field source matrix before rendering;
+      the current v5 catalogue retains this evidence and adds M6-B2 availability plus
+      cross-repository common-module claims. Reject ambiguous mount CLI spellings and keep
+      sensitive environment variants
       redacted as all-or-nothing `PLN0046` outcomes.
-- [ ] M6-B2: Add typed network attachments, static addresses and MAC addresses, port mappings,
+- [x] M6-B2: Add typed network attachments, static addresses and MAC addresses, port mappings,
       DNS, host aliases, IPAM subnets, routes with metrics, and explicit rootful/rootless target
       semantics. Keep pod-owned networking on the infra container and reject member-owned network
-      namespace configuration before rendering. Exact CLI and Libpod rendering remains fail-closed
-      until every release records Podman plus the pinned common/container-libs source-repository
-      evidence. Static IPv4, IPv6, and MAC declarations already require an explicit rootful planner
-      target; rootless and unknown targets reject them with field-level findings.
+      namespace configuration before rendering. Exact CLI and Libpod rendering is recorded for
+      every reviewed release with Podman plus pinned common/container-libs source-repository
+      evidence. Container network order and non-unicast route types are exact only in Podman 6.0+
+      and otherwise produce field-level `PLN0046`; static IPv4, IPv6, and MAC declarations require
+      an explicit rootful planner target. Multi-IP attachment forms, port ranges, interface names,
+      arbitrary network drivers/options, and unmanaged namespace modes remain explicitly outside
+      this bounded model for the later native-field coverage ledger.
 - [ ] Generate exact CLI program and argument arrays.
 - [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
 - [ ] Prove CLI and API equivalence for every dual-representation operation.

@@ -149,8 +149,12 @@ cannot declare any of those fields. Network attachments retain aliases and expli
 static IPv4, IPv6, and MAC addresses. Managed networks retain bounded IPAM subnets and static
 routes. Pod network order is not representable and is rejected. Static addresses require an
 explicitly rootful target during planning; unknown and rootless contexts produce field-level
-findings. Exact rendering of populated M6-B2 networking fields remains fail-closed while the
-per-release Podman and `containers/common` source matrix is added.
+findings. Exact rendering of the bounded M6-B2 networking fields is backed by the per-release
+Podman and `containers/common`/container-libs source matrix. Container network order and
+non-unicast route types are gated to Podman 6.0+; a lower reviewed target receives a field-level
+finding and no partial rendering. Multi-IP attachment forms, port ranges, interface names,
+arbitrary network drivers/options, and unmanaged namespace modes remain deliberately unmodelled
+for the coverage ledger rather than being silently reduced.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.

@@ -187,6 +187,56 @@ fn consume_typed_observation(source: &ResourceObservation) {
                 logging.size().observed().map(podman_lens::ObservedValue::value),
             )
         });
+        let _ = container.security().observed().map(|security| {
+            let security = security.value();
+            (
+                security.privileged().observed().map(podman_lens::ObservedValue::value),
+                security
+                    .cap_add()
+                    .observed()
+                    .map(|capabilities| capabilities.value().iter().map(podman_lens::NativeCapability::as_str)),
+                security
+                    .cap_drop()
+                    .observed()
+                    .map(|capabilities| capabilities.value().iter().map(podman_lens::NativeCapability::as_str)),
+                security
+                    .security_options()
+                    .observed()
+                    .map(|options| options.value().len()),
+                security
+                    .read_only_root_filesystem()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+            )
+        });
+        let _ = container.namespaces().observed().map(|namespaces| {
+            let namespaces = namespaces.value();
+            (
+                namespaces.pid().observed().map(podman_lens::ObservedValue::value),
+                namespaces.ipc().observed().map(podman_lens::ObservedValue::value),
+                namespaces.uts().observed().map(podman_lens::ObservedValue::value),
+                namespaces.cgroup().observed().map(podman_lens::ObservedValue::value),
+            )
+        });
+        let _ = container.resource_controls().observed().map(|resources| {
+            let resources = resources.value();
+            (
+                resources.cpu_shares().observed().map(podman_lens::ObservedValue::value),
+                resources.cpu_period().observed().map(podman_lens::ObservedValue::value),
+                resources.cpu_quota().observed().map(podman_lens::ObservedValue::value),
+                resources.memory().observed().map(podman_lens::ObservedValue::value),
+                resources.pids_limit().observed().map(podman_lens::ObservedValue::value),
+                resources.ulimits().observed().map(|ulimits| {
+                    ulimits.value().iter().map(|ulimit| {
+                        (
+                            ulimit.name().observed().map(podman_lens::ObservedValue::value),
+                            ulimit.soft().observed().map(podman_lens::ObservedValue::value),
+                            ulimit.hard().observed().map(podman_lens::ObservedValue::value),
+                        )
+                    })
+                }),
+            )
+        });
     }
     if let ResourceDetails::Pod(pod) = source.details() {
         let _ = pod.create_infra().observed().map(podman_lens::ObservedValue::value);
@@ -309,6 +359,23 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
         entry.id() == "PLN-FLD-0038"
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
+    }));
+    assert_eq!(entries.len(), 176);
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0112"
+            && entry.plane() == NativeFieldCoveragePlane::InputObservation
+            && entry.field_path() == "$.HostConfig.CapAdd"
+            && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+            && entry.public_contract() == "NativeSecurityObservation::cap_add"
+            && entry.finding() == "PLN0023"
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0128"
+            && entry.plane() == NativeFieldCoveragePlane::InputObservation
+            && entry.field_path() == "$.HostConfig.Ulimits[].Hard"
+            && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+            && entry.public_contract() == "NativeUlimitObservation::hard"
+            && entry.finding() == "PLN0017"
     }));
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-OUT-0015"

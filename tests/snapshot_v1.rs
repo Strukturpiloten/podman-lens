@@ -254,6 +254,28 @@ fn draft_2020_12_schema_accepts_golden_snapshots_and_rejects_shape_violations() 
     absent_with_volume_wire_value["sections"][3]["observations"][0]["details"]["volume_uid"]["state"] = json!("absent");
     absent_with_volume_wire_value["sections"][3]["observations"][0]["details"]["volume_uid"]["origin"] = json!(null);
     assert!(!validator.is_valid(&absent_with_volume_wire_value));
+
+    let mut missing_resource_controls = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    missing_resource_controls["sections"][0]["observations"][0]["details"]
+        .as_object_mut()
+        .ok_or("container details must be an object")?
+        .remove("resource_controls");
+    assert!(!validator.is_valid(&missing_resource_controls));
+
+    let mut security_option_values = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    security_option_values["sections"][0]["observations"][0]["details"]["security"]["security_options"]["values"] =
+        json!(["must-not-exist"]);
+    assert!(!validator.is_valid(&security_option_values));
+
+    let mut security_on_pod = golden_value(include_str!("../fixtures/snapshots/inventory-v1.json"))?;
+    security_on_pod["sections"][1]["observations"][0]["details"]["security"] = json!({
+        "privileged":{"state":"absent","origin":null},
+        "cap_add":{"state":"absent","origin":null,"count":0},
+        "cap_drop":{"state":"absent","origin":null,"count":0},
+        "security_options":{"state":"absent","origin":null,"count":0},
+        "read_only_root_filesystem":{"state":"absent","origin":null}
+    });
+    assert!(!validator.is_valid(&security_on_pod));
     Ok(())
 }
 

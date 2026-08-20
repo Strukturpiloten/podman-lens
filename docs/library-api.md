@@ -88,6 +88,16 @@ display, or snapshots. Only `["NONE"]` disables health. `Retries`, startup `Succ
 Snapshots expose field state/origin and command argument count, never command, log-size, or other
 configuration spelling.
 
+M7-B3b adds `security`, `namespaces`, and `resource_controls` accessors to
+`ContainerObservation`. Their input-only native types remain separate from
+`ContainerRuntimeSettings`. Capabilities preserve order and duplicates. `SecurityOpt` exposes
+only a count, namespace modes expose only the bounded private/host subset plus IPC
+shareable/none, and future syntactically valid modes remain unmodelled.
+Empty PID, IPC, and UTS mode spellings are the reviewed private defaults; an empty cgroup mode is
+malformed.
+Resource observations preserve native signed sentinels and ulimit order without enforcing deployment constraints.
+Snapshots contain only states, origins, and collection counts.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

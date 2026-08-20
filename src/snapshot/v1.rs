@@ -246,6 +246,9 @@ struct ResourceDetailsSnapshot {
     health_failure_action: Option<FieldStateSnapshot>,
     startup_health_check: Option<NativeStartupHealthCheckSnapshot>,
     logging: Option<NativeLoggingSnapshot>,
+    security: Option<NativeSecuritySnapshot>,
+    namespaces: Option<NativeNamespaceSnapshot>,
+    resource_controls: Option<NativeResourceControlSnapshot>,
     create_infra: Option<FieldStateSnapshot>,
     secret_driver: Option<FieldStateSnapshot>,
     volume_uid: Option<VolumeOwnerFieldSnapshot>,
@@ -327,6 +330,36 @@ struct NativeStartupHealthCheckSnapshot {
 struct NativeLoggingSnapshot {
     driver: FieldStateSnapshot,
     size: FieldStateSnapshot,
+}
+
+/// Redacted state/count-only native security snapshot. Security-option values are never serialized.
+#[derive(Debug, Serialize)]
+struct NativeSecuritySnapshot {
+    privileged: FieldStateSnapshot,
+    cap_add: FieldCountSnapshot,
+    cap_drop: FieldCountSnapshot,
+    security_options: FieldCountSnapshot,
+    read_only_root_filesystem: FieldStateSnapshot,
+}
+
+/// Redacted state-only native namespace snapshot.
+#[derive(Debug, Serialize)]
+struct NativeNamespaceSnapshot {
+    pid: FieldStateSnapshot,
+    ipc: FieldStateSnapshot,
+    uts: FieldStateSnapshot,
+    cgroup: FieldStateSnapshot,
+}
+
+/// Redacted state/count-only native resource-control snapshot.
+#[derive(Debug, Serialize)]
+struct NativeResourceControlSnapshot {
+    cpu_shares: FieldStateSnapshot,
+    cpu_period: FieldStateSnapshot,
+    cpu_quota: FieldStateSnapshot,
+    memory: FieldStateSnapshot,
+    pids_limit: FieldStateSnapshot,
+    ulimits: FieldCountSnapshot,
 }
 
 /// Redacted state/count-only native networking snapshot. It deliberately omits every address,
@@ -503,6 +536,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: Some(field_summary(value.health_failure_action())),
             startup_health_check: Some(native_startup_health_check(value.startup_health_check())),
             logging: Some(native_logging(value.logging())),
+            security: Some(native_security(value.security())),
+            namespaces: Some(native_namespaces(value.namespaces())),
+            resource_controls: Some(native_resource_controls(value.resource_controls())),
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -534,6 +570,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: None,
             startup_health_check: None,
             logging: None,
+            security: None,
+            namespaces: None,
+            resource_controls: None,
             create_infra: Some(field_summary(value.create_infra())),
             secret_driver: None,
             volume_uid: None,
@@ -570,6 +609,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: None,
             startup_health_check: None,
             logging: None,
+            security: None,
+            namespaces: None,
+            resource_controls: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -601,6 +643,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: None,
             startup_health_check: None,
             logging: None,
+            security: None,
+            namespaces: None,
+            resource_controls: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: Some(volume_owner(value.uid())),
@@ -632,6 +677,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: None,
             startup_health_check: None,
             logging: None,
+            security: None,
+            namespaces: None,
+            resource_controls: None,
             create_infra: None,
             secret_driver: None,
             volume_uid: None,
@@ -663,6 +711,9 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             health_failure_action: None,
             startup_health_check: None,
             logging: None,
+            security: None,
+            namespaces: None,
+            resource_controls: None,
             create_infra: None,
             secret_driver: Some(field_summary(value.driver())),
             volume_uid: None,
@@ -755,6 +806,68 @@ fn native_logging(value: &ObservationField<crate::NativeLoggingObservation>) -> 
     NativeLoggingSnapshot {
         driver: field_summary(value.driver()),
         size: field_summary(value.size()),
+    }
+}
+
+fn native_security(value: &ObservationField<crate::NativeSecurityObservation>) -> NativeSecuritySnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeSecuritySnapshot {
+            privileged: state.clone(),
+            cap_add: empty_collection_summary(&state),
+            cap_drop: empty_collection_summary(&state),
+            security_options: empty_collection_summary(&state),
+            read_only_root_filesystem: state,
+        };
+    };
+    NativeSecuritySnapshot {
+        privileged: field_summary(value.privileged()),
+        cap_add: collection_summary(value.cap_add(), Vec::len),
+        cap_drop: collection_summary(value.cap_drop(), Vec::len),
+        security_options: collection_summary(value.security_options(), crate::NativeOpaqueSecurityOptions::len),
+        read_only_root_filesystem: field_summary(value.read_only_root_filesystem()),
+    }
+}
+
+fn native_namespaces(value: &ObservationField<crate::NativeNamespaceObservation>) -> NativeNamespaceSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeNamespaceSnapshot {
+            pid: state.clone(),
+            ipc: state.clone(),
+            uts: state.clone(),
+            cgroup: state,
+        };
+    };
+    NativeNamespaceSnapshot {
+        pid: field_summary(value.pid()),
+        ipc: field_summary(value.ipc()),
+        uts: field_summary(value.uts()),
+        cgroup: field_summary(value.cgroup()),
+    }
+}
+
+fn native_resource_controls(
+    value: &ObservationField<crate::NativeResourceControlObservation>,
+) -> NativeResourceControlSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeResourceControlSnapshot {
+            cpu_shares: state.clone(),
+            cpu_period: state.clone(),
+            cpu_quota: state.clone(),
+            memory: state.clone(),
+            pids_limit: state.clone(),
+            ulimits: empty_collection_summary(&state),
+        };
+    };
+    NativeResourceControlSnapshot {
+        cpu_shares: field_summary(value.cpu_shares()),
+        cpu_period: field_summary(value.cpu_period()),
+        cpu_quota: field_summary(value.cpu_quota()),
+        memory: field_summary(value.memory()),
+        pids_limit: field_summary(value.pids_limit()),
+        ulimits: collection_summary(value.ulimits(), Vec::len),
     }
 }
 

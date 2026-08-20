@@ -1099,6 +1099,278 @@ impl NativeLoggingObservation {
     }
 }
 
+/// One reviewed Linux capability spelling from native container inspection.
+///
+/// This input-only type is deliberately separate from the deployment capability type.
+/// Native order and duplicates are evidence and therefore remain intact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeCapability(String);
+
+impl NativeCapability {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the exact reviewed native capability spelling.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Opaque native security options. Values are deliberately never retained or exposed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeOpaqueSecurityOptions {
+    count: usize,
+}
+
+impl NativeOpaqueSecurityOptions {
+    pub(crate) const fn new(count: usize) -> Self {
+        Self { count }
+    }
+
+    /// Returns the number of opaque security options.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.count
+    }
+
+    /// Returns whether no opaque security options were observed.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
+/// Effective native security evidence from `HostConfig`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeSecurityObservation {
+    privileged: ObservationField<bool>,
+    cap_add: ObservationField<Vec<NativeCapability>>,
+    cap_drop: ObservationField<Vec<NativeCapability>>,
+    security_options: ObservationField<NativeOpaqueSecurityOptions>,
+    read_only_root_filesystem: ObservationField<bool>,
+}
+
+impl NativeSecurityObservation {
+    pub(crate) const fn new(
+        privileged: ObservationField<bool>,
+        cap_add: ObservationField<Vec<NativeCapability>>,
+        cap_drop: ObservationField<Vec<NativeCapability>>,
+        security_options: ObservationField<NativeOpaqueSecurityOptions>,
+        read_only_root_filesystem: ObservationField<bool>,
+    ) -> Self {
+        Self {
+            privileged,
+            cap_add,
+            cap_drop,
+            security_options,
+            read_only_root_filesystem,
+        }
+    }
+
+    /// Returns effective privileged state.
+    #[must_use]
+    pub fn privileged(&self) -> &ObservationField<bool> {
+        &self.privileged
+    }
+
+    /// Returns added capabilities in native order, including duplicates.
+    #[must_use]
+    pub fn cap_add(&self) -> &ObservationField<Vec<NativeCapability>> {
+        &self.cap_add
+    }
+
+    /// Returns dropped capabilities in native order, including duplicates.
+    #[must_use]
+    pub fn cap_drop(&self) -> &ObservationField<Vec<NativeCapability>> {
+        &self.cap_drop
+    }
+
+    /// Returns only the count and state of opaque security options.
+    #[must_use]
+    pub fn security_options(&self) -> &ObservationField<NativeOpaqueSecurityOptions> {
+        &self.security_options
+    }
+
+    /// Returns effective read-only-root-filesystem state.
+    #[must_use]
+    pub fn read_only_root_filesystem(&self) -> &ObservationField<bool> {
+        &self.read_only_root_filesystem
+    }
+}
+
+/// A bounded native private or host namespace mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeNamespaceMode {
+    /// A private namespace.
+    Private,
+    /// The host namespace.
+    Host,
+}
+
+/// A bounded native IPC namespace mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeIpcNamespaceMode {
+    /// A private IPC namespace.
+    Private,
+    /// The host IPC namespace.
+    Host,
+    /// A shareable private IPC namespace.
+    Shareable,
+    /// No IPC namespace.
+    None,
+}
+
+/// Effective native namespace evidence from `HostConfig`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNamespaceObservation {
+    pid: ObservationField<NativeNamespaceMode>,
+    ipc: ObservationField<NativeIpcNamespaceMode>,
+    uts: ObservationField<NativeNamespaceMode>,
+    cgroup: ObservationField<NativeNamespaceMode>,
+}
+
+impl NativeNamespaceObservation {
+    pub(crate) const fn new(
+        pid: ObservationField<NativeNamespaceMode>,
+        ipc: ObservationField<NativeIpcNamespaceMode>,
+        uts: ObservationField<NativeNamespaceMode>,
+        cgroup: ObservationField<NativeNamespaceMode>,
+    ) -> Self {
+        Self { pid, ipc, uts, cgroup }
+    }
+
+    /// Returns effective PID namespace evidence.
+    #[must_use]
+    pub fn pid(&self) -> &ObservationField<NativeNamespaceMode> {
+        &self.pid
+    }
+
+    /// Returns effective IPC namespace evidence.
+    #[must_use]
+    pub fn ipc(&self) -> &ObservationField<NativeIpcNamespaceMode> {
+        &self.ipc
+    }
+
+    /// Returns effective UTS namespace evidence.
+    #[must_use]
+    pub fn uts(&self) -> &ObservationField<NativeNamespaceMode> {
+        &self.uts
+    }
+
+    /// Returns effective cgroup namespace evidence.
+    #[must_use]
+    pub fn cgroup(&self) -> &ObservationField<NativeNamespaceMode> {
+        &self.cgroup
+    }
+}
+
+/// One native ulimit observation. Values are retained exactly without output-intent validation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeUlimitObservation {
+    name: ObservationField<String>,
+    soft: ObservationField<i64>,
+    hard: ObservationField<i64>,
+}
+
+impl NativeUlimitObservation {
+    pub(crate) const fn new(
+        name: ObservationField<String>,
+        soft: ObservationField<i64>,
+        hard: ObservationField<i64>,
+    ) -> Self {
+        Self { name, soft, hard }
+    }
+
+    /// Returns the exact native limit name.
+    #[must_use]
+    pub fn name(&self) -> &ObservationField<String> {
+        &self.name
+    }
+
+    /// Returns the native soft limit, including zero and -1.
+    #[must_use]
+    pub fn soft(&self) -> &ObservationField<i64> {
+        &self.soft
+    }
+
+    /// Returns the native hard limit, including zero and -1.
+    #[must_use]
+    pub fn hard(&self) -> &ObservationField<i64> {
+        &self.hard
+    }
+}
+
+/// Effective native CPU, memory, PID, and ulimit evidence from `HostConfig`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeResourceControlObservation {
+    cpu_shares: ObservationField<u64>,
+    cpu_period: ObservationField<u64>,
+    cpu_quota: ObservationField<i64>,
+    memory: ObservationField<i64>,
+    pids_limit: ObservationField<i64>,
+    ulimits: ObservationField<Vec<NativeUlimitObservation>>,
+}
+
+impl NativeResourceControlObservation {
+    pub(crate) const fn new(
+        cpu_shares: ObservationField<u64>,
+        cpu_period: ObservationField<u64>,
+        cpu_quota: ObservationField<i64>,
+        memory: ObservationField<i64>,
+        pids_limit: ObservationField<i64>,
+        ulimits: ObservationField<Vec<NativeUlimitObservation>>,
+    ) -> Self {
+        Self {
+            cpu_shares,
+            cpu_period,
+            cpu_quota,
+            memory,
+            pids_limit,
+            ulimits,
+        }
+    }
+
+    /// Returns native CPU shares, preserving zero.
+    #[must_use]
+    pub fn cpu_shares(&self) -> &ObservationField<u64> {
+        &self.cpu_shares
+    }
+
+    /// Returns native CPU period, preserving zero.
+    #[must_use]
+    pub fn cpu_period(&self) -> &ObservationField<u64> {
+        &self.cpu_period
+    }
+
+    /// Returns native CPU quota, preserving zero and negative native sentinels.
+    #[must_use]
+    pub fn cpu_quota(&self) -> &ObservationField<i64> {
+        &self.cpu_quota
+    }
+
+    /// Returns native memory bytes, preserving zero and negative native sentinels.
+    #[must_use]
+    pub fn memory(&self) -> &ObservationField<i64> {
+        &self.memory
+    }
+
+    /// Returns native PID limit, preserving zero and -1.
+    #[must_use]
+    pub fn pids_limit(&self) -> &ObservationField<i64> {
+        &self.pids_limit
+    }
+
+    /// Returns native ulimits in source order.
+    #[must_use]
+    pub fn ulimits(&self) -> &ObservationField<Vec<NativeUlimitObservation>> {
+        &self.ulimits
+    }
+}
+
 /// Container-specific native observations.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ContainerObservation {
@@ -1123,6 +1395,9 @@ pub struct ContainerObservation {
     health_failure_action: ObservationField<NativeHealthFailureAction>,
     startup_health_check: ObservationField<NativeStartupHealthCheckObservation>,
     logging: ObservationField<NativeLoggingObservation>,
+    security: ObservationField<NativeSecurityObservation>,
+    namespaces: ObservationField<NativeNamespaceObservation>,
+    resource_controls: ObservationField<NativeResourceControlObservation>,
     networking: ObservationField<NativeNetworkingObservation>,
 }
 
@@ -1162,6 +1437,9 @@ observation_debug!(
     health_failure_action,
     startup_health_check,
     logging,
+    security,
+    namespaces,
+    resource_controls,
 );
 
 impl ContainerObservation {
@@ -1188,6 +1466,9 @@ impl ContainerObservation {
         health_failure_action: ObservationField<NativeHealthFailureAction>,
         startup_health_check: ObservationField<NativeStartupHealthCheckObservation>,
         logging: ObservationField<NativeLoggingObservation>,
+        security: ObservationField<NativeSecurityObservation>,
+        namespaces: ObservationField<NativeNamespaceObservation>,
+        resource_controls: ObservationField<NativeResourceControlObservation>,
         networking: ObservationField<NativeNetworkingObservation>,
     ) -> Self {
         Self {
@@ -1212,6 +1493,9 @@ impl ContainerObservation {
             health_failure_action,
             startup_health_check,
             logging,
+            security,
+            namespaces,
+            resource_controls,
             networking,
         }
     }
@@ -1320,6 +1604,21 @@ impl ContainerObservation {
     #[must_use]
     pub fn logging(&self) -> &ObservationField<NativeLoggingObservation> {
         &self.logging
+    }
+    /// Returns effective security evidence or its observation state.
+    #[must_use]
+    pub fn security(&self) -> &ObservationField<NativeSecurityObservation> {
+        &self.security
+    }
+    /// Returns effective namespace evidence for any inspected container, including pod members.
+    #[must_use]
+    pub fn namespaces(&self) -> &ObservationField<NativeNamespaceObservation> {
+        &self.namespaces
+    }
+    /// Returns effective resource-control evidence or its observation state.
+    #[must_use]
+    pub fn resource_controls(&self) -> &ObservationField<NativeResourceControlObservation> {
+        &self.resource_controls
     }
     /// Returns the infra-container marker or its observation state.
     #[must_use]
@@ -2095,6 +2394,9 @@ fn incomplete_field<T>(state: ResourceObservationState) -> ObservationField<T> {
 fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> ResourceDetails {
     match kind {
         ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),

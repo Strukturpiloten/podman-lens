@@ -226,8 +226,14 @@ without silent loss; all other native output remains explicitly outside that con
       deployment intent: inspect may include image health defaults and normalized host settings.
       Health command arguments remain protected callback-only evidence, and snapshots retain only
       their count. Unknown enum spellings remain bounded `PLN0023` metadata; malformed command
-      forms and negative native count values fail closed with `PLN0017`. Security, namespaces, and
-      resource controls remain separate later B3 increments.
+      forms and negative native count values fail closed with `PLN0017`. Security, namespace, and
+      resource-control observations follow in M7-B3b.
+- [x] M7-B3b: Add observation-only container security, namespace, and resource controls with
+      effective provenance. Capability order and duplicates remain native evidence; unknown
+      semantics stay bounded `PLN0023` metadata. Security-option values are never retained.
+      Namespace observations remain visible on pod members. CPU, memory, PID, and ulimit values
+      preserve native zero/`-1` and order without output validation; malformed ulimit members fail
+      the complete collection closed. This batch adds no output mapping.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.
 - [ ] Stabilize the APIs required by BoxFerry while leaving unimplemented native fields explicit.

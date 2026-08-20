@@ -283,6 +283,76 @@
                 "origin": null
               }
             },
+            "security": {
+              "privileged": {
+                "state": "absent",
+                "origin": null
+              },
+              "cap_add": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "cap_drop": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "security_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "read_only_root_filesystem": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "namespaces": {
+              "pid": {
+                "state": "absent",
+                "origin": null
+              },
+              "ipc": {
+                "state": "absent",
+                "origin": null
+              },
+              "uts": {
+                "state": "absent",
+                "origin": null
+              },
+              "cgroup": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "resource_controls": {
+              "cpu_shares": {
+                "state": "absent",
+                "origin": null
+              },
+              "cpu_period": {
+                "state": "absent",
+                "origin": null
+              },
+              "cpu_quota": {
+                "state": "absent",
+                "origin": null
+              },
+              "memory": {
+                "state": "absent",
+                "origin": null
+              },
+              "pids_limit": {
+                "state": "absent",
+                "origin": null
+              },
+              "ulimits": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              }
+            },
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -524,6 +594,76 @@
                 "origin": null
               }
             },
+            "security": {
+              "privileged": {
+                "state": "absent",
+                "origin": null
+              },
+              "cap_add": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "cap_drop": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "security_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "read_only_root_filesystem": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "namespaces": {
+              "pid": {
+                "state": "absent",
+                "origin": null
+              },
+              "ipc": {
+                "state": "absent",
+                "origin": null
+              },
+              "uts": {
+                "state": "absent",
+                "origin": null
+              },
+              "cgroup": {
+                "state": "absent",
+                "origin": null
+              }
+            },
+            "resource_controls": {
+              "cpu_shares": {
+                "state": "absent",
+                "origin": null
+              },
+              "cpu_period": {
+                "state": "absent",
+                "origin": null
+              },
+              "cpu_quota": {
+                "state": "absent",
+                "origin": null
+              },
+              "memory": {
+                "state": "absent",
+                "origin": null
+              },
+              "pids_limit": {
+                "state": "absent",
+                "origin": null
+              },
+              "ulimits": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              }
+            },
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -722,6 +862,9 @@
             "health_failure_action": null,
             "startup_health_check": null,
             "logging": null,
+            "security": null,
+            "namespaces": null,
+            "resource_controls": null,
             "create_infra": {
               "state": "absent",
               "origin": null
@@ -813,6 +956,9 @@
             "health_failure_action": null,
             "startup_health_check": null,
             "logging": null,
+            "security": null,
+            "namespaces": null,
+            "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -902,6 +1048,9 @@
             "health_failure_action": null,
             "startup_health_check": null,
             "logging": null,
+            "security": null,
+            "namespaces": null,
+            "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": {
@@ -991,6 +1140,9 @@
             "health_failure_action": null,
             "startup_health_check": null,
             "logging": null,
+            "security": null,
+            "namespaces": null,
+            "resource_controls": null,
             "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
@@ -1070,6 +1222,9 @@
             "health_failure_action": null,
             "startup_health_check": null,
             "logging": null,
+            "security": null,
+            "namespaces": null,
+            "resource_controls": null,
             "create_infra": null,
             "secret_driver": {
               "state": "observed",

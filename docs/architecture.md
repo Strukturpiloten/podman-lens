@@ -178,6 +178,14 @@ provenance, and argument count. The sole disabled health form is `Test: ["NONE"]
 and negative unsigned count values fail closed. Future enum spellings remain field-local bounded
 metadata with `PLN0023`, not coerced values or an implied output mapping.
 
+M7-B3b adds distinct effective security, namespace, and resource-control observations for every
+container, including pod members. Native capabilities preserve order, duplicates, and reviewed
+spelling in an input-only type. Unknown capability or syntactically valid namespace semantics stay
+field-local `PLN0023` metadata. `SecurityOpt` is opaque count-only evidence; option values are
+never retained. CPU shares/period remain unsigned, quota/memory/PID limits remain signed, and
+ulimits retain native order plus zero and `-1` without output-intent range validation. One malformed
+ulimit member poisons the complete collection. No field is converted to deployment runtime intent.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

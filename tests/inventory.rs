@@ -2962,6 +2962,447 @@ async fn container_b3_unknown_enums_are_bounded_unmodelled_metadata() -> Result<
     Ok(())
 }
 
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One native inspect assertion keeps order, sentinels, and provenance auditable.
+async fn container_security_namespaces_and_resources_are_typed_effective_observations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+        "Id":"container-a","Name":"a","Pod":"pod-a",
+        "HostConfig":{
+            "Privileged":true,
+            "CapAdd":["CAP_NET_ADMIN","CAP_NET_ADMIN","CAP_NET_RAW"],
+            "CapDrop":["CAP_MKNOD"],
+            "SecurityOpt":["label=DISTINCTIVE_SECURITY_OPTION","no-new-privileges"],
+            "ReadonlyRootfs":false,
+            "PidMode":"private",
+            "IpcMode":"shareable",
+            "UTSMode":"host",
+            "CgroupMode":"private",
+            "CpuShares":0,
+            "CpuPeriod":0,
+            "CpuQuota":-1,
+            "Memory":0,
+            "PidsLimit":-1,
+            "Ulimits":[
+                {"Name":"nofile","Soft":0,"Hard":-1},
+                {"Name":"nproc","Soft":-1,"Hard":-1}
+            ]
+        }
+    }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+
+    let security = container.security().observed().ok_or("security")?;
+    assert_eq!(security.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        security
+            .value()
+            .privileged()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((true, ObservationOrigin::Effective))
+    );
+    let cap_add = security.value().cap_add().observed().ok_or("cap add")?;
+    assert_eq!(cap_add.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        cap_add
+            .value()
+            .iter()
+            .map(podman_lens::NativeCapability::as_str)
+            .collect::<Vec<_>>(),
+        ["CAP_NET_ADMIN", "CAP_NET_ADMIN", "CAP_NET_RAW"]
+    );
+    assert_eq!(
+        security
+            .value()
+            .cap_drop()
+            .observed()
+            .ok_or("cap drop")?
+            .value()
+            .iter()
+            .map(podman_lens::NativeCapability::as_str)
+            .collect::<Vec<_>>(),
+        ["CAP_MKNOD"]
+    );
+    assert_eq!(
+        security
+            .value()
+            .security_options()
+            .observed()
+            .map(|value| (value.value().len(), value.origin())),
+        Some((2, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        security
+            .value()
+            .read_only_root_filesystem()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((false, ObservationOrigin::Effective))
+    );
+
+    let namespaces = container.namespaces().observed().ok_or("namespaces")?;
+    assert_eq!(namespaces.origin(), ObservationOrigin::Effective);
+    assert!(matches!(
+        namespaces.value().pid(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeNamespaceMode::Private
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert!(matches!(
+        namespaces.value().ipc(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeIpcNamespaceMode::Shareable
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert!(matches!(
+        namespaces.value().uts(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeNamespaceMode::Host
+                && value.origin() == ObservationOrigin::Effective
+    ));
+    assert!(matches!(
+        namespaces.value().cgroup(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeNamespaceMode::Private
+                && value.origin() == ObservationOrigin::Effective
+    ));
+
+    let resources = container.resource_controls().observed().ok_or("resources")?;
+    assert_eq!(resources.origin(), ObservationOrigin::Effective);
+    assert_eq!(
+        resources
+            .value()
+            .cpu_shares()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((0, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        resources
+            .value()
+            .cpu_period()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((0, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        resources
+            .value()
+            .cpu_quota()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((-1, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        resources
+            .value()
+            .memory()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((0, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        resources
+            .value()
+            .pids_limit()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((-1, ObservationOrigin::Effective))
+    );
+    let ulimits = resources.value().ulimits().observed().ok_or("ulimits")?;
+    assert_eq!(ulimits.origin(), ObservationOrigin::Effective);
+    assert_eq!(ulimits.value().len(), 2);
+    assert_eq!(
+        ulimits.value()[0]
+            .name()
+            .observed()
+            .map(|value| (value.value().as_str(), value.origin())),
+        Some(("nofile", ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        ulimits.value()[0]
+            .soft()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((0, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        ulimits.value()[0]
+            .hard()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((-1, ObservationOrigin::Effective))
+    );
+    assert_eq!(
+        ulimits.value()[1].name().observed().map(|value| value.value().as_str()),
+        Some("nproc")
+    );
+    let debug = format!("{container:?}");
+    let snapshot = serde_json::to_string(&podman_lens::snapshot::v1::inventory(&inventory))?;
+    assert!(!debug.contains("DISTINCTIVE_SECURITY_OPTION"));
+    assert!(!snapshot.contains("DISTINCTIVE_SECURITY_OPTION"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn container_empty_pid_ipc_uts_modes_observe_private_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","HostConfig":{"PidMode":"","IpcMode":"","UTSMode":"","CgroupMode":"private"}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    let namespaces = container.namespaces().observed().ok_or("namespaces")?.value();
+
+    assert!(matches!(
+        namespaces.pid(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeNamespaceMode::Private
+    ));
+    assert!(matches!(
+        namespaces.ipc(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeIpcNamespaceMode::Private
+    ));
+    assert!(matches!(
+        namespaces.uts(),
+        ObservationField::Observed(value)
+            if value.value() == &podman_lens::NativeNamespaceMode::Private
+    ));
+    assert!(namespaces.cgroup().observed().is_some());
+
+    Ok(())
+}
+#[tokio::test]
+async fn container_b3b_unknown_capabilities_and_namespace_modes_are_unmodelled()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","HostConfig":{"CapAdd":["CAP_NET_ADMIN","NET_RAW"],"CapDrop":["CAP_FUTURE_DROP"],"PidMode":"container:future","IpcMode":"container:future","UTSMode":"ns:/future","CgroupMode":"future"}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must remain a container observation".into());
+    };
+    let security = container.security().observed().ok_or("security")?.value();
+    assert!(matches!(
+        security.cap_add(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+    ));
+    assert!(matches!(
+        security.cap_drop(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+    ));
+    let namespaces = container.namespaces().observed().ok_or("namespaces")?.value();
+    for field in [namespaces.pid(), namespaces.uts(), namespaces.cgroup()] {
+        assert!(matches!(
+            field,
+            ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+        ));
+    }
+    assert!(matches!(
+        namespaces.ipc(),
+        ObservationField::Unmodelled(podman_lens::UnmodelledFieldId::ContainerHostConfig)
+    ));
+    for path in [
+        "$.HostConfig.CapAdd[1]",
+        "$.HostConfig.PidMode",
+        "$.HostConfig.CapDrop[0]",
+        "$.HostConfig.IpcMode",
+        "$.HostConfig.UTSMode",
+        "$.HostConfig.CgroupMode",
+    ] {
+        assert!(
+            observation
+                .header()
+                .unmodelled_fields()
+                .iter()
+                .any(|field| field.path() == path)
+        );
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::NativeFieldUnsupported && finding.field_path() == Some(path)
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // The table covers every malformed scalar and ulimit collection boundary.
+async fn container_b3b_malformed_fields_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        ("Privileged", serde_json::json!("true"), "$.HostConfig.Privileged"),
+        ("CapAdd", serde_json::json!(false), "$.HostConfig.CapAdd"),
+        ("CapDrop", serde_json::json!([false]), "$.HostConfig.CapDrop"),
+        ("SecurityOpt", serde_json::json!([false]), "$.HostConfig.SecurityOpt"),
+        (
+            "ReadonlyRootfs",
+            serde_json::json!("false"),
+            "$.HostConfig.ReadonlyRootfs",
+        ),
+        ("PidMode", serde_json::json!(false), "$.HostConfig.PidMode"),
+        ("IpcMode", serde_json::json!(false), "$.HostConfig.IpcMode"),
+        ("UTSMode", serde_json::json!(false), "$.HostConfig.UTSMode"),
+        ("CgroupMode", serde_json::json!(false), "$.HostConfig.CgroupMode"),
+        ("CgroupMode", serde_json::json!(""), "$.HostConfig.CgroupMode"),
+        ("CpuShares", serde_json::json!(-1), "$.HostConfig.CpuShares"),
+        ("CpuPeriod", serde_json::json!(-1), "$.HostConfig.CpuPeriod"),
+        ("CpuQuota", serde_json::json!(false), "$.HostConfig.CpuQuota"),
+        ("Memory", serde_json::json!(false), "$.HostConfig.Memory"),
+        ("PidsLimit", serde_json::json!(false), "$.HostConfig.PidsLimit"),
+        ("Ulimits", serde_json::json!(false), "$.HostConfig.Ulimits"),
+    ];
+    for (field, value, path) in cases {
+        let mut body = serde_json::json!({"Id":"container-a", "Name":"a", "HostConfig":{}});
+        body["HostConfig"][field] = value;
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(serde_json::to_vec(&body)?)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("fixture must remain a container observation".into());
+        };
+        let malformed = match field {
+            "Privileged" => container
+                .security()
+                .observed()
+                .is_some_and(|value| value.value().privileged().is_malformed()),
+            "CapAdd" => container
+                .security()
+                .observed()
+                .is_some_and(|value| value.value().cap_add().is_malformed()),
+            "CapDrop" => container
+                .security()
+                .observed()
+                .is_some_and(|value| value.value().cap_drop().is_malformed()),
+            "SecurityOpt" => container
+                .security()
+                .observed()
+                .is_some_and(|value| value.value().security_options().is_malformed()),
+            "ReadonlyRootfs" => container
+                .security()
+                .observed()
+                .is_some_and(|value| value.value().read_only_root_filesystem().is_malformed()),
+            "PidMode" => container
+                .namespaces()
+                .observed()
+                .is_some_and(|value| value.value().pid().is_malformed()),
+            "IpcMode" => container
+                .namespaces()
+                .observed()
+                .is_some_and(|value| value.value().ipc().is_malformed()),
+            "UTSMode" => container
+                .namespaces()
+                .observed()
+                .is_some_and(|value| value.value().uts().is_malformed()),
+            "CgroupMode" => container
+                .namespaces()
+                .observed()
+                .is_some_and(|value| value.value().cgroup().is_malformed()),
+            "CpuShares" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().cpu_shares().is_malformed()),
+            "CpuPeriod" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().cpu_period().is_malformed()),
+            "CpuQuota" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().cpu_quota().is_malformed()),
+            "Memory" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().memory().is_malformed()),
+            "PidsLimit" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().pids_limit().is_malformed()),
+            "Ulimits" => container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().ulimits().is_malformed()),
+            _ => false,
+        };
+        assert!(malformed, "{path} must be malformed");
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(path)
+        }));
+    }
+
+    for (ulimits, path) in [
+        (serde_json::json!([false]), "$.HostConfig.Ulimits"),
+        (
+            serde_json::json!([{"Name":false,"Soft":0,"Hard":0}]),
+            "$.HostConfig.Ulimits[0].Name",
+        ),
+        (
+            serde_json::json!([{"Name":"nofile","Soft":false,"Hard":0}]),
+            "$.HostConfig.Ulimits[0].Soft",
+        ),
+        (
+            serde_json::json!([{"Name":"nofile","Soft":0,"Hard":false}]),
+            "$.HostConfig.Ulimits[0].Hard",
+        ),
+        (
+            serde_json::json!([
+                {"Name":"nofile","Soft":0,"Hard":0},
+                {"Name":"nproc","Soft":0,"Hard":false}
+            ]),
+            "$.HostConfig.Ulimits[1].Hard",
+        ),
+    ] {
+        let body = serde_json::json!({
+            "Id":"container-a",
+            "Name":"a",
+            "HostConfig":{"Ulimits":ulimits}
+        });
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(serde_json::to_vec(&body)?)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("fixture must remain a container observation".into());
+        };
+        assert!(
+            container
+                .resource_controls()
+                .observed()
+                .is_some_and(|value| value.value().ulimits().is_malformed())
+        );
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(path)
+        }));
+    }
+    Ok(())
+}
+
 fn hex_digest(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut output = String::with_capacity(bytes.len() * 2);

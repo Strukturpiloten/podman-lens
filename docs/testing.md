@@ -149,3 +149,11 @@ health command table shapes; and negative restart/retry/success count values. Un
 logging, action, and health enum spellings must remain field-local unmodelled metadata with
 `PLN0023`. The external-consumer test compiles every public accessor and handles the
 non-exhaustive health-command enum.
+
+M7-B3b offline tests cover effective security, namespace, and resource controls on a pod member;
+capability order and duplicates; opaque security-option redaction; zero and `-1` preservation; and
+native ulimit order. Table-driven negative cases cover every ledger-linked scalar, collection, and
+ulimit member. Any malformed ulimit member poisons the collection. Unknown capabilities and future
+namespace modes remain bounded `PLN0023` metadata. The private-default case covers empty PID, IPC,
+and UTS modes while keeping empty cgroup mode malformed. Snapshot and external-consumer tests cover
+the new state/origin/count-only contract without reusing deployment runtime types.

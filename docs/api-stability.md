@@ -45,10 +45,17 @@ logging may be normalized by Podman. `ProtectedHealthCommand` discloses argument
 callback accessor and cannot format or serialize them. Normal/startup retry counts and startup
 successes are unsigned observations, so negative wire values are malformed rather than usable.
 
-The packaged ledger currently contains 108 input-observation rows and 50 output-intent rows (158
-total). M7-B2b added 22 input-only pod-infra and unpodded-container networking rows; this first
-M7-B3 increment adds 20 typed restart, health, and logging rows. M6-B4
-extends the latter beyond container runtime settings to container mounts and secret grants, volume
+M7-B3b adds separate native security, namespace, capability, ulimit, and resource-control
+observation types. These effective inspect values are never deployment runtime types. Capability
+order and duplicates remain native evidence; unknown capability and namespace semantics become
+bounded `PLN0023` metadata. Security options are count-only and their values are never retained.
+CPU, memory, PID, and ulimit values preserve native zero and `-1` spellings without applying
+output-intent validation.
+
+The packaged ledger currently contains 126 input-observation rows and 50 output-intent rows (176
+total). M7-B3 contributes 38 observation-only restart, health, logging, security, namespace, and
+resource-control rows. M6-B4 extends the latter beyond container runtime settings to container
+mounts and secret grants, volume
 ownership, image acquisition policy/source portability, and the explicitly blocked pod-infra mount
 surface. It remains a strict catalogue: each row fixes its resource kind, target applicability,
 planner, CLI/Libpod owners, diagnostic, and focused positive/negative test symbols.

@@ -533,7 +533,10 @@
         "health_check",
         "health_failure_action",
         "startup_health_check",
-        "logging"
+        "logging",
+        "security",
+        "namespaces",
+        "resource_controls"
       ],
       "properties": {
         "kind": {
@@ -811,6 +814,36 @@
               "type": "null"
             }
           ]
+        },
+        "security": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/native_security"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "namespaces": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/native_namespaces"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resource_controls": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/native_resource_controls"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -905,6 +938,15 @@
             },
             "logging": {
               "$ref": "#/$defs/native_logging"
+            },
+            "security": {
+              "$ref": "#/$defs/native_security"
+            },
+            "namespaces": {
+              "$ref": "#/$defs/native_namespaces"
+            },
+            "resource_controls": {
+              "$ref": "#/$defs/native_resource_controls"
             }
           }
         }
@@ -999,6 +1041,15 @@
               "type": "null"
             },
             "logging": {
+              "type": "null"
+            },
+            "security": {
+              "type": "null"
+            },
+            "namespaces": {
+              "type": "null"
+            },
+            "resource_controls": {
               "type": "null"
             }
           }
@@ -1095,6 +1146,15 @@
             },
             "logging": {
               "type": "null"
+            },
+            "security": {
+              "type": "null"
+            },
+            "namespaces": {
+              "type": "null"
+            },
+            "resource_controls": {
+              "type": "null"
             }
           }
         }
@@ -1189,6 +1249,15 @@
               "type": "null"
             },
             "logging": {
+              "type": "null"
+            },
+            "security": {
+              "type": "null"
+            },
+            "namespaces": {
+              "type": "null"
+            },
+            "resource_controls": {
               "type": "null"
             }
           }
@@ -1285,6 +1354,15 @@
             },
             "logging": {
               "type": "null"
+            },
+            "security": {
+              "type": "null"
+            },
+            "namespaces": {
+              "type": "null"
+            },
+            "resource_controls": {
+              "type": "null"
             }
           }
         }
@@ -1379,6 +1457,15 @@
               "type": "null"
             },
             "logging": {
+              "type": "null"
+            },
+            "security": {
+              "type": "null"
+            },
+            "namespaces": {
+              "type": "null"
+            },
+            "resource_controls": {
               "type": "null"
             }
           }
@@ -2087,6 +2174,78 @@
         },
         "successes": {
           "$ref": "#/$defs/field_state"
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_security": {
+      "type": "object",
+      "required": [
+        "privileged",
+        "cap_add",
+        "cap_drop",
+        "security_options",
+        "read_only_root_filesystem"
+      ],
+      "properties": {
+        "privileged": {
+          "$ref": "#/$defs/field_state"
+        },
+        "cap_add": {
+          "$ref": "#/$defs/field_count"
+        },
+        "cap_drop": {
+          "$ref": "#/$defs/field_count"
+        },
+        "security_options": {
+          "$ref": "#/$defs/field_count"
+        },
+        "read_only_root_filesystem": {
+          "$ref": "#/$defs/field_state"
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_namespaces": {
+      "type": "object",
+      "required": ["pid", "ipc", "uts", "cgroup"],
+      "properties": {
+        "pid": {
+          "$ref": "#/$defs/field_state"
+        },
+        "ipc": {
+          "$ref": "#/$defs/field_state"
+        },
+        "uts": {
+          "$ref": "#/$defs/field_state"
+        },
+        "cgroup": {
+          "$ref": "#/$defs/field_state"
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_resource_controls": {
+      "type": "object",
+      "required": ["cpu_shares", "cpu_period", "cpu_quota", "memory", "pids_limit", "ulimits"],
+      "properties": {
+        "cpu_shares": {
+          "$ref": "#/$defs/field_state"
+        },
+        "cpu_period": {
+          "$ref": "#/$defs/field_state"
+        },
+        "cpu_quota": {
+          "$ref": "#/$defs/field_state"
+        },
+        "memory": {
+          "$ref": "#/$defs/field_state"
+        },
+        "pids_limit": {
+          "$ref": "#/$defs/field_state"
+        },
+        "ulimits": {
+          "$ref": "#/$defs/field_count"
         }
       },
       "additionalProperties": false

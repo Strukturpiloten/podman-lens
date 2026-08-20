@@ -71,6 +71,13 @@ gateway, and route type. A unicast route requires a gateway; blackhole, unreacha
 routes must not carry one. Route type is version-inapplicable before Podman 6.0; from 6.0 an
 omitted member is effective `unicast`. Snapshots retain only state, origin, and counts.
 
+M7-B2b adds `PodObservation::create_infra`, pod and container `networking`, and
+`NativeNetworkingObservation` accessors for bounded port, DNS, namespace, host-management,
+network-reference, and deprecated static-address evidence. Unpodded `CreateNetNS` remains a
+separate configured observation; callers must not infer `host_network` by negating it. Pod
+`HostNetwork` is effective infra evidence. Runtime `NetworkSettings`, assigned addresses, raw
+host entries, and option values are not deployment intent.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

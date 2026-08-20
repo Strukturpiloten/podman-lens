@@ -12,9 +12,10 @@ use crate::observation::{
     ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
     ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
     NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
-    NativeNetworkSubnetObservation, NativeRelationship, NativeResourceReference, NetworkObservation, NetworkOptionKeys,
-    ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation, ProtectedEnvironment,
-    ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
+    NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
+    NativePortBindingObservation, NativePortProtocol, NativeRelationship, NativeResourceReference, NetworkObservation,
+    NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation,
+    ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ResourceDetails, ResourceObservation,
     ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId, UnmodelledCompleteness, UnmodelledField,
     VolumeObservation, VolumeOwnerIdWireValue,
 };
@@ -873,6 +874,9 @@ fn decode_observation(
         configured_image,
         local_image_id,
         is_infra,
+        container_networking,
+        pod_create_infra,
+        pod_networking,
         secret_driver,
         volume_owner_user,
         volume_owner_group,
@@ -880,7 +884,7 @@ fn decode_observation(
         known,
     ) = match listed_identity.kind {
         ResourceKind::Container => decode_container(listed_identity, object, options, &evidence)?,
-        ResourceKind::Pod => decode_pod(listed_identity, object)?,
+        ResourceKind::Pod => decode_pod(listed_identity, object, &evidence)?,
         ResourceKind::Network => decode_network(listed_identity, object, &evidence)?,
         ResourceKind::Volume => decode_volume(listed_identity, object)?,
         ResourceKind::Image => decode_image(listed_identity, object, options)?,
@@ -936,6 +940,9 @@ fn decode_observation(
                 configured_image,
                 local_image_id,
                 is_infra,
+                container_networking,
+                pod_create_infra,
+                pod_networking,
                 secret_driver,
                 volume_owner_user,
                 volume_owner_group,
@@ -964,6 +971,9 @@ type Decoded = (
     Option<ObservationField<String>>,
     Option<ObservationField<String>>,
     Option<ObservationField<bool>>,
+    Option<ObservationField<NativeNetworkingObservation>>,
+    Option<ObservationField<bool>>,
+    Option<ObservationField<NativeNetworkingObservation>>,
     Option<ObservationField<String>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
     Option<ObservationField<VolumeOwnerIdWireValue>>,
@@ -997,6 +1007,9 @@ struct DecodedDetails {
     configured_image: Option<ObservationField<String>>,
     local_image_id: Option<ObservationField<String>>,
     is_infra: Option<ObservationField<bool>>,
+    container_networking: Option<ObservationField<NativeNetworkingObservation>>,
+    pod_create_infra: Option<ObservationField<bool>>,
+    pod_networking: Option<ObservationField<NativeNetworkingObservation>>,
     secret_driver: Option<ObservationField<String>>,
     volume_owner_user: Option<ObservationField<VolumeOwnerIdWireValue>>,
     volume_owner_group: Option<ObservationField<VolumeOwnerIdWireValue>>,
@@ -1022,6 +1035,9 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
         configured_image,
         local_image_id,
         is_infra,
+        container_networking,
+        pod_create_infra,
+        pod_networking,
         secret_driver,
         volume_owner_user,
         volume_owner_group,
@@ -1044,8 +1060,14 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
             secret_grants.unwrap_or(ObservationField::Absent),
             memory_swappiness.unwrap_or(ObservationField::NotApplicable),
             is_infra.unwrap_or(ObservationField::Absent),
+            container_networking.unwrap_or(ObservationField::Absent),
         )),
-        ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(labels, relationships)),
+        ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(
+            labels,
+            relationships,
+            pod_create_infra.unwrap_or(ObservationField::Absent),
+            pod_networking.unwrap_or(ObservationField::Absent),
+        )),
         ResourceKind::Network => {
             let (internal, options, subnets, routes) = network.unwrap_or((
                 ObservationField::NotApplicable,
@@ -1119,12 +1141,15 @@ fn decode_container(
         ResourceKind::Pod,
         &mut relationships,
     ));
-    relationship_decoding.merge(decode_container_networks(
-        object,
-        &identity,
-        &mut relationships,
-        &mut findings,
-    ));
+    let container_networking = decode_container_networking(object, &pod_membership, &identity, &mut findings);
+    if matches!(pod_membership, ObservationField::Absent) {
+        relationship_decoding.merge(decode_container_networks(
+            object,
+            &identity,
+            &mut relationships,
+            &mut findings,
+        ));
+    }
     let mounts = decode_container_mounts(object, &identity, &mut relationships, &mut findings);
     relationship_decoding.merge(mounts.relationships);
     let native_dependencies = decode_native_dependencies(object.get("Dependencies"), &identity, &mut findings);
@@ -1157,6 +1182,9 @@ fn decode_container(
         Some(configured_image),
         Some(local_image_id),
         Some(is_infra),
+        Some(container_networking),
+        None,
+        None,
         None,
         None,
         None,
@@ -1177,18 +1205,19 @@ fn decode_container(
     ))
 }
 
-fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanLensResult<Decoded> {
+fn decode_pod(
+    listed: &ResourceIdentity,
+    object: &Map<String, Value>,
+    evidence: &ResourceEvidence,
+) -> PodmanLensResult<Decoded> {
     let identity = identity_from_inspect(listed, object, &["Id"], &["Name"])?;
     let mut relationships = Vec::new();
     let mut findings = Vec::new();
     let labels = labels(object.get("Labels"), "$.Labels", &identity, &mut findings);
     let mut relationship_decoding = decode_pod_containers(object, &identity, &mut relationships, &mut findings);
-    relationship_decoding.merge(decode_pod_networks(
-        object,
-        &identity,
-        &mut relationships,
-        &mut findings,
-    ));
+    let (create_infra, networking, networking_relationships) =
+        decode_pod_networking(object, &identity, evidence, &mut relationships, &mut findings);
+    relationship_decoding.merge(networking_relationships);
     Ok((
         identity,
         labels,
@@ -1210,10 +1239,13 @@ fn decode_pod(listed: &ResourceIdentity, object: &Map<String, Value>) -> PodmanL
         None,
         None,
         None,
+        Some(create_infra),
+        Some(networking),
+        None,
         None,
         None,
         findings,
-        &["Id", "Name", "Labels", "Containers", "Networks"],
+        &["Id", "Name", "Labels", "Containers", "CreateInfra", "InfraConfig"],
     ))
 }
 
@@ -1401,6 +1433,9 @@ fn decode_network(
         None,
         None,
         None,
+        None,
+        None,
+        None,
         findings,
         &["id", "name", "labels", "internal", "options", "subnets", "routes"],
     ))
@@ -1486,7 +1521,13 @@ fn decode_native_network_subnets(
             findings,
             true,
         );
-        let gateway = native_ip_field(object.get("gateway"), &format!("{path}.gateway"), identity, findings);
+        let gateway = native_ip_field(
+            object.get("gateway"),
+            &format!("{path}.gateway"),
+            identity,
+            ObservationOrigin::Effective,
+            findings,
+        );
         let lease_range = native_lease_range_field(
             object.get("lease_range"),
             cidr.observed().map(ObservedValue::value),
@@ -1562,7 +1603,13 @@ fn decode_native_network_routes(
             findings,
             true,
         );
-        let gateway = native_ip_field(object.get("gateway"), &format!("{path}.gateway"), identity, findings);
+        let gateway = native_ip_field(
+            object.get("gateway"),
+            &format!("{path}.gateway"),
+            identity,
+            ObservationOrigin::Effective,
+            findings,
+        );
         let metric = native_u32_field(object.get("metric"), &format!("{path}.metric"), identity, findings);
         let route_type = native_route_type_field(
             object.get("route_type"),
@@ -1638,12 +1685,13 @@ fn native_ip_field(
     value: Option<&Value>,
     path: &str,
     identity: &ResourceIdentity,
+    origin: ObservationOrigin,
     findings: &mut Vec<InventoryFinding>,
 ) -> ObservationField<IpAddr> {
     match value {
         None | Some(Value::Null) => ObservationField::Absent,
         Some(Value::String(value)) => match value.parse() {
-            Ok(value) => ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Effective)),
+            Ok(value) => ObservationField::Observed(ObservedValue::new(value, origin)),
             Err(_) => native_malformed_field(path, identity, findings),
         },
         _ => native_malformed_field(path, identity, findings),
@@ -1676,8 +1724,20 @@ fn native_lease_range_field(
     match value {
         None | Some(Value::Null) => ObservationField::Absent,
         Some(Value::Object(value)) => {
-            let start = native_ip_field(value.get("start_ip"), &format!("{path}.start_ip"), identity, findings);
-            let end = native_ip_field(value.get("end_ip"), &format!("{path}.end_ip"), identity, findings);
+            let start = native_ip_field(
+                value.get("start_ip"),
+                &format!("{path}.start_ip"),
+                identity,
+                ObservationOrigin::Effective,
+                findings,
+            );
+            let end = native_ip_field(
+                value.get("end_ip"),
+                &format!("{path}.end_ip"),
+                identity,
+                ObservationOrigin::Effective,
+                findings,
+            );
             if start.is_malformed() || end.is_malformed() {
                 return ObservationField::Malformed;
             }
@@ -1795,6 +1855,9 @@ fn decode_volume(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         None,
         None,
         None,
+        None,
+        None,
+        None,
         Some(uid),
         Some(gid),
         findings,
@@ -1902,6 +1965,9 @@ fn decode_image(
         None,
         None,
         None,
+        None,
+        None,
+        None,
         findings,
         &["Id", "Names", "Labels", "Config"],
     ))
@@ -1950,6 +2016,9 @@ fn decode_secret(listed: &ResourceIdentity, object: &Map<String, Value>) -> Podm
         None,
         None,
         ObservationField::NotApplicable,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -2726,51 +2795,694 @@ fn decode_pod_containers(
     }
 }
 
-fn decode_pod_networks(
+#[allow(clippy::too_many_lines)] // gate/object consistency stays adjacent to the field family.
+fn decode_pod_networking(
     object: &Map<String, Value>,
     identity: &ResourceIdentity,
+    evidence: &ResourceEvidence,
     relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
-) -> RelationshipDecoding {
-    let Some(networks) = object.get("Networks") else {
-        return RelationshipDecoding::default();
-    };
-    if networks.is_null() {
-        return RelationshipDecoding::default();
-    }
-    let Some(networks) = networks.as_array() else {
-        findings.push(InventoryFinding::field(
-            DiagnosticCode::ResourceMalformed,
-            identity.clone(),
-            "$.Networks",
-        ));
-        return RelationshipDecoding {
-            supplied: true,
-            malformed: true,
-        };
-    };
-    let mut malformed = false;
-    for (index, network) in networks.iter().enumerate() {
-        if let Some(name) = network.as_str().filter(|name| !name.is_empty()) {
-            relationships.push(NativeRelationship::new(
-                ResourceKind::Network,
-                name,
-                format!("$.Networks[{index}]"),
+) -> (
+    ObservationField<bool>,
+    ObservationField<NativeNetworkingObservation>,
+    RelationshipDecoding,
+) {
+    let create_infra = native_bool_field(
+        object.get("CreateInfra"),
+        "$.CreateInfra",
+        identity,
+        ObservationOrigin::Effective,
+        findings,
+    );
+    let infra_config = object.get("InfraConfig");
+    match (&create_infra, infra_config) {
+        (ObservationField::Observed(value), None | Some(Value::Null)) if *value.value() => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.InfraConfig",
             ));
-        } else {
-            malformed = true;
+            (
+                create_infra,
+                ObservationField::Malformed,
+                RelationshipDecoding {
+                    supplied: true,
+                    malformed: true,
+                },
+            )
+        }
+        (ObservationField::Observed(value), Some(Value::Object(config))) if *value.value() => {
+            let (networking, relationship_decoding) = decode_native_networking(
+                config,
+                "$.InfraConfig",
+                identity,
+                evidence,
+                ObservationOrigin::Effective,
+                findings,
+            );
+            if let ObservationField::Observed(networking) = &networking {
+                if let ObservationField::Observed(networks) = networking.value().networks() {
+                    relationships.extend(networks.value().iter().map(|network| {
+                        NativeRelationship::new(ResourceKind::Network, network.reference(), network.field_path())
+                    }));
+                }
+            }
+            (create_infra, networking, relationship_decoding)
+        }
+        (ObservationField::Observed(value), Some(_)) if *value.value() => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.InfraConfig",
+            ));
+            (
+                create_infra,
+                ObservationField::Malformed,
+                RelationshipDecoding {
+                    supplied: true,
+                    malformed: true,
+                },
+            )
+        }
+        (ObservationField::Observed(value), Some(config)) if !*value.value() && !config.is_null() => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.InfraConfig",
+            ));
+            (
+                create_infra,
+                ObservationField::Malformed,
+                RelationshipDecoding {
+                    supplied: true,
+                    malformed: true,
+                },
+            )
+        }
+        (ObservationField::Observed(value), _) if !*value.value() => {
+            (create_infra, ObservationField::Absent, RelationshipDecoding::default())
+        }
+        (ObservationField::Absent, None | Some(Value::Null)) => {
+            (create_infra, ObservationField::Absent, RelationshipDecoding::default())
+        }
+        (ObservationField::Absent, Some(config)) if !config.is_null() => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.InfraConfig",
+            ));
+            (
+                create_infra,
+                ObservationField::Malformed,
+                RelationshipDecoding {
+                    supplied: true,
+                    malformed: true,
+                },
+            )
+        }
+        _ => (
+            create_infra,
+            ObservationField::Malformed,
+            RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            },
+        ),
+    }
+}
+
+#[allow(clippy::too_many_lines)] // source-local field family is intentionally explicit.
+fn decode_container_networking(
+    object: &Map<String, Value>,
+    pod_membership: &ObservationField<NativeResourceReference>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeNetworkingObservation> {
+    if pod_membership.observed().is_some() {
+        if object
+            .get("HostConfig")
+            .and_then(Value::as_object)
+            .is_some_and(|host_config| {
+                [
+                    "CreateNetNS",
+                    "PortBindings",
+                    "Dns",
+                    "DnsSearch",
+                    "DnsOptions",
+                    "ExtraHosts",
+                    "NoManageResolvConf",
+                    "NoManageHosts",
+                ]
+                .iter()
+                .any(|key| host_config.contains_key(*key))
+            })
+        {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::NativeFieldUnsupported,
+                identity.clone(),
+                "$.HostConfig",
+            ));
+        }
+        return ObservationField::NotApplicable;
+    }
+    let Some(host_config) = object.get("HostConfig") else {
+        return ObservationField::Absent;
+    };
+    let Some(host_config) = host_config.as_object() else {
+        if !host_config.is_null() {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.HostConfig",
+            ));
+            return ObservationField::Malformed;
+        }
+        return ObservationField::Absent;
+    };
+    let create_net_ns = native_bool_field(
+        host_config.get("CreateNetNS"),
+        "$.HostConfig.CreateNetNS",
+        identity,
+        ObservationOrigin::Configured,
+        findings,
+    );
+    let no_manage_resolv_conf = native_bool_field(
+        host_config.get("NoManageResolvConf"),
+        "$.HostConfig.NoManageResolvConf",
+        identity,
+        ObservationOrigin::Configured,
+        findings,
+    );
+    let no_manage_hosts = native_bool_field(
+        host_config.get("NoManageHosts"),
+        "$.HostConfig.NoManageHosts",
+        identity,
+        ObservationOrigin::Configured,
+        findings,
+    );
+    let mut local_findings = Vec::new();
+    let ports = native_port_bindings(
+        host_config.get("PortBindings"),
+        "$.HostConfig.PortBindings",
+        identity,
+        ObservationOrigin::Configured,
+        &mut local_findings,
+    );
+    let resolver_managed = !matches!(no_manage_resolv_conf.observed().map(ObservedValue::value), Some(true));
+    let hosts_managed = !matches!(no_manage_hosts.observed().map(ObservedValue::value), Some(true));
+    let dns_servers = if resolver_managed {
+        native_ip_list(
+            host_config.get("Dns"),
+            "$.HostConfig.Dns",
+            identity,
+            ObservationOrigin::Configured,
+            &mut local_findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let dns_search = if resolver_managed {
+        native_string_list(
+            host_config.get("DnsSearch"),
+            "$.HostConfig.DnsSearch",
+            identity,
+            ObservationOrigin::Configured,
+            &mut local_findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let dns_options = if resolver_managed {
+        native_string_list(
+            host_config.get("DnsOptions"),
+            "$.HostConfig.DnsOptions",
+            identity,
+            ObservationOrigin::Configured,
+            &mut local_findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let host_entries = if hosts_managed {
+        native_unmodelled_string_list(
+            host_config.get("ExtraHosts"),
+            "$.HostConfig.ExtraHosts",
+            identity,
+            crate::UnmodelledFieldId::ContainerHostConfig,
+            &mut local_findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    findings.extend(local_findings);
+    if ports.is_malformed()
+        || dns_servers.is_malformed()
+        || dns_search.is_malformed()
+        || dns_options.is_malformed()
+        || host_entries.is_malformed()
+        || create_net_ns.is_malformed()
+    {
+        return ObservationField::Malformed;
+    }
+    ObservationField::Observed(ObservedValue::new(
+        NativeNetworkingObservation::new(
+            ports,
+            create_net_ns,
+            ObservationField::NotApplicable,
+            dns_servers,
+            dns_search,
+            dns_options,
+            host_entries,
+            ObservationField::NotApplicable,
+            ObservationField::NotApplicable,
+            no_manage_resolv_conf,
+            no_manage_hosts,
+            ObservationField::NotApplicable,
+            ObservationField::NotApplicable,
+        ),
+        ObservationOrigin::Configured,
+    ))
+}
+
+#[allow(clippy::too_many_lines)] // native field provenance and applicability remain explicit.
+fn decode_native_networking(
+    object: &Map<String, Value>,
+    prefix: &str,
+    identity: &ResourceIdentity,
+    evidence: &ResourceEvidence,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> (ObservationField<NativeNetworkingObservation>, RelationshipDecoding) {
+    let port_bindings = native_port_bindings(
+        object.get("PortBindings"),
+        &format!("{prefix}.PortBindings"),
+        identity,
+        origin,
+        findings,
+    );
+    let host_network = native_bool_field(
+        object.get("HostNetwork"),
+        &format!("{prefix}.HostNetwork"),
+        identity,
+        origin,
+        findings,
+    );
+    let no_manage_resolv_conf = native_bool_field(
+        object.get("NoManageResolvConf"),
+        &format!("{prefix}.NoManageResolvConf"),
+        identity,
+        origin,
+        findings,
+    );
+    let no_manage_hosts = native_bool_field(
+        object.get("NoManageHosts"),
+        &format!("{prefix}.NoManageHosts"),
+        identity,
+        origin,
+        findings,
+    );
+    let resolver_managed = !matches!(no_manage_resolv_conf.observed().map(ObservedValue::value), Some(true));
+    let hosts_managed = !matches!(no_manage_hosts.observed().map(ObservedValue::value), Some(true));
+    let dns_servers = if resolver_managed {
+        native_ip_list(
+            object.get("DNSServer"),
+            &format!("{prefix}.DNSServer"),
+            identity,
+            origin,
+            findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let dns_search = if resolver_managed {
+        native_string_list(
+            object.get("DNSSearch"),
+            &format!("{prefix}.DNSSearch"),
+            identity,
+            origin,
+            findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let dns_options = if resolver_managed {
+        native_string_list(
+            object.get("DNSOption"),
+            &format!("{prefix}.DNSOption"),
+            identity,
+            origin,
+            findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let host_entries = if hosts_managed {
+        native_unmodelled_string_list(
+            object.get("HostAdd"),
+            &format!("{prefix}.HostAdd"),
+            identity,
+            crate::UnmodelledFieldId::PodInfraConfig,
+            findings,
+        )
+    } else {
+        ObservationField::NotApplicable
+    };
+    let (networks, relationships) = native_network_references(
+        object.get("Networks"),
+        &format!("{prefix}.Networks"),
+        identity,
+        findings,
+    );
+    let network_options = native_opaque_options(
+        object.get("NetworkOptions"),
+        &format!("{prefix}.NetworkOptions"),
+        identity,
+        origin,
+        findings,
+    );
+    let static_ip = if semver::Version::parse(evidence.engine_version())
+        .is_ok_and(|version| version <= semver::Version::new(5, 8, 6))
+    {
+        native_ip_field(
+            object.get("StaticIP"),
+            &format!("{prefix}.StaticIP"),
+            identity,
+            origin,
+            findings,
+        )
+    } else {
+        if object.get("StaticIP").is_some_and(|value| !value.is_null()) {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::VersionInapplicableField,
+                identity.clone(),
+                format!("{prefix}.StaticIP"),
+            ));
+        }
+        ObservationField::VersionInapplicable
+    };
+    if object.get("StaticMAC").is_some_and(|value| !value.is_null()) {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::VersionInapplicableField,
+            identity.clone(),
+            format!("{prefix}.StaticMAC"),
+        ));
+    }
+    let static_mac = ObservationField::VersionInapplicable;
+    let malformed = [
+        port_bindings.is_malformed(),
+        host_network.is_malformed(),
+        dns_servers.is_malformed(),
+        dns_search.is_malformed(),
+        dns_options.is_malformed(),
+        host_entries.is_malformed(),
+        networks.is_malformed(),
+        network_options.is_malformed(),
+        no_manage_resolv_conf.is_malformed(),
+        no_manage_hosts.is_malformed(),
+        static_ip.is_malformed(),
+    ]
+    .into_iter()
+    .any(|value| value);
+    let networking = if malformed {
+        ObservationField::Malformed
+    } else {
+        ObservationField::Observed(ObservedValue::new(
+            NativeNetworkingObservation::new(
+                port_bindings,
+                host_network,
+                ObservationField::NotApplicable,
+                dns_servers,
+                dns_search,
+                dns_options,
+                host_entries,
+                networks,
+                network_options,
+                no_manage_resolv_conf,
+                no_manage_hosts,
+                static_ip,
+                static_mac,
+            ),
+            origin,
+        ))
+    };
+    (networking, relationships)
+}
+
+fn native_bool_field(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<bool> {
+    match value {
+        None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Bool(value)) => ObservationField::Observed(ObservedValue::new(*value, origin)),
+        Some(_) => native_malformed_field(path, identity, findings),
+    }
+}
+
+fn native_ip_list(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<IpAddr>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let mut decoded = Vec::with_capacity(values.len());
+    for (index, value) in values.iter().enumerate() {
+        let Some(value) = value.as_str().and_then(|value| value.parse::<IpAddr>().ok()) else {
             findings.push(InventoryFinding::at_occurrence(
                 DiagnosticCode::ResourceMalformed,
                 identity.clone(),
-                "$.Networks",
+                path,
                 index,
             ));
+            return ObservationField::Malformed;
+        };
+        decoded.push(value);
+    }
+    ObservationField::Observed(ObservedValue::new(decoded, origin))
+}
+
+fn native_string_list(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<String>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let mut decoded = Vec::with_capacity(values.len());
+    for (index, value) in values.iter().enumerate() {
+        let Some(value) = value
+            .as_str()
+            .filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
+        else {
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+                index,
+            ));
+            return ObservationField::Malformed;
+        };
+        decoded.push(value.to_owned());
+    }
+    ObservationField::Observed(ObservedValue::new(decoded, origin))
+}
+
+fn native_unmodelled_string_list(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    field: crate::UnmodelledFieldId,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeOpaqueNetworkOptions> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    if values.iter().any(|value| !value.is_string()) {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            path,
+        ));
+        return ObservationField::Malformed;
+    }
+    ObservationField::Unmodelled(field)
+}
+
+fn native_opaque_options(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<NativeOpaqueNetworkOptions> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(options) = value.as_object() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    ObservationField::Observed(ObservedValue::new(
+        NativeOpaqueNetworkOptions::new(options.len()),
+        origin,
+    ))
+}
+
+fn native_network_references(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> (ObservationField<Vec<NativeResourceReference>>, RelationshipDecoding) {
+    let Some(value) = value else {
+        return (ObservationField::Absent, RelationshipDecoding::default());
+    };
+    if value.is_null() {
+        return (ObservationField::Absent, RelationshipDecoding::default());
+    }
+    let Some(values) = value.as_array() else {
+        let field = native_malformed_field(path, identity, findings);
+        return (
+            field,
+            RelationshipDecoding {
+                supplied: true,
+                malformed: true,
+            },
+        );
+    };
+    let mut references = Vec::with_capacity(values.len());
+    for (index, value) in values.iter().enumerate() {
+        let Some(value) = value.as_str().filter(|value| !value.is_empty()) else {
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                path,
+                index,
+            ));
+            return (
+                ObservationField::Malformed,
+                RelationshipDecoding {
+                    supplied: true,
+                    malformed: true,
+                },
+            );
+        };
+        references.push(NativeResourceReference::new(
+            value.to_owned(),
+            format!("{path}[{index}]"),
+        ));
+    }
+    (
+        ObservationField::Observed(ObservedValue::new(references, ObservationOrigin::Effective)),
+        RelationshipDecoding {
+            supplied: true,
+            malformed: false,
+        },
+    )
+}
+
+fn native_port_bindings(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    origin: ObservationOrigin,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativePortBindingObservation>> {
+    let Some(value) = value else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(bindings) = value.as_object() else {
+        return native_malformed_field(path, identity, findings);
+    };
+    let mut decoded = Vec::new();
+    for (key, values) in bindings {
+        let Some((port, protocol)) = native_port_binding_key(key) else {
+            return native_malformed_field(&format!("{path}.{key}"), identity, findings);
+        };
+        let Some(values) = values.as_array() else {
+            return native_malformed_field(&format!("{path}.{key}"), identity, findings);
+        };
+        for (index, value) in values.iter().enumerate() {
+            let Some(value) = value.as_object() else {
+                findings.push(InventoryFinding::at_occurrence(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    format!("{path}.{key}"),
+                    index,
+                ));
+                return ObservationField::Malformed;
+            };
+            let host_ip = match value.get("HostIp") {
+                None | Some(Value::Null) => ObservationField::Absent,
+                Some(Value::String(value)) if value.is_empty() => ObservationField::Absent,
+                Some(Value::String(value)) => match value.parse() {
+                    Ok(value) => ObservationField::Observed(ObservedValue::new(value, origin)),
+                    Err(_) => {
+                        return native_malformed_field(&format!("{path}.{key}[{index}].HostIp"), identity, findings);
+                    }
+                },
+                Some(_) => return native_malformed_field(&format!("{path}.{key}[{index}].HostIp"), identity, findings),
+            };
+            let host_port = match value.get("HostPort") {
+                None | Some(Value::Null) => ObservationField::Absent,
+                Some(Value::String(value)) if value.is_empty() => ObservationField::Absent,
+                Some(Value::String(value)) => match value.parse() {
+                    Ok(value) if value != 0 => ObservationField::Observed(ObservedValue::new(value, origin)),
+                    _ => return native_malformed_field(&format!("{path}.{key}[{index}].HostPort"), identity, findings),
+                },
+                Some(_) => {
+                    return native_malformed_field(&format!("{path}.{key}[{index}].HostPort"), identity, findings);
+                }
+            };
+            decoded.push(NativePortBindingObservation::new(port, protocol, host_ip, host_port));
         }
     }
-    RelationshipDecoding {
-        supplied: true,
-        malformed,
-    }
+    ObservationField::Observed(ObservedValue::new(decoded, origin))
+}
+
+fn native_port_binding_key(value: &str) -> Option<(u16, NativePortProtocol)> {
+    let (port, protocol) = value.split_once('/')?;
+    let port = port.parse().ok().filter(|port: &u16| *port != 0)?;
+    let protocol = match protocol {
+        "tcp" => NativePortProtocol::Tcp,
+        "udp" => NativePortProtocol::Udp,
+        "sctp" => NativePortProtocol::Sctp,
+        _ => return None,
+    };
+    Some((port, protocol))
 }
 
 fn decode_memory_swappiness(
@@ -3059,6 +3771,7 @@ fn unknown_top_level(object: &Map<String, Value>, known: &[&str], fields: &mut U
     }
 }
 
+#[allow(clippy::too_many_lines)] // explicit known-member sets are the audit boundary.
 fn unknown_nested_fields(
     kind: ResourceKind,
     object: &Map<String, Value>,
@@ -3131,12 +3844,46 @@ fn unknown_nested_fields(
                 &["ID", "Name", "UID", "GID", "Mode"],
                 fields,
             );
-            // `MemorySwappiness` is the only currently typed HostConfig member. Every other
-            // direct member is deliberately retained as unsupported metadata instead of being
-            // hidden by the accepted HostConfig object.
-            unknown_object_members(object.get("HostConfig"), "$.HostConfig", &["MemorySwappiness"], fields);
+            // HostAdd intentionally remains value-free unmodelled hosts-file data. All other
+            // listed members have a bounded typed observation; unknown siblings remain explicit
+            // metadata rather than being hidden by the accepted HostConfig object.
+            unknown_object_members(
+                object.get("HostConfig"),
+                "$.HostConfig",
+                &[
+                    "MemorySwappiness",
+                    "CreateNetNS",
+                    "PortBindings",
+                    "Dns",
+                    "DnsSearch",
+                    "DnsOptions",
+                    "NoManageResolvConf",
+                    "NoManageHosts",
+                ],
+                fields,
+            );
         }
-        ResourceKind::Pod => unknown_array_object_members(object.get("Containers"), "$.Containers", &["Id"], fields),
+        ResourceKind::Pod => {
+            unknown_array_object_members(object.get("Containers"), "$.Containers", &["Id"], fields);
+            unknown_object_members(
+                object.get("InfraConfig"),
+                "$.InfraConfig",
+                &[
+                    "PortBindings",
+                    "HostNetwork",
+                    "DNSServer",
+                    "DNSSearch",
+                    "DNSOption",
+                    "Networks",
+                    "NetworkOptions",
+                    "NoManageResolvConf",
+                    "NoManageHosts",
+                    "StaticMAC",
+                    "StaticIP",
+                ],
+                fields,
+            );
+        }
         ResourceKind::Network => unknown_network_nested_fields(object, evidence, fields),
         ResourceKind::Image => unknown_object_members(object.get("Config"), "$.Config", &["Env"], fields),
         ResourceKind::Secret => {
@@ -3346,8 +4093,14 @@ mod typed_observation_constructor_tests {
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
+                ObservationField::Absent,
             )),
-            ResourceDetails::Pod(PodObservation::new(ObservationField::Absent, ObservationField::Absent)),
+            ResourceDetails::Pod(PodObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
             ResourceDetails::Network(NetworkObservation::new(
                 ObservationField::Absent,
                 ObservationField::Absent,
@@ -3376,7 +4129,12 @@ mod typed_observation_constructor_tests {
 
         let error = ResourceObservation::try_new(
             header(ResourceKind::Container),
-            ResourceDetails::Pod(PodObservation::new(ObservationField::Absent, ObservationField::Absent)),
+            ResourceDetails::Pod(PodObservation::new(
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+                ObservationField::Absent,
+            )),
         )
         .expect_err("kind mismatch must be a structured construction failure");
         assert_eq!(error.code(), DiagnosticCode::ResourceMalformed);

@@ -744,7 +744,7 @@ async fn one_malformed_relationship_member_blocks_its_entire_collection() -> Res
         ),
         (
             12,
-            r#"{"Id":"pod-1","Name":"pod","Networks":["app",false]}"#,
+            r#"{"Id":"pod-1","Name":"pod","CreateInfra":true,"InfraConfig":{"Networks":["app",false]}}"#,
             ResourceKind::Pod,
             "pod",
         ),

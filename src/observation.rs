@@ -151,6 +151,8 @@ pub enum UnmodelledFieldId {
     ContainerTopLevel,
     /// Pod membership data outside the bounded typed subset.
     PodMember,
+    /// Pod infra-configuration data outside the bounded typed subset.
+    PodInfraConfig,
     /// Other pod inspect data outside the bounded typed subset.
     PodTopLevel,
     /// Network subnet data outside the bounded typed subset.
@@ -183,6 +185,7 @@ impl UnmodelledFieldId {
             Self::ContainerMount => "podman.native.container.mount",
             Self::ContainerTopLevel => "podman.native.container.top-level",
             Self::PodMember => "podman.native.pod.member",
+            Self::PodInfraConfig => "podman.native.pod.infra-config",
             Self::PodTopLevel => "podman.native.pod.top-level",
             Self::NetworkSubnet => "podman.native.network.subnet",
             Self::NetworkRoute => "podman.native.network.route",
@@ -266,6 +269,7 @@ fn semantic_unmodelled_id(kind: ResourceKind, path: &str) -> UnmodelledFieldId {
         }
         (ResourceKind::Container, value) if value.starts_with("$.Mounts") => UnmodelledFieldId::ContainerMount,
         (ResourceKind::Pod, value) if value.starts_with("$.Containers") => UnmodelledFieldId::PodMember,
+        (ResourceKind::Pod, value) if value.starts_with("$.InfraConfig") => UnmodelledFieldId::PodInfraConfig,
         (ResourceKind::Network, value) if value.starts_with("$.subnets") => UnmodelledFieldId::NetworkSubnet,
         (ResourceKind::Network, value) if value.starts_with("$.routes") => UnmodelledFieldId::NetworkRoute,
         (ResourceKind::Image, value) if value.starts_with("$.Config") => UnmodelledFieldId::ImageConfig,
@@ -855,6 +859,7 @@ pub struct ContainerObservation {
     secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
     memory_swappiness: ObservationField<u64>,
     infra: ObservationField<bool>,
+    networking: ObservationField<NativeNetworkingObservation>,
 }
 
 macro_rules! observation_debug {
@@ -886,7 +891,8 @@ observation_debug!(
     mounts,
     secret_grants,
     memory_swappiness,
-    infra
+    infra,
+    networking
 );
 
 impl ContainerObservation {
@@ -908,6 +914,7 @@ impl ContainerObservation {
         secret_grants: ObservationField<Vec<ContainerSecretGrantObservation>>,
         memory_swappiness: ObservationField<u64>,
         infra: ObservationField<bool>,
+        networking: ObservationField<NativeNetworkingObservation>,
     ) -> Self {
         Self {
             labels,
@@ -926,6 +933,7 @@ impl ContainerObservation {
             secret_grants,
             memory_swappiness,
             infra,
+            networking,
         }
     }
 
@@ -1008,6 +1016,13 @@ impl ContainerObservation {
     pub fn infra(&self) -> &ObservationField<bool> {
         &self.infra
     }
+    /// Returns bounded configured networking evidence for an unpodded container.
+    ///
+    /// Pod-member networking is topology-owned by its pod and is never promoted here.
+    #[must_use]
+    pub fn networking(&self) -> &ObservationField<NativeNetworkingObservation> {
+        &self.networking
+    }
     pub(crate) fn relationships(&self) -> &ObservationField<Vec<NativeRelationship>> {
         &self.relationships
     }
@@ -1018,23 +1033,245 @@ impl ContainerObservation {
 pub struct PodObservation {
     labels: ObservationField<Labels>,
     relationships: ObservationField<Vec<NativeRelationship>>,
+    create_infra: ObservationField<bool>,
+    networking: ObservationField<NativeNetworkingObservation>,
 }
-observation_debug!(PodObservation, labels, relationships);
+observation_debug!(PodObservation, labels, relationships, create_infra, networking);
 
 impl PodObservation {
     pub(crate) fn new(
         labels: ObservationField<Labels>,
         relationships: ObservationField<Vec<NativeRelationship>>,
+        create_infra: ObservationField<bool>,
+        networking: ObservationField<NativeNetworkingObservation>,
     ) -> Self {
-        Self { labels, relationships }
+        Self {
+            labels,
+            relationships,
+            create_infra,
+            networking,
+        }
     }
     /// Returns the configured pod labels or their observation state.
     #[must_use]
     pub fn labels(&self) -> &ObservationField<Labels> {
         &self.labels
     }
+    /// Returns whether the pod was created with an infra container.
+    #[must_use]
+    pub fn create_infra(&self) -> &ObservationField<bool> {
+        &self.create_infra
+    }
+    /// Returns networking observed only from `Pod.InspectPodData.InfraConfig`.
+    #[must_use]
+    pub fn networking(&self) -> &ObservationField<NativeNetworkingObservation> {
+        &self.networking
+    }
     pub(crate) fn relationships(&self) -> &ObservationField<Vec<NativeRelationship>> {
         &self.relationships
+    }
+}
+
+/// A protocol carried by a native inspected port binding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativePortProtocol {
+    /// TCP.
+    Tcp,
+    /// UDP.
+    Udp,
+    /// SCTP.
+    Sctp,
+}
+
+/// One bounded native port-binding observation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativePortBindingObservation {
+    container_port: u16,
+    protocol: NativePortProtocol,
+    host_ip: ObservationField<IpAddr>,
+    host_port: ObservationField<u16>,
+}
+
+impl NativePortBindingObservation {
+    pub(crate) const fn new(
+        container_port: u16,
+        protocol: NativePortProtocol,
+        host_ip: ObservationField<IpAddr>,
+        host_port: ObservationField<u16>,
+    ) -> Self {
+        Self {
+            container_port,
+            protocol,
+            host_ip,
+            host_port,
+        }
+    }
+    /// Returns the container port from the binding key.
+    #[must_use]
+    pub const fn container_port(&self) -> u16 {
+        self.container_port
+    }
+    /// Returns the native transport protocol.
+    #[must_use]
+    pub const fn protocol(&self) -> NativePortProtocol {
+        self.protocol
+    }
+    /// Returns the optional host IP or its observation state.
+    #[must_use]
+    pub fn host_ip(&self) -> &ObservationField<IpAddr> {
+        &self.host_ip
+    }
+    /// Returns the optional host port or its observation state.
+    #[must_use]
+    pub fn host_port(&self) -> &ObservationField<u16> {
+        &self.host_port
+    }
+}
+
+/// Bounded, opaque native network options. Option values are deliberately never exposed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeOpaqueNetworkOptions {
+    count: usize,
+}
+
+impl NativeOpaqueNetworkOptions {
+    pub(crate) const fn new(count: usize) -> Self {
+        Self { count }
+    }
+    /// Returns the number of opaque options without exposing keys or values.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.count
+    }
+    /// Returns whether no opaque options were observed.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
+/// Native networking evidence observed from authoritative pod infra or unpodded host config.
+///
+/// This is deliberately separate from declared deployment networking intent. Host entries and
+/// free-form network options remain non-promotable bounded metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkingObservation {
+    port_bindings: ObservationField<Vec<NativePortBindingObservation>>,
+    create_net_ns: ObservationField<bool>,
+    host_network: ObservationField<bool>,
+    dns_servers: ObservationField<Vec<IpAddr>>,
+    dns_search: ObservationField<Vec<String>>,
+    dns_options: ObservationField<Vec<String>>,
+    host_entries: ObservationField<NativeOpaqueNetworkOptions>,
+    networks: ObservationField<Vec<NativeResourceReference>>,
+    network_options: ObservationField<NativeOpaqueNetworkOptions>,
+    no_manage_resolv_conf: ObservationField<bool>,
+    no_manage_hosts: ObservationField<bool>,
+    static_ip: ObservationField<IpAddr>,
+    static_mac: ObservationField<String>,
+}
+
+impl NativeNetworkingObservation {
+    #[allow(clippy::too_many_arguments)] // private decoder construction keeps every source field explicit.
+    pub(crate) fn new(
+        port_bindings: ObservationField<Vec<NativePortBindingObservation>>,
+        create_net_ns: ObservationField<bool>,
+        host_network: ObservationField<bool>,
+        dns_servers: ObservationField<Vec<IpAddr>>,
+        dns_search: ObservationField<Vec<String>>,
+        dns_options: ObservationField<Vec<String>>,
+        host_entries: ObservationField<NativeOpaqueNetworkOptions>,
+        networks: ObservationField<Vec<NativeResourceReference>>,
+        network_options: ObservationField<NativeOpaqueNetworkOptions>,
+        no_manage_resolv_conf: ObservationField<bool>,
+        no_manage_hosts: ObservationField<bool>,
+        static_ip: ObservationField<IpAddr>,
+        static_mac: ObservationField<String>,
+    ) -> Self {
+        Self {
+            port_bindings,
+            create_net_ns,
+            host_network,
+            dns_servers,
+            dns_search,
+            dns_options,
+            host_entries,
+            networks,
+            network_options,
+            no_manage_resolv_conf,
+            no_manage_hosts,
+            static_ip,
+            static_mac,
+        }
+    }
+    /// Returns bounded port-binding evidence.
+    #[must_use]
+    pub fn port_bindings(&self) -> &ObservationField<Vec<NativePortBindingObservation>> {
+        &self.port_bindings
+    }
+    /// Returns the configured container network-namespace creation gate.
+    #[must_use]
+    pub fn create_net_ns(&self) -> &ObservationField<bool> {
+        &self.create_net_ns
+    }
+    /// Returns the effective host-network gate.
+    #[must_use]
+    pub fn host_network(&self) -> &ObservationField<bool> {
+        &self.host_network
+    }
+    /// Returns copied/configured DNS server evidence.
+    #[must_use]
+    pub fn dns_servers(&self) -> &ObservationField<Vec<IpAddr>> {
+        &self.dns_servers
+    }
+    /// Returns copied/configured DNS search evidence.
+    #[must_use]
+    pub fn dns_search(&self) -> &ObservationField<Vec<String>> {
+        &self.dns_search
+    }
+    /// Returns copied/configured DNS option evidence.
+    #[must_use]
+    pub fn dns_options(&self) -> &ObservationField<Vec<String>> {
+        &self.dns_options
+    }
+    /// Returns the state of `/etc/hosts` entry data.
+    ///
+    /// `PodmanLens` intentionally does not parse this free-form hosts-file syntax as aliases or
+    /// expose its values. A present entry list is therefore `Unmodelled`.
+    #[must_use]
+    pub fn host_entries(&self) -> &ObservationField<NativeOpaqueNetworkOptions> {
+        &self.host_entries
+    }
+    /// Returns effective native network names in native order; that order is not a contract.
+    #[must_use]
+    pub fn networks(&self) -> &ObservationField<Vec<NativeResourceReference>> {
+        &self.networks
+    }
+    /// Returns opaque network-option evidence without key/value semantics.
+    #[must_use]
+    pub fn network_options(&self) -> &ObservationField<NativeOpaqueNetworkOptions> {
+        &self.network_options
+    }
+    /// Returns the effective resolver-management gate.
+    #[must_use]
+    pub fn no_manage_resolv_conf(&self) -> &ObservationField<bool> {
+        &self.no_manage_resolv_conf
+    }
+    /// Returns the effective hosts-file-management gate.
+    #[must_use]
+    pub fn no_manage_hosts(&self) -> &ObservationField<bool> {
+        &self.no_manage_hosts
+    }
+    /// Returns static IP evidence only where the inspected field has reviewed meaning.
+    #[must_use]
+    pub fn static_ip(&self) -> &ObservationField<IpAddr> {
+        &self.static_ip
+    }
+    /// Returns static MAC evidence only where the inspected field has reviewed meaning.
+    #[must_use]
+    pub fn static_mac(&self) -> &ObservationField<String> {
+        &self.static_mac
     }
 }
 
@@ -1564,10 +1801,14 @@ fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> Re
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
+            incomplete_field(state),
         )),
-        ResourceKind::Pod => {
-            ResourceDetails::Pod(PodObservation::new(incomplete_field(state), incomplete_field(state)))
-        }
+        ResourceKind::Pod => ResourceDetails::Pod(PodObservation::new(
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+            incomplete_field(state),
+        )),
         ResourceKind::Network => ResourceDetails::Network(NetworkObservation::new(
             incomplete_field(state),
             incomplete_field(state),

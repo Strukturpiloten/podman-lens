@@ -65,8 +65,9 @@
       "body": {
         "Id": "rootful-pod",
         "Name": "application",
+        "CreateInfra": true,
         "Containers": [{ "Id": "rootful-api" }, { "Id": "rootful-infra" }],
-        "Networks": ["application", "podman"]
+        "InfraConfig": { "Networks": ["application", "podman"] }
       }
     },
     {

@@ -214,8 +214,12 @@ without silent loss; all other native output remains explicitly outside that con
       does not claim host-bit route destinations are valid. Route type is explicitly
       version-inapplicable before Podman 6.0 and defaults to effective `unicast` from 6.0 when
       omitted; this batch adds no output mapping.
-- [ ] M7-B2: Continue bounded native network input coverage without inferring container runtime
-      addresses, pod infra configuration, arbitrary drivers/options, or output behavior.
+- [x] M7-B2b: Add observation-only pod `InfraConfig` and unpodded-container `HostConfig`
+      networking with explicit configured/effective provenance. `CreateNetNS` remains a distinct
+      configured gate and is not inverted into a host-network claim. Runtime `NetworkSettings`
+      addresses and assignments are never promoted.
+- [x] M7-B2: Complete bounded native network input coverage without inferring container runtime
+      addresses, arbitrary driver/option values, or output behavior.
 - [ ] M7-B: Document the exact PodmanLens-to-neutral-model mapping contract.
 - [ ] Provide large offline input and output scenarios for BoxFerry adapter tests.
 - [ ] Publish compatibility matrices for Podman versions, resource kinds, and transports.

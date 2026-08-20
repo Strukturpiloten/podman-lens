@@ -42,10 +42,62 @@ fn consume_inventory_snapshot(source: &ResourceInventory) {
     drop(serde_json::to_string(&snapshot));
 }
 
+#[allow(clippy::too_many_lines)] // one public-consumer smoke path intentionally touches every accessor.
 fn consume_typed_observation(source: &ResourceObservation) {
     let _ = source.header().state();
     let _ = source.header().unmodelled_completeness();
     if let ResourceDetails::Container(container) = source.details() {
+        let _ = container.networking().observed().map(|networking| {
+            let networking = networking.value();
+            (
+                networking.port_bindings().observed().map(|value| {
+                    value.value().iter().map(|binding| {
+                        (
+                            binding.container_port(),
+                            binding.protocol(),
+                            binding.host_ip().observed().map(podman_lens::ObservedValue::value),
+                            binding.host_port().observed().map(podman_lens::ObservedValue::value),
+                        )
+                    })
+                }),
+                networking
+                    .create_net_ns()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking
+                    .host_network()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking
+                    .dns_servers()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking
+                    .dns_search()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking
+                    .dns_options()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking.host_entries(),
+                networking.networks().observed().map(podman_lens::ObservedValue::value),
+                networking.network_options().observed().map(|value| value.value().len()),
+                networking
+                    .no_manage_resolv_conf()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking
+                    .no_manage_hosts()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+                networking.static_ip().observed().map(podman_lens::ObservedValue::value),
+                networking
+                    .static_mac()
+                    .observed()
+                    .map(podman_lens::ObservedValue::value),
+            )
+        });
         let _ = container
             .configured_image()
             .observed()
@@ -88,6 +140,13 @@ fn consume_typed_observation(source: &ResourceObservation) {
                 })
                 .collect::<Vec<_>>()
         });
+    }
+    if let ResourceDetails::Pod(pod) = source.details() {
+        let _ = pod.create_infra().observed().map(podman_lens::ObservedValue::value);
+        let _ = pod
+            .networking()
+            .observed()
+            .map(|networking| networking.value().port_bindings());
     }
     if let ResourceDetails::Network(network) = source.details() {
         let _ = network.subnets().observed().map(|subnets| {

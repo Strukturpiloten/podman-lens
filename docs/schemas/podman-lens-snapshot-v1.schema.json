@@ -160,6 +160,40 @@
       },
       "additionalProperties": false
     },
+    "native_networking": {
+      "type": "object",
+      "required": [
+        "port_bindings",
+        "create_net_ns",
+        "host_network",
+        "dns_servers",
+        "dns_search",
+        "dns_options",
+        "host_entries",
+        "networks",
+        "network_options",
+        "no_manage_resolv_conf",
+        "no_manage_hosts",
+        "static_ip",
+        "static_mac"
+      ],
+      "properties": {
+        "port_bindings": { "$ref": "#/$defs/field_count" },
+        "create_net_ns": { "$ref": "#/$defs/field_state" },
+        "host_network": { "$ref": "#/$defs/field_state" },
+        "dns_servers": { "$ref": "#/$defs/field_count" },
+        "dns_search": { "$ref": "#/$defs/field_count" },
+        "dns_options": { "$ref": "#/$defs/field_count" },
+        "host_entries": { "$ref": "#/$defs/field_state" },
+        "networks": { "$ref": "#/$defs/field_count" },
+        "network_options": { "$ref": "#/$defs/field_count" },
+        "no_manage_resolv_conf": { "$ref": "#/$defs/field_state" },
+        "no_manage_hosts": { "$ref": "#/$defs/field_state" },
+        "static_ip": { "$ref": "#/$defs/field_state" },
+        "static_mac": { "$ref": "#/$defs/field_state" }
+      },
+      "additionalProperties": false
+    },
     "unmodelled_field": {
       "type": "object",
       "required": ["id", "path", "json_kind", "resource", "evidence"],
@@ -229,8 +263,10 @@
         "secret_grants",
         "image_aliases",
         "network",
+        "networking",
         "memory_swappiness",
         "infra",
+        "create_infra",
         "secret_driver",
         "volume_uid",
         "volume_gid"
@@ -255,8 +291,10 @@
         "secret_grants": { "anyOf": [{ "$ref": "#/$defs/field_count" }, { "type": "null" }] },
         "image_aliases": { "anyOf": [{ "$ref": "#/$defs/field_count" }, { "type": "null" }] },
         "network": { "anyOf": [{ "$ref": "#/$defs/network" }, { "type": "null" }] },
+        "networking": { "anyOf": [{ "$ref": "#/$defs/native_networking" }, { "type": "null" }] },
         "memory_swappiness": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
         "infra": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
+        "create_infra": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
         "secret_driver": { "anyOf": [{ "$ref": "#/$defs/field_state" }, { "type": "null" }] },
         "volume_uid": { "anyOf": [{ "$ref": "#/$defs/volume_owner" }, { "type": "null" }] },
         "volume_gid": { "anyOf": [{ "$ref": "#/$defs/volume_owner" }, { "type": "null" }] }
@@ -286,6 +324,8 @@
             "infra": { "$ref": "#/$defs/field_state" },
             "image_aliases": { "type": "null" },
             "network": { "type": "null" },
+            "networking": { "$ref": "#/$defs/native_networking" },
+            "create_infra": { "type": "null" },
             "secret_driver": { "type": "null" },
             "volume_uid": { "type": "null" },
             "volume_gid": { "type": "null" }
@@ -314,8 +354,10 @@
             "secret_grants": { "type": "null" },
             "image_aliases": { "type": "null" },
             "network": { "type": "null" },
+            "networking": { "$ref": "#/$defs/native_networking" },
             "memory_swappiness": { "type": "null" },
             "infra": { "type": "null" },
+            "create_infra": { "$ref": "#/$defs/field_state" },
             "secret_driver": { "type": "null" },
             "volume_uid": { "type": "null" },
             "volume_gid": { "type": "null" }
@@ -330,6 +372,7 @@
           "properties": {
             "kind": { "const": "network" },
             "network": { "$ref": "#/$defs/network" },
+            "networking": { "type": "null" },
             "configured_image": { "type": "null" },
             "local_image_id": { "type": "null" },
             "relationships": { "type": "null" },
@@ -346,6 +389,7 @@
             "image_aliases": { "type": "null" },
             "memory_swappiness": { "type": "null" },
             "infra": { "type": "null" },
+            "create_infra": { "type": "null" },
             "secret_driver": { "type": "null" },
             "volume_uid": { "type": "null" },
             "volume_gid": { "type": "null" }
@@ -376,8 +420,10 @@
             "secret_grants": { "type": "null" },
             "image_aliases": { "type": "null" },
             "network": { "type": "null" },
+            "networking": { "type": "null" },
             "memory_swappiness": { "type": "null" },
             "infra": { "type": "null" },
+            "create_infra": { "type": "null" },
             "secret_driver": { "type": "null" }
           }
         }
@@ -395,6 +441,7 @@
             "local_image_id": { "type": "null" },
             "relationships": { "type": "null" },
             "network": { "type": "null" },
+            "networking": { "type": "null" },
             "command": { "type": "null" },
             "entrypoint": { "type": "null" },
             "user": { "type": "null" },
@@ -406,6 +453,7 @@
             "secret_grants": { "type": "null" },
             "memory_swappiness": { "type": "null" },
             "infra": { "type": "null" },
+            "create_infra": { "type": "null" },
             "secret_driver": { "type": "null" },
             "volume_uid": { "type": "null" },
             "volume_gid": { "type": "null" }
@@ -435,8 +483,10 @@
             "secret_grants": { "type": "null" },
             "image_aliases": { "type": "null" },
             "network": { "type": "null" },
+            "networking": { "type": "null" },
             "memory_swappiness": { "type": "null" },
             "infra": { "type": "null" },
+            "create_infra": { "type": "null" },
             "volume_uid": { "type": "null" },
             "volume_gid": { "type": "null" }
           }

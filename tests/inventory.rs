@@ -649,6 +649,289 @@ async fn native_network_cidr_preserves_host_bits_and_normalizes_only_for_contain
 }
 
 #[tokio::test]
+async fn pod_infra_networking_is_authoritative_and_member_runtime_networking_is_not_promoted()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("5.4.0")?;
+    responses[10] = json(
+        r#"{
+          "Id":"pod-1","Name":"pod-one","CreateInfra":true,
+          "InfraConfig":{
+            "PortBindings":{"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"8080"}]},
+            "HostNetwork":false,
+            "NoManageResolvConf":false,"NoManageHosts":false,
+            "DNSServer":["192.0.2.53"],"DNSSearch":["example.test"],"DNSOption":["ndots:2"],
+            "HostAdd":["app.test:192.0.2.10"],"Networks":["app"],"NetworkOptions":{"opaque":"x=y"},
+            "StaticIP":"10.88.0.5","StaticMAC":"02:42:ac:11:00:02"
+          }
+        }"#,
+    )?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","Pod":"pod-1","NetworkSettings":{"Ports":{"8080/tcp":[{"HostIp":"203.0.113.1","HostPort":"9999"}]},"IPAddress":"203.0.113.2","MacAddress":"02:00:00:00:00:01","Networks":{"wrong":{}}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Pod(pod) = inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0].details()
+    else {
+        return Err("fixture must decode as a pod".into());
+    };
+    assert_eq!(pod.create_infra().observed().map(|value| *value.value()), Some(true));
+    let networking = pod
+        .networking()
+        .observed()
+        .ok_or("infra networking must be observed")?
+        .value();
+    assert_eq!(
+        networking.port_bindings().observed().map(|value| value.value().len()),
+        Some(1)
+    );
+    assert_eq!(
+        networking
+            .dns_servers()
+            .observed()
+            .map(|value| value.value()[0].to_string()),
+        Some("192.0.2.53".to_owned())
+    );
+    assert_eq!(
+        networking
+            .dns_servers()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    assert!(matches!(networking.host_entries(), ObservationField::Unmodelled(_)));
+    assert_eq!(
+        networking
+            .networks()
+            .observed()
+            .map(|value| value.value()[0].reference()),
+        Some("app")
+    );
+    assert_eq!(
+        networking.network_options().observed().map(|value| value.value().len()),
+        Some(1)
+    );
+    assert_eq!(
+        networking.static_ip().observed().map(|value| value.value().to_string()),
+        Some("10.88.0.5".to_owned())
+    );
+    assert!(matches!(networking.static_mac(), ObservationField::VersionInapplicable));
+    let ResourceDetails::Container(member) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a container".into());
+    };
+    assert!(matches!(member.networking(), ObservationField::NotApplicable));
+    Ok(())
+}
+
+#[tokio::test]
+async fn unpodded_host_config_networking_is_configured_and_management_gates_are_fail_closed()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "HostConfig":{
+            "CreateNetNS":true,
+            "PortBindings":{"53/udp":[{"HostIp":"127.0.0.1","HostPort":"5353"}]},
+            "Dns":["192.0.2.53"],"DnsSearch":["example.test"],"DnsOptions":["ndots:2"],
+            "ExtraHosts":["host.test:192.0.2.2"]
+          }
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a container".into());
+    };
+    let networking = container
+        .networking()
+        .observed()
+        .ok_or("configured networking")?
+        .value();
+    assert_eq!(
+        networking
+            .create_net_ns()
+            .observed()
+            .map(|value| (*value.value(), value.origin())),
+        Some((true, ObservationOrigin::Configured))
+    );
+    assert!(matches!(networking.host_network(), ObservationField::NotApplicable));
+    assert_eq!(
+        networking
+            .port_bindings()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert_eq!(
+        networking
+            .dns_servers()
+            .observed()
+            .map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Configured)
+    );
+    assert!(matches!(networking.host_entries(), ObservationField::Unmodelled(_)));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","HostConfig":{"CreateNetNS":true,"NoManageResolvConf":true,"NoManageHosts":true,"Dns":["192.0.2.53"],"ExtraHosts":["host.test:192.0.2.2"]}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a container".into());
+    };
+    let networking = container
+        .networking()
+        .observed()
+        .ok_or("configured networking")?
+        .value();
+    assert!(matches!(networking.dns_servers(), ObservationField::NotApplicable));
+    assert!(matches!(networking.host_entries(), ObservationField::NotApplicable));
+    Ok(())
+}
+
+#[tokio::test]
+async fn unpodded_port_bindings_are_validated_without_a_new_network_namespace_gate()
+-> Result<(), Box<dyn std::error::Error>> {
+    for create_net_ns in ["", r#""CreateNetNS":false,"#] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(format!(
+            r#"{{"Id":"container-a","Name":"a","HostConfig":{{{create_net_ns}"PortBindings":{{"53/udp":[{{"HostPort":"5353"}}]}}}}}}"#
+        ))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let ResourceDetails::Container(container) = inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0]
+            .details()
+        else {
+            return Err("fixture must decode as a container".into());
+        };
+        let networking = container
+            .networking()
+            .observed()
+            .ok_or("configured networking")?
+            .value();
+        assert_eq!(
+            networking.port_bindings().observed().map(|value| value.value().len()),
+            Some(1)
+        );
+
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(format!(
+            r#"{{"Id":"container-a","Name":"a","HostConfig":{{{create_net_ns}"PortBindings":false}}}}"#
+        ))?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("fixture must decode as a container".into());
+        };
+        assert!(matches!(container.networking(), ObservationField::Malformed));
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed
+                && finding.field_path() == Some("$.HostConfig.PortBindings")
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn infra_configuration_inconsistencies_and_malformed_members_fail_closed()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true}"#,
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":false,"InfraConfig":{}}"#,
+        r#"{"Id":"pod-1","Name":"pod-one","InfraConfig":{}}"#,
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"PortBindings":{"invalid":[{}]}}}"#,
+    ];
+    for body in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[10] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let pod = &inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0];
+        let ResourceDetails::Pod(pod_details) = pod.details() else {
+            return Err("fixture must decode as a pod".into());
+        };
+        assert!(matches!(pod_details.networking(), ObservationField::Malformed));
+        assert!(
+            pod.header()
+                .findings()
+                .iter()
+                .any(|finding| { finding.code() == DiagnosticCode::ResourceMalformed })
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[0] = LibpodResponse::new(
+        200,
+        LibpodHeaders::new(vec![LibpodHeader::new("libpod-api-version", "5.8.6")?]),
+        Vec::new(),
+    )?;
+    responses[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"5.8.6"}]}"#)?;
+    responses[10] = json(
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"StaticIP":"10.88.0.5","StaticMAC":"02:42:ac:11:00:02"}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Pod(pod) = inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0].details()
+    else {
+        return Err("fixture must decode as a pod".into());
+    };
+    let networking = pod.networking().observed().ok_or("infra networking")?.value();
+    assert_eq!(
+        networking.static_ip().observed().map(|value| value.value().to_string()),
+        Some("10.88.0.5".to_owned())
+    );
+    assert!(matches!(networking.static_mac(), ObservationField::VersionInapplicable));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[0] = LibpodResponse::new(
+        200,
+        LibpodHeaders::new(vec![LibpodHeader::new("libpod-api-version", "6.0.0")?]),
+        Vec::new(),
+    )?;
+    responses[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"6.0.0"}]}"#)?;
+    responses[10] = json(
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"StaticIP":"10.88.0.5","StaticMAC":"not-a-mac"}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Pod(pod) = inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0].details()
+    else {
+        return Err("fixture must decode as a pod".into());
+    };
+    let networking = pod.networking().observed().ok_or("infra networking")?.value();
+    assert!(matches!(networking.static_ip(), ObservationField::VersionInapplicable));
+    assert!(matches!(networking.static_mac(), ObservationField::VersionInapplicable));
+    assert!(
+        !inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0]
+            .header()
+            .unmodelled_fields()
+            .iter()
+            .any(|field| field.path() == "$.InfraConfig.StaticMAC")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn native_network_route_type_is_version_gated_and_malformed_families_do_not_partial_decode()
 -> Result<(), Box<dyn std::error::Error>> {
     let cases = [
@@ -1011,8 +1294,8 @@ async fn modeled_nested_boundaries_report_the_precise_path_without_hiding_the_re
         (
             10,
             ResourceKind::Pod,
-            r#"{"Id":"pod-1","Name":"pod-one","Networks":[false]}"#,
-            "$.Networks",
+            r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":false}"#,
+            "$.InfraConfig",
         ),
         (
             11,
@@ -1591,8 +1874,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
 }
 
 #[tokio::test]
-async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memberships()
--> Result<(), Box<dyn std::error::Error>> {
+async fn reconciliation_keeps_member_runtime_networks_out_of_pod_topology() -> Result<(), Box<dyn std::error::Error>> {
     let mut responses = fixture_responses("6.1.0")?;
     responses[8] = json(
         r#"{"Id":"container-a","Name":"a","Image":"sha256:abc","ImageName":"image:latest","Pod":"pod-one","NetworkSettings":{"Networks":{"missing-network":{}}}}"#,
@@ -1608,7 +1890,7 @@ async fn reconciliation_resolves_aliases_and_reports_missing_or_disagreeing_memb
         first
             .findings()
             .iter()
-            .any(|finding| finding.code() == DiagnosticCode::UnresolvedRelationship)
+            .all(|finding| finding.code() != DiagnosticCode::UnresolvedRelationship)
     );
     assert!(
         first
@@ -1642,7 +1924,10 @@ async fn public_debug_output_and_network_options_never_leak_protected_values() -
 
     let mut responses = fixture_responses("6.1.0")?;
     responses[8] = json(
-        r#"{"Id":"container-a","Name":"a","Image":"SENTINEL_LOCAL_IMAGE","ImageName":"SENTINEL_CONFIGURED_IMAGE","Config":{"Labels":{"SENTINEL_LABEL_KEY":"SENTINEL_LABEL_VALUE"},"Env":["SENTINEL_ENV_NAME=SENTINEL_ENV_VALUE"]}}"#,
+        r#"{"Id":"container-a","Name":"a","Image":"SENTINEL_LOCAL_IMAGE","ImageName":"SENTINEL_CONFIGURED_IMAGE","Config":{"Labels":{"SENTINEL_LABEL_KEY":"SENTINEL_LABEL_VALUE"},"Env":["SENTINEL_ENV_NAME=SENTINEL_ENV_VALUE"]},"HostConfig":{"CreateNetNS":true,"PortBindings":{"8080/tcp":[{"HostIp":"203.0.113.253","HostPort":"65000"}]},"DnsSearch":["SENTINEL_CONTAINER_DNS_SEARCH"],"DnsOptions":["SENTINEL_CONTAINER_DNS_OPTION"],"ExtraHosts":["SENTINEL_CONTAINER_HOST:203.0.113.252"]}}"#,
+    )?;
+    responses[10] = json(
+        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"DNSSearch":["SENTINEL_POD_DNS_SEARCH"],"DNSOption":["SENTINEL_POD_DNS_OPTION"],"HostAdd":["SENTINEL_POD_HOST:203.0.113.251"],"Networks":["SENTINEL_POD_NETWORK"],"NetworkOptions":{"SENTINEL_NETWORK_OPTION_KEY":["SENTINEL_NETWORK_OPTION_VALUE"]}}}"#,
     )?;
     responses[11] = json(
         r#"{"id":"network-1","name":"app","labels":{"SENTINEL_NETWORK_LABEL":"SENTINEL_NETWORK_LABEL_VALUE"},"options":{"SENTINEL_OPTION_KEY":"SENTINEL_OPTION_VALUE"},"subnets":[{"subnet":"10.17.0.0/24"}]}"#,
@@ -1685,6 +1970,14 @@ async fn public_debug_output_and_network_options_never_leak_protected_values() -
         "SENTINEL_IMAGE_ALIAS",
         "SENTINEL_SECRET_DRIVER",
         "SENTINEL_DIRECT_OBSERVED_VALUE",
+        "SENTINEL_CONTAINER_DNS_SEARCH",
+        "SENTINEL_CONTAINER_DNS_OPTION",
+        "SENTINEL_CONTAINER_HOST",
+        "SENTINEL_POD_DNS_SEARCH",
+        "SENTINEL_POD_DNS_OPTION",
+        "SENTINEL_POD_HOST",
+        "SENTINEL_POD_NETWORK",
+        "SENTINEL_NETWORK_OPTION_VALUE",
     ] {
         assert!(!rendered.contains(secret), "debug output leaked {secret}");
     }

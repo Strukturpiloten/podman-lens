@@ -156,6 +156,19 @@ effective default of `unicast` when absent from a reviewed 6.0+ response. Revers
 ranges are rejected as a PodmanLens defensive consistency policy; that is not a claim about
 Podman's own validation.
 
+M7-B2b adds observation-only pod and unpodded-container networking. Pod networking is read only
+from `Pod.InspectPodData.InfraConfig` when `CreateInfra` is true; member `NetworkSettings` and
+member `HostConfig` networking never imply pod configuration. An unpodded container retains only
+its bounded `HostConfig` configuration with configured provenance. Its `CreateNetNS` field is
+retained as a namespace-creation gate and is not inverted into a host-network claim because false
+may describe a different shared namespace. Infra observations are effective. Resolver and
+hosts-file management gates prevent promotion of their associated values. Port bindings, DNS
+lists, pod host-network state, and network references have typed stateful views;
+free-form `NetworkOptions` are opaque and `HostAdd` remains value-free unmodelled hosts-file data.
+Runtime addresses, runtime port assignments, MAC addresses, and arbitrary option values are never
+portable intent. Deprecated `StaticIP` is usable only through 5.8.6; `StaticMAC` is version-
+inapplicable throughout the reviewed range.
+
 ## Ordered deployment plans
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a

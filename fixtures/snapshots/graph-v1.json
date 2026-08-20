@@ -46,11 +46,6 @@
       ],
       "prerequisites": [
         {
-          "kind": "network",
-          "id": "network-1",
-          "name": "app"
-        },
-        {
           "kind": "volume",
           "id": "database-data",
           "name": "database-data"
@@ -113,24 +108,6 @@
         "name": "a"
       },
       "prerequisite": {
-        "kind": "network",
-        "id": "network-1",
-        "name": "app"
-      },
-      "evidence": {
-        "kind": "native_relationship",
-        "field_paths": [
-          "$.NetworkSettings.Networks.app"
-        ]
-      }
-    },
-    {
-      "dependent": {
-        "kind": "container",
-        "id": "container-a",
-        "name": "a"
-      },
-      "prerequisite": {
         "kind": "volume",
         "id": "database-data",
         "name": "database-data"
@@ -176,24 +153,6 @@
         "field_paths": [
           "$.Config.Secrets[0].ID",
           "$.Config.Secrets[0].Name"
-        ]
-      }
-    },
-    {
-      "dependent": {
-        "kind": "pod",
-        "id": "pod-1",
-        "name": "pod-one"
-      },
-      "prerequisite": {
-        "kind": "network",
-        "id": "network-1",
-        "name": "app"
-      },
-      "evidence": {
-        "kind": "native_relationship",
-        "field_paths": [
-          "$.Networks[0]"
         ]
       }
     }
@@ -310,21 +269,6 @@
         "kind": "pod",
         "id": "pod-1",
         "name": "pod-one"
-      },
-      "related": {
-        "kind": "container",
-        "id": "container-a",
-        "name": "a"
-      },
-      "position": null,
-      "root_origin": null
-    },
-    {
-      "kind": "prerequisite",
-      "resource": {
-        "kind": "network",
-        "id": "network-1",
-        "name": "app"
       },
       "related": {
         "kind": "container",

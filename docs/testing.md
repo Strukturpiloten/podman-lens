@@ -35,8 +35,8 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
-The coverage ledger is parsed as a strict public two-plane catalogue with 66 input-observation and
-50 output-intent rows (116 total). Its unit tests reject schema,
+The coverage ledger is parsed as a strict public two-plane catalogue with 88 input-observation and
+50 output-intent rows (138 total). Its unit tests reject schema,
 identifier, diagnostic, observation/planner/CLI/Libpod link, expected-row, and plausible
 target-availability swap mutations. Inventory tests prove that unmodeled `HostConfig` members
 become bounded unsupported metadata, `Secret.Spec.Driver` does not become unknown metadata, and
@@ -131,3 +131,13 @@ preservation, and explicit rootful/rootless/unknown planning. Byte-exact CLI and
 all reviewed releases, IPv4/IPv6, TCP/UDP/SCTP, deterministic order, pod versus unpodded ownership,
 6.0 target boundaries, and strict per-release Podman/common-module catalogue mutations. These tests
 use no live connection and never run generated commands.
+
+M7-B2b tests use only pinned or synthesized offline inspect responses. They prove that a pod's
+`InfraConfig` is authoritative over disagreeing member runtime values; `CreateInfra` and
+`InfraConfig` inconsistencies fail closed; unpodded `HostConfig` values retain configured origin;
+and resolver/hosts gates suppress their dependent fields. `CreateNetNS` is preserved separately,
+while port bindings remain validated when that gate is absent or false. The explicit 5.8.6/6.0
+boundary proves deprecated `StaticIP` and permanently inapplicable `StaticMAC` behavior.
+Snapshot tests assert state,
+origin, and counts only, never addresses, host entries, DNS strings, port values, network names,
+or opaque option data.

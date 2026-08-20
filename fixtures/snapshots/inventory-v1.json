@@ -123,7 +123,7 @@
             "relationships": {
               "state": "observed",
               "origin": "effective",
-              "count": 6
+              "count": 5
             },
             "environment": {
               "state": "observed",
@@ -141,6 +141,66 @@
             },
             "image_aliases": null,
             "network": null,
+            "networking": {
+              "port_bindings": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "create_net_ns": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "host_network": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "dns_servers": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "dns_search": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "dns_options": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "host_entries": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "networks": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "network_options": {
+                "state": "not_applicable",
+                "origin": null,
+                "count": 0
+              },
+              "no_manage_resolv_conf": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "no_manage_hosts": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "static_ip": {
+                "state": "not_applicable",
+                "origin": null
+              },
+              "static_mac": {
+                "state": "not_applicable",
+                "origin": null
+              }
+            },
             "memory_swappiness": {
               "state": "observed",
               "origin": "effective"
@@ -149,6 +209,7 @@
               "state": "absent",
               "origin": null
             },
+            "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
             "volume_gid": null,
@@ -247,6 +308,66 @@
             },
             "image_aliases": null,
             "network": null,
+            "networking": {
+              "port_bindings": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "create_net_ns": {
+                "state": "absent",
+                "origin": null
+              },
+              "host_network": {
+                "state": "absent",
+                "origin": null
+              },
+              "dns_servers": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "dns_search": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "dns_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "host_entries": {
+                "state": "absent",
+                "origin": null
+              },
+              "networks": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "network_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "no_manage_resolv_conf": {
+                "state": "absent",
+                "origin": null
+              },
+              "no_manage_hosts": {
+                "state": "absent",
+                "origin": null
+              },
+              "static_ip": {
+                "state": "absent",
+                "origin": null
+              },
+              "static_mac": {
+                "state": "absent",
+                "origin": null
+              }
+            },
             "memory_swappiness": {
               "state": "absent",
               "origin": null
@@ -255,6 +376,7 @@
               "state": "absent",
               "origin": null
             },
+            "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
             "volume_gid": null,
@@ -317,8 +439,43 @@
             },
             "state": "complete",
             "unmodelled_completeness": "complete",
-            "unmodelled_fields": [],
-            "findings": [],
+            "unmodelled_fields": [
+              {
+                "id": "podman.native.pod.top-level",
+                "path": "$.Networks",
+                "json_kind": "array",
+                "resource": {
+                  "kind": "pod",
+                  "id": "pod-1",
+                  "name": "pod-one"
+                },
+                "evidence": {
+                  "engine_version": "6.1.0",
+                  "api_version": "6.1.0",
+                  "podman_minor_line": "6.1",
+                  "minimum_podman_version": "6.1.0",
+                  "maximum_exclusive_podman_version": "6.2.0",
+                  "minimum_libpod_api_version": "4.0.0",
+                  "observed_podman_version": "6.1.0",
+                  "observed_libpod_api_version": "6.1.0",
+                  "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
+                  "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+                  "evidence_release_tag": "v6.1.0"
+                }
+              }
+            ],
+            "findings": [
+              {
+                "code": "PLN0023",
+                "resource": {
+                  "kind": "pod",
+                  "id": "pod-1",
+                  "name": "pod-one"
+                },
+                "field_path": "$.Networks",
+                "occurrence": null
+              }
+            ],
             "evidence": {
               "engine_version": "6.1.0",
               "api_version": "6.1.0",
@@ -345,13 +502,77 @@
             "relationships": {
               "state": "observed",
               "origin": "effective",
-              "count": 2
+              "count": 1
             },
             "environment": null,
             "image_aliases": null,
             "network": null,
+            "networking": {
+              "port_bindings": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "create_net_ns": {
+                "state": "absent",
+                "origin": null
+              },
+              "host_network": {
+                "state": "absent",
+                "origin": null
+              },
+              "dns_servers": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "dns_search": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "dns_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "host_entries": {
+                "state": "absent",
+                "origin": null
+              },
+              "networks": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "network_options": {
+                "state": "absent",
+                "origin": null,
+                "count": 0
+              },
+              "no_manage_resolv_conf": {
+                "state": "absent",
+                "origin": null
+              },
+              "no_manage_hosts": {
+                "state": "absent",
+                "origin": null
+              },
+              "static_ip": {
+                "state": "absent",
+                "origin": null
+              },
+              "static_mac": {
+                "state": "absent",
+                "origin": null
+              }
+            },
             "memory_swappiness": null,
             "infra": null,
+            "create_infra": {
+              "state": "absent",
+              "origin": null
+            },
             "secret_driver": null,
             "volume_uid": null,
             "volume_gid": null,
@@ -431,8 +652,10 @@
                 "count": 0
               }
             },
+            "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
             "volume_gid": null,
@@ -513,8 +736,10 @@
             "environment": null,
             "image_aliases": null,
             "network": null,
+            "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "create_infra": null,
             "secret_driver": null,
             "volume_uid": {
               "state": "observed",
@@ -595,8 +820,10 @@
               "count": 2
             },
             "network": null,
+            "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "create_infra": null,
             "secret_driver": null,
             "volume_uid": null,
             "volume_gid": null,
@@ -667,8 +894,10 @@
             "environment": null,
             "image_aliases": null,
             "network": null,
+            "networking": null,
             "memory_swappiness": null,
             "infra": null,
+            "create_infra": null,
             "secret_driver": {
               "state": "observed",
               "origin": "configured"

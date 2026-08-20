@@ -29,7 +29,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://docs.podman.io/en/v6.1.0/_static/api.html",
       "artifact": "rootful-6.1.responses.json",
-      "sha256": "e80ef7780573b6018b1eeb860c44a9706346a186940f8e92b548b7f6228fc29e",
+      "sha256": "8d05ea92d7b486603ba3dc5fd54f8b1660cdc9b6317e078cf54e19180d2c922b",
       "synthetic": true,
       "coverage": [
         "pod",

@@ -238,8 +238,10 @@ struct ResourceDetailsSnapshot {
     environment: Option<ProtectedEnvironmentSnapshot>,
     image_aliases: Option<FieldCountSnapshot>,
     network: Option<NetworkSnapshot>,
+    networking: Option<NativeNetworkingSnapshot>,
     memory_swappiness: Option<FieldStateSnapshot>,
     infra: Option<FieldStateSnapshot>,
+    create_infra: Option<FieldStateSnapshot>,
     secret_driver: Option<FieldStateSnapshot>,
     volume_uid: Option<VolumeOwnerFieldSnapshot>,
     volume_gid: Option<VolumeOwnerFieldSnapshot>,
@@ -254,7 +256,7 @@ struct ResourceDetailsSnapshot {
     secret_grants: Option<FieldCountSnapshot>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 struct FieldStateSnapshot {
     state: &'static str,
     origin: Option<&'static str>,
@@ -286,6 +288,25 @@ struct NetworkSnapshot {
     options: FieldCountSnapshot,
     subnets: FieldCountSnapshot,
     routes: FieldCountSnapshot,
+}
+
+/// Redacted state/count-only native networking snapshot. It deliberately omits every address,
+/// host entry, network name, DNS value, port value, option key, and option value.
+#[derive(Debug, Serialize)]
+struct NativeNetworkingSnapshot {
+    port_bindings: FieldCountSnapshot,
+    create_net_ns: FieldStateSnapshot,
+    host_network: FieldStateSnapshot,
+    dns_servers: FieldCountSnapshot,
+    dns_search: FieldCountSnapshot,
+    dns_options: FieldCountSnapshot,
+    host_entries: FieldStateSnapshot,
+    networks: FieldCountSnapshot,
+    network_options: FieldCountSnapshot,
+    no_manage_resolv_conf: FieldStateSnapshot,
+    no_manage_hosts: FieldStateSnapshot,
+    static_ip: FieldStateSnapshot,
+    static_mac: FieldStateSnapshot,
 }
 
 #[derive(Debug, Serialize)]
@@ -435,8 +456,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             secret_grants: Some(collection_summary(value.secret_grants(), Vec::len)),
             image_aliases: None,
             network: None,
+            networking: Some(native_networking(value.networking())),
             memory_swappiness: Some(field_summary(value.memory_swappiness())),
             infra: Some(field_summary(value.infra())),
+            create_infra: None,
             secret_driver: None,
             volume_uid: None,
             volume_gid: None,
@@ -459,8 +482,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             secret_grants: None,
             image_aliases: None,
             network: None,
+            networking: Some(native_networking(value.networking())),
             memory_swappiness: None,
             infra: None,
+            create_infra: Some(field_summary(value.create_infra())),
             secret_driver: None,
             volume_uid: None,
             volume_gid: None,
@@ -488,8 +513,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
                 subnets: collection_summary(value.subnets(), Vec::len),
                 routes: collection_summary(value.routes(), Vec::len),
             }),
+            networking: None,
             memory_swappiness: None,
             infra: None,
+            create_infra: None,
             secret_driver: None,
             volume_uid: None,
             volume_gid: None,
@@ -512,8 +539,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             secret_grants: None,
             image_aliases: None,
             network: None,
+            networking: None,
             memory_swappiness: None,
             infra: None,
+            create_infra: None,
             secret_driver: None,
             volume_uid: Some(volume_owner(value.uid())),
             volume_gid: Some(volume_owner(value.gid())),
@@ -536,8 +565,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             secret_grants: None,
             image_aliases: Some(collection_summary(value.aliases(), Vec::len)),
             network: None,
+            networking: None,
             memory_swappiness: None,
             infra: None,
+            create_infra: None,
             secret_driver: None,
             volume_uid: None,
             volume_gid: None,
@@ -560,8 +591,10 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
             secret_grants: None,
             image_aliases: None,
             network: None,
+            networking: None,
             memory_swappiness: None,
             infra: None,
+            create_infra: None,
             secret_driver: Some(field_summary(value.driver())),
             volume_uid: None,
             volume_gid: None,
@@ -571,6 +604,49 @@ fn details(source: &ResourceDetails) -> ResourceDetailsSnapshot {
 
 fn label_summary(value: &ObservationField<crate::Labels>) -> FieldCountSnapshot {
     collection_summary(value, BTreeMap::len)
+}
+
+fn native_networking(value: &ObservationField<crate::NativeNetworkingObservation>) -> NativeNetworkingSnapshot {
+    let Some(value) = value.observed().map(crate::ObservedValue::value) else {
+        let state = field_summary(value);
+        return NativeNetworkingSnapshot {
+            port_bindings: empty_collection_summary(&state),
+            create_net_ns: state.clone(),
+            host_network: state.clone(),
+            dns_servers: empty_collection_summary(&state),
+            dns_search: empty_collection_summary(&state),
+            dns_options: empty_collection_summary(&state),
+            host_entries: state.clone(),
+            networks: empty_collection_summary(&state),
+            network_options: empty_collection_summary(&state),
+            no_manage_resolv_conf: state.clone(),
+            no_manage_hosts: state.clone(),
+            static_ip: state.clone(),
+            static_mac: state,
+        };
+    };
+    NativeNetworkingSnapshot {
+        port_bindings: collection_summary(value.port_bindings(), Vec::len),
+        create_net_ns: field_summary(value.create_net_ns()),
+        host_network: field_summary(value.host_network()),
+        dns_servers: collection_summary(value.dns_servers(), Vec::len),
+        dns_search: collection_summary(value.dns_search(), Vec::len),
+        dns_options: collection_summary(value.dns_options(), Vec::len),
+        host_entries: field_summary(value.host_entries()),
+        networks: collection_summary(value.networks(), Vec::len),
+        network_options: collection_summary(value.network_options(), crate::NativeOpaqueNetworkOptions::len),
+        no_manage_resolv_conf: field_summary(value.no_manage_resolv_conf()),
+        no_manage_hosts: field_summary(value.no_manage_hosts()),
+        static_ip: field_summary(value.static_ip()),
+        static_mac: field_summary(value.static_mac()),
+    }
+}
+
+fn empty_collection_summary(field: &FieldStateSnapshot) -> FieldCountSnapshot {
+    FieldCountSnapshot {
+        field: field.clone(),
+        count: 0,
+    }
 }
 
 fn collection_summary<T>(value: &ObservationField<T>, count: impl FnOnce(&T) -> usize) -> FieldCountSnapshot {

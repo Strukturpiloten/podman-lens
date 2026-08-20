@@ -154,6 +154,7 @@ impl ReadOnlyUnixTransport {
         tokio::pin!(response_future);
         let response = timeout(self.timeouts.headers(), async {
             let response = tokio::select! {
+                biased;
                 response = &mut response_future => response,
                 result = &mut connection => {
                     result.map_err(|error| classify_hyper_error(&error))?;
@@ -172,6 +173,7 @@ impl ReadOnlyUnixTransport {
         tokio::pin!(body_future);
         let collected = timeout(self.timeouts.body(), async {
             let body = tokio::select! {
+                biased;
                 body = &mut body_future => body,
                 result = &mut connection => {
                     result.map_err(|error| classify_body_hyper_error(&error))?;

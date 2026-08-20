@@ -118,6 +118,24 @@ impl SupportedPodmanRange {
 pub struct TargetProfile {
     podman_version: ObservedPodmanVersion,
     api_version: ObservedApiVersion,
+    execution_context: TargetExecutionContext,
+}
+
+/// Explicit privilege context of the selected deployment target.
+///
+/// Podman accepts some native settings, including static network addresses and MAC addresses,
+/// only for rootful targets. The context is caller-supplied evidence; `PodmanLens` never probes the
+/// development machine to infer it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TargetExecutionContext {
+    /// The target privilege context has not been explicitly established.
+    #[default]
+    Unknown,
+    /// The target is explicitly rootless.
+    Rootless,
+    /// The target is explicitly rootful.
+    Rootful,
 }
 
 impl TargetProfile {
@@ -138,7 +156,13 @@ impl TargetProfile {
         Ok(Self {
             podman_version,
             api_version,
+            execution_context: TargetExecutionContext::Unknown,
         })
+    }
+
+    /// Records the caller-proven privilege context of the deployment target.
+    pub fn set_execution_context(&mut self, context: TargetExecutionContext) {
+        self.execution_context = context;
     }
 
     /// Returns the explicit Podman target version.
@@ -151,6 +175,12 @@ impl TargetProfile {
     #[must_use]
     pub fn api_version(&self) -> &ObservedApiVersion {
         &self.api_version
+    }
+
+    /// Returns the caller-proven privilege context of the deployment target.
+    #[must_use]
+    pub const fn execution_context(&self) -> TargetExecutionContext {
+        self.execution_context
     }
 }
 

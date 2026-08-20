@@ -14,8 +14,8 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     DeploymentConnectionReference, DeploymentOperation, DeploymentPlan, DeploymentResource, DeploymentResourceId,
-    Diagnostic, DiagnosticCode, ExternalPrecondition, NamedVolumeMount, ResourceKind, RestartPolicy,
-    SensitiveInputReference,
+    Diagnostic, DiagnosticCode, ExternalPrecondition, HostAlias, NamedVolumeMount, NetworkAttachment, NetworkIntent,
+    NetworkRoute, PortMapping, PortProtocol, ResourceKind, RestartPolicy, RouteType, SensitiveInputReference,
 };
 
 const RENDERING_CATALOGUE_JSON: &str = include_str!("../catalogue/v1/podman-deployment-rendering.json");
@@ -44,6 +44,7 @@ struct ReviewedRenderingLine {
     version: String,
     revision: String,
     tag: String,
+    common_module: ModulePin,
     operations: Vec<ReviewedRenderingOperation>,
     field_evidence: Vec<ReviewedFieldEvidence>,
 }
@@ -52,9 +53,9 @@ struct ReviewedRenderingLine {
 #[serde(deny_unknown_fields)]
 struct ReviewedRenderingOperation {
     category: RenderingOperationCategory,
-    cli_source: String,
-    libpod_endpoint_source: String,
-    body_source: Option<String>,
+    cli_source: SourceReference,
+    libpod_endpoint_source: SourceReference,
+    body_source: Option<SourceReference>,
 }
 
 #[derive(Deserialize)]
@@ -64,9 +65,42 @@ struct ReviewedFieldEvidence {
     operation: RenderingOperationCategory,
     cli: CliFieldClaim,
     libpod: LibpodFieldClaim,
-    cli_source: String,
-    model_sources: Vec<String>,
-    handler_source: String,
+    cli_source: SourceReference,
+    model_sources: Vec<SourceReference>,
+    handler_source: SourceReference,
+}
+
+/// One immutable source location backing a rendering claim.
+///
+/// URLs are deliberately not accepted here: they obscure repository ownership and permit a
+/// revision from one repository to be paired with a path from another. The parser constructs a
+/// URL only after it has checked this structured, repository-aware form against the canonical
+/// field matrix.
+#[derive(Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct SourceReference {
+    repository: SourceRepository,
+    revision: String,
+    path: String,
+    module: Option<ModulePin>,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum SourceRepository {
+    ContainersPodman,
+    ContainersCommon,
+    ContainersContainerLibs,
+    PodmanContainerToolsContainerLibs,
+}
+
+#[derive(Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct ModulePin {
+    repository: SourceRepository,
+    path: String,
+    version: String,
+    revision: String,
 }
 
 #[derive(Deserialize)]
@@ -123,6 +157,30 @@ enum RenderedField {
     ContainerRestartPolicy,
     ContainerNamedVolumeMount,
     PodInfraNamedVolumeMount,
+    ContainerNetworkAttachment,
+    PodNetworkAttachment,
+    NetworkAlias,
+    NetworkStaticIp,
+    NetworkStaticMac,
+    ContainerPortMapping,
+    PodPortMapping,
+    ContainerDnsServers,
+    ContainerDnsSearch,
+    ContainerDnsOptions,
+    PodDnsServers,
+    PodDnsSearch,
+    PodDnsOptions,
+    ContainerHostAlias,
+    PodHostAlias,
+    ContainerNetworkOrder,
+    NetworkIpamSubnet,
+    NetworkIpamGateway,
+    NetworkIpamRange,
+    NetworkRoute,
+    NetworkRouteTypeUnicast,
+    NetworkRouteTypeBlackhole,
+    NetworkRouteTypeUnreachable,
+    NetworkRouteTypeProhibit,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -143,6 +201,34 @@ enum CliFlag {
     Restart,
     #[serde(rename = "--volume")]
     Volume,
+    #[serde(rename = "--network")]
+    Network,
+    #[serde(rename = "--network-alias")]
+    NetworkAlias,
+    #[serde(rename = "--ip")]
+    Ip,
+    #[serde(rename = "--ip6")]
+    Ip6,
+    #[serde(rename = "--mac-address")]
+    MacAddress,
+    #[serde(rename = "--publish")]
+    Publish,
+    #[serde(rename = "--dns")]
+    Dns,
+    #[serde(rename = "--dns-search")]
+    DnsSearch,
+    #[serde(rename = "--dns-option")]
+    DnsOption,
+    #[serde(rename = "--add-host")]
+    AddHost,
+    #[serde(rename = "--subnet")]
+    Subnet,
+    #[serde(rename = "--gateway")]
+    Gateway,
+    #[serde(rename = "--ip-range")]
+    IpRange,
+    #[serde(rename = "--route")]
+    Route,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -156,6 +242,20 @@ enum CliValueShape {
     EnvironmentAssignment,
     RestartPolicy,
     NamedVolumeMount,
+    NetworkAttachment,
+    NetworkAlias,
+    StaticIp,
+    StaticMac,
+    PortMapping,
+    DnsServer,
+    DnsSearch,
+    DnsOption,
+    HostAlias,
+    NetworkOrder,
+    NetworkSubnet,
+    NetworkGateway,
+    NetworkIpRange,
+    NetworkRoute,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -501,7 +601,7 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
         if blocked_resources.contains(operation.id().resource()) {
             continue;
         }
-        let unsupported_fields = unsupported_fields(operation.resource_intent());
+        let unsupported_fields = unsupported_fields(operation.resource_intent(), plan.target().execution_context());
         if !unsupported_fields.is_empty() {
             blocked_resources.insert(operation.id().resource().clone());
             findings.extend(unsupported_fields.into_iter().map(|field| {
@@ -554,18 +654,19 @@ fn render_operation(
     let id = operation.id().resource();
     let mut prefix = connection.map_or_else(Vec::new, |value| vec!["--connection".to_owned(), value.to_owned()]);
     let (status, cli_suffix, method, path, body, input) = match operation.resource_intent() {
-        DeploymentResource::Network(network) => (
-            RenderStatus::Exact,
-            vec![
-                "network".to_owned(),
-                "create".to_owned(),
-                network.identity().name().to_owned(),
-            ],
-            RenderedHttpMethod::Post,
-            format!("/v{version}/libpod/networks/create"),
-            RenderedHttpBody::Json(json!({"name": network.identity().name()})),
-            None,
-        ),
+        DeploymentResource::Network(network) => {
+            let mut cli_suffix = vec!["network".to_owned(), "create".to_owned()];
+            append_network_create_arguments(&mut cli_suffix, network);
+            cli_suffix.push(network.identity().name().to_owned());
+            (
+                RenderStatus::Exact,
+                cli_suffix,
+                RenderedHttpMethod::Post,
+                format!("/v{version}/libpod/networks/create"),
+                RenderedHttpBody::Json(network_create_configuration(network)),
+                None,
+            )
+        }
         DeploymentResource::Volume(volume) => (
             RenderStatus::Exact,
             vec![
@@ -631,7 +732,16 @@ fn render_operation(
                     "--name".to_owned(),
                     pod.identity().name().to_owned(),
                 ];
-                append_network_arguments(&mut cli_suffix, pod.networks());
+                if !append_network_arguments(&mut cli_suffix, pod.networks(), None) {
+                    return Err(RenderingFinding::new(
+                        DiagnosticCode::RenderingUnsupported,
+                        Some(id.clone()),
+                        Some("networks.cli_ambiguous"),
+                    ));
+                }
+                append_port_arguments(&mut cli_suffix, pod.ports());
+                append_dns_arguments(&mut cli_suffix, pod.dns());
+                append_host_alias_arguments(&mut cli_suffix, pod.host_aliases());
                 if !append_named_volume_arguments(&mut cli_suffix, pod.infra_mounts()) {
                     return Err(RenderingFinding::new(
                         DiagnosticCode::RenderingUnsupported,
@@ -641,7 +751,8 @@ fn render_operation(
                 }
                 let mut body = Map::new();
                 body.insert("name".to_owned(), Value::String(pod.identity().name().to_owned()));
-                body.insert("networks".to_owned(), networks);
+                body.insert("Networks".to_owned(), networks);
+                append_networking_json(&mut body, pod.ports(), pod.dns(), pod.host_aliases(), None);
                 if !pod.infra_mounts().is_empty() {
                     body.insert("volumes".to_owned(), named_volume_json(pod.infra_mounts()));
                 }
@@ -688,8 +799,32 @@ fn render_operation(
                     cli_suffix.push(pod.name().to_owned());
                     json!({"image": image, "pod": pod.name()})
                 } else {
-                    append_network_arguments(&mut cli_suffix, container.networks());
-                    json!({"image": image, "networks": network_configuration(container.networks())})
+                    if !append_network_arguments(&mut cli_suffix, container.networks(), container.network_order()) {
+                        return Err(RenderingFinding::new(
+                            DiagnosticCode::RenderingUnsupported,
+                            Some(id.clone()),
+                            Some("networks.cli_ambiguous"),
+                        ));
+                    }
+                    append_port_arguments(&mut cli_suffix, container.ports());
+                    append_dns_arguments(&mut cli_suffix, container.dns());
+                    append_host_alias_arguments(&mut cli_suffix, container.host_aliases());
+                    let mut body = json!({"image": image, "Networks": network_configuration(container.networks())});
+                    let Some(body_map) = body.as_object_mut() else {
+                        return Err(RenderingFinding::new(
+                            DiagnosticCode::RenderingUnsupported,
+                            Some(id.clone()),
+                            Some("container_body"),
+                        ));
+                    };
+                    append_networking_json(
+                        body_map,
+                        container.ports(),
+                        container.dns(),
+                        container.host_aliases(),
+                        container.network_order(),
+                    );
+                    body
                 };
                 if !append_named_volume_arguments(&mut cli_suffix, container.mounts()) {
                     return Err(RenderingFinding::new(
@@ -763,7 +898,7 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
     let capabilities = crate::capability_catalogue().map_err(|_| ())?;
-    if catalogue.schema_version != 3
+    if catalogue.schema_version != 4
         || catalogue.provenance.trim().is_empty()
         || catalogue.reviewed_lines.len() != capabilities.len()
     {
@@ -779,6 +914,7 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
             || line.revision != capability.evidence().revision()
             || line.tag != capability.evidence().release_tag()
             || !is_lowercase_sha40(&line.revision)
+            || !valid_common_module(&line.version, &line.common_module)
             || !validated_renderer_operations(&line, &expected_operations)
             || !validated_field_evidence(&line)
         {
@@ -906,13 +1042,13 @@ fn validated_renderer_operations(line: &ReviewedRenderingLine, expected_categori
             let Some((cli_path, libpod_path, body_path)) = rendering_source_paths(operation.category.as_str()) else {
                 return false;
             };
-            operation.cli_source == immutable_source_url(&line.revision, cli_path)
-                && operation.libpod_endpoint_source == immutable_source_url(&line.revision, libpod_path)
+            source_matches_podman(&operation.cli_source, &line.revision, cli_path)
+                && source_matches_podman(&operation.libpod_endpoint_source, &line.revision, libpod_path)
                 && match body_path {
-                    Some(body_path) => {
-                        operation.body_source.as_deref()
-                            == Some(immutable_source_url(&line.revision, body_path).as_str())
-                    }
+                    Some(body_path) => operation
+                        .body_source
+                        .as_ref()
+                        .is_some_and(|source| source_matches_podman(source, &line.revision, body_path)),
                     None => operation.body_source.is_none(),
                 }
         })
@@ -933,13 +1069,14 @@ fn validated_field_evidence(line: &ReviewedRenderingLine) -> bool {
                 && evidence.cli.flag == flag
                 && evidence.cli.value_shape == shape
                 && evidence.libpod.json_member == member
-                && evidence.cli_source == immutable_source_url(&line.revision, cli_path)
-                && evidence.model_sources
-                    == model_paths
-                        .iter()
-                        .map(|path| immutable_source_url(&line.revision, path))
-                        .collect::<Vec<_>>()
-                && evidence.handler_source == immutable_source_url(&line.revision, handler_path)
+                && source_matches_podman(&evidence.cli_source, &line.revision, cli_path)
+                && evidence.model_sources.len() == model_paths.len()
+                && evidence
+                    .model_sources
+                    .iter()
+                    .zip(model_paths)
+                    .all(|(source, path)| source_matches_podman(source, &line.revision, path))
+                && source_matches_podman(&evidence.handler_source, &line.revision, handler_path)
         })
 }
 
@@ -1067,6 +1204,7 @@ fn expected_field_claim(
             POD_VOLUME_MODEL,
             "pkg/api/handlers/libpod/pods.go",
         ),
+        _ => unreachable!("B2 fields remain fail-closed until their evidence matrix is enabled"),
     }
 }
 
@@ -1108,8 +1246,67 @@ fn rendering_source_paths(category: &str) -> Option<(&'static str, &'static str,
     }
 }
 
-fn immutable_source_url(revision: &str, path: &str) -> String {
-    format!("https://github.com/containers/podman/blob/{revision}/{path}")
+fn source_matches_podman(source: &SourceReference, revision: &str, path: &str) -> bool {
+    source.repository == SourceRepository::ContainersPodman
+        && source.revision == revision
+        && source.path == path
+        && source.module.is_none()
+        && is_lowercase_sha40(&source.revision)
+}
+
+fn valid_common_module(version: &str, module: &ModulePin) -> bool {
+    matches!(
+        (
+            version,
+            module.repository,
+            module.path.as_str(),
+            module.version.as_str(),
+            module.revision.as_str()
+        ),
+        (
+            "5.4.0",
+            SourceRepository::ContainersCommon,
+            "github.com/containers/common",
+            "v0.62.0",
+            "cde1afdf623bdb9595d1fdc7acffa6e2f03a06b2"
+        ) | (
+            "5.5.0",
+            SourceRepository::ContainersCommon,
+            "github.com/containers/common",
+            "v0.63.0",
+            "92927328862e4837d87bcbc0725b713387399984"
+        ) | (
+            "5.6.0",
+            SourceRepository::ContainersCommon,
+            "github.com/containers/common",
+            "v0.64.1",
+            "c007f37a6c55a53a7d41419d094c815bf2e46ca3"
+        ) | (
+            "5.7.0",
+            SourceRepository::PodmanContainerToolsContainerLibs,
+            "go.podman.io/common",
+            "v0.66.0",
+            "8163ca799c317e3dea886be7228406ec8cf06abc"
+        ) | (
+            "5.8.6",
+            SourceRepository::PodmanContainerToolsContainerLibs,
+            "go.podman.io/common",
+            "v0.67.1",
+            "c8b7f74383aa8bac5a84118db1a6fa870602af63"
+        ) | (
+            "6.0.0",
+            SourceRepository::PodmanContainerToolsContainerLibs,
+            "go.podman.io/common",
+            "v0.68.0",
+            "bb6a37c8946a977f24a8eed4d97b2dc3608cd05e"
+        ) | (
+            "6.1.0",
+            SourceRepository::PodmanContainerToolsContainerLibs,
+            "go.podman.io/common",
+            "v0.69.1",
+            "e47c7ccf66a1b89b0807e053dd426ff26eedd7a7"
+        )
+    )
 }
 
 fn canonical_version(version: &Version) -> String {
@@ -1133,12 +1330,79 @@ fn managed_image_sources(plan: &DeploymentPlan) -> BTreeMap<DeploymentResourceId
         .collect()
 }
 
-fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
+fn unsupported_fields(resource: &DeploymentResource, context: crate::TargetExecutionContext) -> Vec<&'static str> {
     match resource {
+        DeploymentResource::Network(network) => {
+            let mut fields = Vec::new();
+            if !network.subnets().is_empty() {
+                fields.push("subnets");
+            }
+            if !network.routes().is_empty() {
+                fields.push("routes");
+            }
+            fields
+        }
+        DeploymentResource::Pod(pod) => {
+            let mut fields = Vec::new();
+            if pod.networks().iter().any(network_attachment_has_options) {
+                fields.push("networks.attachment_options");
+            }
+            if context != crate::TargetExecutionContext::Rootful
+                && pod.networks().iter().any(network_attachment_has_static_address)
+            {
+                fields.push("networks.static_address_requires_rootful");
+            }
+            if !pod.ports().is_empty() {
+                fields.push("ports");
+            }
+            if dns_is_configured(pod.dns()) {
+                fields.push("dns");
+            }
+            if !pod.host_aliases().is_empty() {
+                fields.push("host_aliases");
+            }
+            fields
+        }
         DeploymentResource::Container(container) => {
             let mut fields = Vec::new();
             if container.pod().is_some() && !container.networks().is_empty() {
                 fields.push("networks");
+            }
+            if container.pod().is_some() && !container.ports().is_empty() {
+                fields.push("ports");
+            }
+            if container.pod().is_some()
+                && (!container.dns().servers().is_empty()
+                    || !container.dns().search().is_empty()
+                    || !container.dns().options().is_empty())
+            {
+                fields.push("dns");
+            }
+            if container.pod().is_some() && !container.host_aliases().is_empty() {
+                fields.push("host_aliases");
+            }
+            if container.pod().is_some() && container.network_order().is_some() {
+                fields.push("network_order");
+            }
+            if container.networks().iter().any(network_attachment_has_options) {
+                fields.push("networks.attachment_options");
+            }
+            if context != crate::TargetExecutionContext::Rootful
+                && container.networks().iter().any(network_attachment_has_static_address)
+            {
+                fields.push("networks.static_address_requires_rootful");
+            }
+            if !container.ports().is_empty() {
+                fields.push("ports");
+            }
+            if dns_is_configured(container.dns()) {
+                fields.push("dns");
+            }
+            if !container.host_aliases().is_empty() {
+                fields.push("host_aliases");
+            }
+            if container.network_order().is_some() {
+                fields.push("network_order");
             }
             if !container.secrets().is_empty() {
                 fields.push("secrets");
@@ -1168,19 +1432,313 @@ fn unsupported_fields(resource: &DeploymentResource) -> Vec<&'static str> {
     }
 }
 
-fn append_network_arguments(arguments: &mut Vec<String>, networks: &[DeploymentResourceId]) {
-    for network in networks {
+fn network_attachment_has_options(attachment: &NetworkAttachment) -> bool {
+    !attachment.aliases().is_empty()
+        || attachment.static_ipv4().is_some()
+        || attachment.static_ipv6().is_some()
+        || attachment.static_mac().is_some()
+}
+
+fn network_attachment_has_static_address(attachment: &NetworkAttachment) -> bool {
+    attachment.static_ipv4().is_some() || attachment.static_ipv6().is_some() || attachment.static_mac().is_some()
+}
+
+fn dns_is_configured(dns: &crate::DnsConfiguration) -> bool {
+    !dns.servers().is_empty() || !dns.search().is_empty() || !dns.options().is_empty()
+}
+
+fn append_network_arguments(
+    arguments: &mut Vec<String>,
+    networks: &[NetworkAttachment],
+    order: Option<&[DeploymentResourceId]>,
+) -> bool {
+    let attachments = ordered_network_attachments(networks, order);
+    let Some(attachments) = attachments else {
+        return false;
+    };
+    for network in attachments {
+        let Some(value) = network_attachment_cli_value(network) else {
+            return false;
+        };
         arguments.push("--network".to_owned());
-        arguments.push(network.name().to_owned());
+        arguments.push(value);
+    }
+    true
+}
+
+fn ordered_network_attachments<'a>(
+    attachments: &'a [NetworkAttachment],
+    order: Option<&[DeploymentResourceId]>,
+) -> Option<Vec<&'a NetworkAttachment>> {
+    match order {
+        None => Some(attachments.iter().collect()),
+        Some(order) => order
+            .iter()
+            .map(|identity| attachments.iter().find(|attachment| attachment.network() == identity))
+            .collect(),
     }
 }
 
-fn network_configuration(networks: &[DeploymentResourceId]) -> Value {
+fn network_attachment_cli_value(attachment: &NetworkAttachment) -> Option<String> {
+    let name = attachment.network().name();
+    if name.contains([':', ',']) {
+        return None;
+    }
+    let mut value = name.to_owned();
+    let mut options = Vec::new();
+    options.extend(attachment.aliases().iter().map(|alias| format!("alias={alias}")));
+    if let Some(ipv4) = attachment.static_ipv4() {
+        options.push(format!("ip={ipv4}"));
+    }
+    if let Some(ipv6) = attachment.static_ipv6() {
+        options.push(format!("ip6={ipv6}"));
+    }
+    if let Some(mac) = attachment.static_mac() {
+        options.push(format!("mac={}", mac.as_str()));
+    }
+    if !options.is_empty() {
+        value.push(':');
+        value.push_str(&options.join(","));
+    }
+    Some(value)
+}
+
+fn network_configuration(networks: &[NetworkAttachment]) -> Value {
     let networks = networks
         .iter()
-        .map(|network| (network.name().to_owned(), Value::Object(Map::new())))
+        .map(|network| {
+            let mut options = Map::new();
+            if !network.aliases().is_empty() {
+                options.insert("aliases".to_owned(), string_array(network.aliases()));
+            }
+            let static_ips = [network.static_ipv4(), network.static_ipv6()]
+                .into_iter()
+                .flatten()
+                .map(|address| Value::String(address.to_string()))
+                .collect::<Vec<_>>();
+            if !static_ips.is_empty() {
+                options.insert("static_ips".to_owned(), Value::Array(static_ips));
+            }
+            if let Some(mac) = network.static_mac() {
+                options.insert("static_mac".to_owned(), Value::String(mac.as_str().to_owned()));
+            }
+            (network.network().name().to_owned(), Value::Object(options))
+        })
         .collect::<Map<String, Value>>();
     Value::Object(networks)
+}
+
+fn append_port_arguments(arguments: &mut Vec<String>, ports: &[PortMapping]) {
+    for port in ports {
+        arguments.push("--publish".to_owned());
+        arguments.push(port_mapping_cli_value(port));
+    }
+}
+
+fn port_mapping_cli_value(port: &PortMapping) -> String {
+    let mut value = String::new();
+    if let Some(host_ip) = port.host_ip() {
+        if host_ip.is_ipv6() {
+            value.push('[');
+            value.push_str(&host_ip.to_string());
+            value.push(']');
+        } else {
+            value.push_str(&host_ip.to_string());
+        }
+        value.push(':');
+    }
+    let protocol = match port.protocol() {
+        PortProtocol::Tcp => "tcp",
+        PortProtocol::Udp => "udp",
+        PortProtocol::Sctp => "sctp",
+    };
+    format!("{value}{}:{}/{protocol}", port.host_port(), port.container_port())
+}
+
+fn append_dns_arguments(arguments: &mut Vec<String>, dns: &crate::DnsConfiguration) {
+    for server in dns.servers() {
+        arguments.extend(["--dns".to_owned(), server.to_string()]);
+    }
+    for search in dns.search() {
+        arguments.extend(["--dns-search".to_owned(), search.clone()]);
+    }
+    for option in dns.options() {
+        arguments.extend(["--dns-option".to_owned(), option.clone()]);
+    }
+}
+
+fn append_host_alias_arguments(arguments: &mut Vec<String>, aliases: &[HostAlias]) {
+    for alias in aliases {
+        arguments.extend(["--add-host".to_owned(), host_alias_value(alias)]);
+    }
+}
+
+fn append_networking_json(
+    body: &mut Map<String, Value>,
+    ports: &[PortMapping],
+    dns: &crate::DnsConfiguration,
+    aliases: &[HostAlias],
+    network_order: Option<&[DeploymentResourceId]>,
+) {
+    if !ports.is_empty() {
+        body.insert(
+            "portmappings".to_owned(),
+            Value::Array(
+                ports
+                    .iter()
+                    .map(|port| {
+                        let protocol = match port.protocol() {
+                            PortProtocol::Tcp => "tcp",
+                            PortProtocol::Udp => "udp",
+                            PortProtocol::Sctp => "sctp",
+                        };
+                        json!({
+                            "host_ip": port.host_ip().map_or_else(String::new, |address| address.to_string()),
+                            "host_port": port.host_port(),
+                            "container_port": port.container_port(),
+                            "range": 1,
+                            "protocol": protocol,
+                        })
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    if !dns.servers().is_empty() {
+        body.insert(
+            "dns_server".to_owned(),
+            Value::Array(
+                dns.servers()
+                    .iter()
+                    .map(|server| Value::String(server.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    if !dns.search().is_empty() {
+        body.insert("dns_search".to_owned(), string_array(dns.search()));
+    }
+    if !dns.options().is_empty() {
+        body.insert("dns_option".to_owned(), string_array(dns.options()));
+    }
+    if !aliases.is_empty() {
+        body.insert(
+            "hostadd".to_owned(),
+            Value::Array(
+                aliases
+                    .iter()
+                    .map(|alias| Value::String(host_alias_value(alias)))
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(order) = network_order {
+        body.insert(
+            "networkOrder".to_owned(),
+            Value::Array(
+                order
+                    .iter()
+                    .map(|network| Value::String(network.name().to_owned()))
+                    .collect(),
+            ),
+        );
+    }
+}
+
+fn host_alias_value(alias: &HostAlias) -> String {
+    // Podman separates the hostname once at the first colon. The validated hostname grammar
+    // excludes colons, so a literal IPv6 address remains unambiguous without brackets in both
+    // the CLI and Libpod `hostadd` representation.
+    format!("{}:{}", alias.hostname(), alias.address())
+}
+
+fn append_network_create_arguments(arguments: &mut Vec<String>, network: &NetworkIntent) {
+    for subnet in network.subnets() {
+        arguments.extend(["--subnet".to_owned(), subnet.subnet().as_str().to_owned()]);
+    }
+    for subnet in network.subnets() {
+        if let Some(gateway) = subnet.gateway() {
+            arguments.extend(["--gateway".to_owned(), gateway.to_string()]);
+        }
+    }
+    for subnet in network.subnets() {
+        if let Some((start, end)) = subnet.range() {
+            arguments.extend(["--ip-range".to_owned(), format!("{start}-{end}")]);
+        }
+    }
+    for route in network.routes() {
+        arguments.extend(["--route".to_owned(), network_route_cli_value(route)]);
+    }
+}
+
+fn network_route_cli_value(route: &NetworkRoute) -> String {
+    let next_hop = match route.route_type() {
+        RouteType::Unicast => route.gateway().map_or_else(String::new, |gateway| gateway.to_string()),
+        RouteType::Blackhole => "blackhole".to_owned(),
+        RouteType::Unreachable => "unreachable".to_owned(),
+        RouteType::Prohibit => "prohibit".to_owned(),
+    };
+    format!("{},{}", route.destination().as_str(), next_hop)
+}
+
+fn network_create_configuration(network: &NetworkIntent) -> Value {
+    let mut body = Map::new();
+    body.insert("name".to_owned(), Value::String(network.identity().name().to_owned()));
+    if !network.subnets().is_empty() {
+        body.insert(
+            "subnets".to_owned(),
+            Value::Array(
+                network
+                    .subnets()
+                    .iter()
+                    .map(|subnet| {
+                        let mut value = Map::new();
+                        value.insert("subnet".to_owned(), Value::String(subnet.subnet().as_str().to_owned()));
+                        if let Some(gateway) = subnet.gateway() {
+                            value.insert("gateway".to_owned(), Value::String(gateway.to_string()));
+                        }
+                        if let Some((start, end)) = subnet.range() {
+                            value.insert(
+                                "lease_range".to_owned(),
+                                json!({"start_ip": start.to_string(), "end_ip": end.to_string()}),
+                            );
+                        }
+                        Value::Object(value)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    if !network.routes().is_empty() {
+        body.insert(
+            "routes".to_owned(),
+            Value::Array(
+                network
+                    .routes()
+                    .iter()
+                    .map(|route| {
+                        let mut value = Map::new();
+                        value.insert(
+                            "destination".to_owned(),
+                            Value::String(route.destination().as_str().to_owned()),
+                        );
+                        if let Some(gateway) = route.gateway() {
+                            value.insert("gateway".to_owned(), Value::String(gateway.to_string()));
+                        }
+                        let route_type = match route.route_type() {
+                            RouteType::Unicast => "unicast",
+                            RouteType::Blackhole => "blackhole",
+                            RouteType::Unreachable => "unreachable",
+                            RouteType::Prohibit => "prohibit",
+                        };
+                        value.insert("route_type".to_owned(), Value::String(route_type.to_owned()));
+                        Value::Object(value)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(body)
 }
 
 fn append_named_volume_arguments(arguments: &mut Vec<String>, mounts: &[NamedVolumeMount]) -> bool {
@@ -1389,7 +1947,8 @@ fn resource_kind_name(kind: ResourceKind) -> &'static str {
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use super::{RENDERING_CATALOGUE_JSON, parse_renderer_catalogue};
+    use super::{RENDERING_CATALOGUE_JSON, host_alias_value, parse_renderer_catalogue};
+    use crate::HostAlias;
 
     fn decoded_catalogue() -> serde_json::Value {
         serde_json::from_str(RENDERING_CATALOGUE_JSON).expect("embedded catalogue JSON")
@@ -1462,22 +2021,72 @@ mod tests {
 
     #[test]
     fn renderer_catalogue_rejects_nonimmutable_field_evidence_and_capability_substitutions() {
-        let mut wrong_source = decoded_catalogue();
-        wrong_source["reviewed_lines"][0]["field_evidence"][0]["cli_source"] =
+        let mut legacy_source_shape = decoded_catalogue();
+        legacy_source_shape["reviewed_lines"][0]["field_evidence"][0]["cli_source"] =
             serde_json::json!("https://github.com/containers/podman/blob/main/cmd/podman/containers/create.go");
-        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_source)).is_err());
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&legacy_source_shape)).is_err());
+        let mut wrong_module_version = decoded_catalogue();
+        wrong_module_version["reviewed_lines"][0]["common_module"]["version"] = serde_json::json!("v0.0.0");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_module_version)).is_err());
+
+        let mut wrong_module_revision = decoded_catalogue();
+        wrong_module_revision["reviewed_lines"][0]["common_module"]["revision"] =
+            serde_json::json!("0000000000000000000000000000000000000000");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_module_revision)).is_err());
+
+        let mut wrong_module_repository = decoded_catalogue();
+        wrong_module_repository["reviewed_lines"][0]["common_module"]["repository"] =
+            serde_json::json!("podman-container-tools-container-libs");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_module_repository)).is_err());
+
+        let mut wrong_module_path = decoded_catalogue();
+        wrong_module_path["reviewed_lines"][0]["common_module"]["path"] = serde_json::json!("go.podman.io/common");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_module_path)).is_err());
+
+        let mut mutable_field_source = decoded_catalogue();
+        mutable_field_source["reviewed_lines"][0]["field_evidence"][0]["cli_source"]["revision"] =
+            serde_json::json!("main");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&mutable_field_source)).is_err());
+
+        let mut wrong_field_repository = decoded_catalogue();
+        wrong_field_repository["reviewed_lines"][0]["field_evidence"][0]["cli_source"]["repository"] =
+            serde_json::json!("containers-common");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_field_repository)).is_err());
+
+        let mut wrong_field_path = decoded_catalogue();
+        wrong_field_path["reviewed_lines"][0]["field_evidence"][0]["cli_source"]["path"] =
+            serde_json::json!("cmd/podman/unknown.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_field_path)).is_err());
 
         let mut wrong_model = decoded_catalogue();
-        wrong_model["reviewed_lines"][0]["field_evidence"][8]["model_sources"][1] = serde_json::json!(
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/not-volumes.go"
-        );
+        wrong_model["reviewed_lines"][0]["field_evidence"][8]["model_sources"][1]["repository"] =
+            serde_json::json!("containers-common");
         assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_model)).is_err());
 
+        let mut mutable_model = decoded_catalogue();
+        mutable_model["reviewed_lines"][0]["field_evidence"][8]["model_sources"][1]["revision"] =
+            serde_json::json!("main");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&mutable_model)).is_err());
+
+        let mut wrong_model_path = decoded_catalogue();
+        wrong_model_path["reviewed_lines"][0]["field_evidence"][8]["model_sources"][1]["path"] =
+            serde_json::json!("pkg/specgen/not-volumes.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_model_path)).is_err());
+
         let mut wrong_handler = decoded_catalogue();
-        wrong_handler["reviewed_lines"][0]["field_evidence"][9]["handler_source"] = serde_json::json!(
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
-        );
+        wrong_handler["reviewed_lines"][0]["field_evidence"][9]["handler_source"]["repository"] =
+            serde_json::json!("containers-common");
         assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_handler)).is_err());
+
+        let mut mutable_handler = decoded_catalogue();
+        mutable_handler["reviewed_lines"][0]["field_evidence"][9]["handler_source"]["revision"] =
+            serde_json::json!("main");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&mutable_handler)).is_err());
+
+        let mut wrong_handler_path = decoded_catalogue();
+        wrong_handler_path["reviewed_lines"][0]["field_evidence"][9]["handler_source"]["path"] =
+            serde_json::json!("pkg/api/handlers/libpod/not-containers.go");
+        assert!(parse_renderer_catalogue(&encoded_catalogue(&wrong_handler_path)).is_err());
 
         let mut missing_line = decoded_catalogue();
         missing_line["reviewed_lines"]
@@ -1497,15 +2106,15 @@ mod tests {
     #[test]
     fn renderer_catalogue_rejects_unknown_and_duplicate_json_keys() {
         let unknown = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 3,",
-            "\"schema_version\": 3, \"unexpected\": true,",
+            "\"schema_version\": 4,",
+            "\"schema_version\": 4, \"unexpected\": true,",
             1,
         );
         assert!(parse_renderer_catalogue(&unknown).is_err());
 
         let duplicate_root = RENDERING_CATALOGUE_JSON.replacen(
-            "\"schema_version\": 3,",
-            "\"schema_version\": 3, \"schema_version\": 3,",
+            "\"schema_version\": 4,",
+            "\"schema_version\": 4, \"schema_version\": 4,",
             1,
         );
         assert!(parse_renderer_catalogue(&duplicate_root).is_err());
@@ -1513,5 +2122,13 @@ mod tests {
         let duplicate_nested =
             RENDERING_CATALOGUE_JSON.replacen("\"flag\": null,", "\"flag\": null, \"flag\": null,", 1);
         assert!(parse_renderer_catalogue(&duplicate_nested).is_err());
+    }
+
+    #[test]
+    fn host_alias_rendering_uses_podmans_single_hostname_separator_for_both_ip_families() {
+        let ipv4 = HostAlias::new("192.0.2.53".parse().expect("IPv4"), "resolver.example").expect("host alias");
+        assert_eq!(host_alias_value(&ipv4), "resolver.example:192.0.2.53");
+        let ipv6 = HostAlias::new("2001:db8::53".parse().expect("IPv6"), "resolver-v6.example").expect("host alias");
+        assert_eq!(host_alias_value(&ipv6), "resolver-v6.example:2001:db8::53");
     }
 }

@@ -5,11 +5,12 @@
 use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
-    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
-    Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion,
-    PodIntent, PublicEnvironmentValue, PublicLabelValue, ResourceKind, RestartPolicy, SecretIntent,
-    SemanticOperationAction, SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency,
-    TargetProfile, VolumeIntent, plan_deployment,
+    DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
+    ImageIntent, ImagePullPolicy, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment,
+    NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
+    PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue, ResourceKind, RestartPolicy, RouteType,
+    SecretIntent, SemanticOperationAction, SensitiveInlineEnvironmentValue, SensitiveInputReference, StartupDependency,
+    StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
 };
 
 fn target(version: &str) -> TargetProfile {
@@ -18,6 +19,445 @@ fn target(version: &str) -> TargetProfile {
         ObservedApiVersion::parse("4.0.0").expect("reviewed Libpod API version"),
     )
     .expect("compatible target profile")
+}
+
+#[test]
+fn pod_members_cannot_own_network_namespace_configuration() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/member:1");
+    let network = id(ResourceKind::Network, "member-network");
+    let pod = id(ResourceKind::Pod, "member-pod");
+    let container = id(ResourceKind::Container, "member");
+    let mut member = ContainerIntent::new(container.clone(), image.clone()).expect("member");
+    member.set_pod(pod.clone()).expect("pod");
+    member
+        .add_network(NetworkAttachment::new(network.clone()).expect("network attachment"))
+        .expect("network");
+    member
+        .add_port(PortMapping::new(None, 8080, 8080, PortProtocol::Tcp).expect("port"))
+        .expect("port");
+    member
+        .dns_mut()
+        .add_server("192.0.2.53".parse().expect("address"))
+        .expect("dns");
+    member
+        .add_host_alias(HostAlias::new("192.0.2.10".parse().expect("address"), "member.test").expect("host"))
+        .expect("host");
+    member.set_network_order(vec![network.clone()]).expect("order");
+
+    let mut pod_intent = PodIntent::new(pod).expect("pod");
+    pod_intent.add_member(container).expect("member");
+    let mut intent = DeploymentIntent::new(target("6.1.0"));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/team/member:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Network(
+        NetworkIntent::new(network).expect("network"),
+    ));
+    intent.add_resource(DeploymentResource::Pod(pod_intent));
+    intent.add_resource(DeploymentResource::Container(member));
+
+    let outcome = plan_deployment(&intent);
+    assert!(!outcome.is_success());
+    assert_eq!(
+        outcome
+            .findings()
+            .iter()
+            .filter_map(podman_lens::PlanningFinding::field)
+            .collect::<Vec<_>>(),
+        ["dns", "host_aliases", "network_order", "networks", "ports"]
+    );
+}
+
+#[test]
+fn typed_networking_values_reject_wrong_families_duplicates_and_invalid_values_without_mutation() {
+    let network = id(ResourceKind::Network, "network");
+    let mut attachment = NetworkAttachment::new(network).expect("network attachment");
+    assert!(
+        attachment
+            .set_static_ipv4("2001:db8::10".parse().expect("address"))
+            .is_err()
+    );
+    attachment
+        .set_static_ipv4("192.0.2.10".parse().expect("address"))
+        .expect("ipv4");
+    assert!(
+        attachment
+            .set_static_ipv4("192.0.2.11".parse().expect("address"))
+            .is_err()
+    );
+    assert_eq!(attachment.static_ipv4(), Some("192.0.2.10".parse().expect("address")));
+    attachment
+        .set_static_ipv6("2001:db8::10".parse().expect("address"))
+        .expect("ipv6");
+    assert!(
+        attachment
+            .set_static_ipv6("2001:db8::11".parse().expect("address"))
+            .is_err()
+    );
+    assert_eq!(attachment.static_ipv6(), Some("2001:db8::10".parse().expect("address")));
+    attachment
+        .set_static_mac(StaticMacAddress::new("02:42:ac:11:00:02").expect("mac"))
+        .expect("mac");
+    assert!(
+        attachment
+            .set_static_mac(StaticMacAddress::new("02:42:ac:11:00:03").expect("mac"))
+            .is_err()
+    );
+    assert_eq!(
+        attachment.static_mac().map(StaticMacAddress::as_str),
+        Some("02:42:ac:11:00:02")
+    );
+    attachment.add_alias("web").expect("alias");
+    assert_eq!(
+        attachment
+            .add_alias("web")
+            .expect_err("duplicate alias")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+    assert_eq!(
+        attachment
+            .add_alias("bad:alias")
+            .expect_err("invalid alias")
+            .code()
+            .as_str(),
+        "PLN0034"
+    );
+
+    let mut dns = DnsConfiguration::default();
+    dns.add_search("example.test").expect("search");
+    assert!(dns.add_search("example.test").is_err());
+    for hostname in [
+        "bad\nname",
+        "bad host",
+        "bad:host",
+        "bad,host",
+        "bad=host",
+        "-bad",
+        "bad-",
+        "a..b",
+    ] {
+        assert!(
+            HostAlias::new("192.0.2.1".parse().expect("address"), hostname).is_err(),
+            "{hostname}"
+        );
+    }
+    assert_eq!(
+        HostAlias::new("2001:db8::53".parse().expect("address"), "dns.example")
+            .expect("IPv6 host alias")
+            .hostname(),
+        "dns.example"
+    );
+    assert!(PortMapping::new(None, 0, 80, PortProtocol::Tcp).is_err());
+
+    let cidr = NetworkCidr::new("192.0.2.0/24").expect("cidr");
+    assert!(NetworkRoute::new(cidr.clone(), None, RouteType::Unicast).is_err());
+    assert!(NetworkRoute::new(cidr, Some("192.0.2.1".parse().expect("address")), RouteType::Blackhole,).is_err());
+}
+
+#[test]
+fn network_alias_capacity_returns_the_duplicate_or_capacity_rule() {
+    let mut attachment = NetworkAttachment::new(id(ResourceKind::Network, "network")).expect("attachment");
+    for index in 0..64 {
+        attachment
+            .add_alias(format!("alias-{index}"))
+            .expect("alias within capacity");
+    }
+    assert_eq!(
+        attachment
+            .add_alias("one-too-many")
+            .expect_err("alias capacity")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+}
+
+#[test]
+fn port_mappings_reject_duplicate_or_conflicting_host_sockets_only() {
+    let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
+    let base = PortMapping::new(
+        Some("192.0.2.10".parse().expect("host address")),
+        8080,
+        80,
+        PortProtocol::Tcp,
+    )
+    .expect("port mapping");
+
+    let mut duplicate =
+        ContainerIntent::new(id(ResourceKind::Container, "duplicate"), image.clone()).expect("container");
+    duplicate.add_port(base.clone()).expect("port mapping");
+    assert_eq!(
+        duplicate
+            .add_port(base.clone())
+            .expect_err("duplicate host socket")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+
+    let mut conflict = ContainerIntent::new(id(ResourceKind::Container, "conflict"), image.clone()).expect("container");
+    conflict.add_port(base.clone()).expect("port mapping");
+    let conflicting_container_port = PortMapping::new(
+        Some("192.0.2.10".parse().expect("host address")),
+        8080,
+        81,
+        PortProtocol::Tcp,
+    )
+    .expect("port mapping");
+    assert_eq!(
+        conflict
+            .add_port(conflicting_container_port)
+            .expect_err("conflicting host socket")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+
+    let mut distinct = ContainerIntent::new(id(ResourceKind::Container, "distinct"), image).expect("container");
+    distinct.add_port(base).expect("port mapping");
+    for mapping in [
+        PortMapping::new(
+            Some("192.0.2.11".parse().expect("host address")),
+            8080,
+            80,
+            PortProtocol::Tcp,
+        )
+        .expect("different host address"),
+        PortMapping::new(
+            Some("192.0.2.10".parse().expect("host address")),
+            8081,
+            80,
+            PortProtocol::Tcp,
+        )
+        .expect("different host port"),
+        PortMapping::new(
+            Some("192.0.2.10".parse().expect("host address")),
+            8080,
+            80,
+            PortProtocol::Udp,
+        )
+        .expect("different protocol"),
+    ] {
+        distinct.add_port(mapping).expect("distinct host socket");
+    }
+    assert_eq!(distinct.ports().len(), 4);
+}
+
+#[test]
+fn network_subnets_reject_duplicate_cidrs_even_when_settings_differ() {
+    let cidr = NetworkCidr::new("192.0.2.0/24").expect("CIDR");
+    let mut exact = NetworkIntent::new(id(ResourceKind::Network, "exact")).expect("network");
+    exact.add_subnet(NetworkSubnet::new(cidr.clone())).expect("subnet");
+    assert_eq!(
+        exact
+            .add_subnet(NetworkSubnet::new(
+                NetworkCidr::new("192.0.2.1/24").expect("equivalent CIDR")
+            ))
+            .expect_err("textually different duplicate CIDR")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+
+    let mut gateway = NetworkSubnet::new(cidr.clone());
+    gateway
+        .set_gateway("192.0.2.1".parse().expect("gateway"))
+        .expect("gateway");
+    let mut range = NetworkSubnet::new(cidr);
+    range
+        .set_range("192.0.2.10".parse().expect("start"), "192.0.2.20".parse().expect("end"))
+        .expect("range");
+    let mut conflicting = NetworkIntent::new(id(ResourceKind::Network, "conflicting")).expect("network");
+    conflicting.add_subnet(gateway).expect("subnet");
+    assert_eq!(
+        conflicting
+            .add_subnet(range)
+            .expect_err("same CIDR with different IPAM settings")
+            .code()
+            .as_str(),
+        "PLN0035"
+    );
+    conflicting
+        .add_subnet(NetworkSubnet::new(NetworkCidr::new("198.51.100.0/24").expect("CIDR")))
+        .expect("distinct CIDR");
+    assert_eq!(conflicting.subnets().len(), 2);
+}
+
+#[test]
+fn duplicate_network_order_rejection_preserves_the_first_declared_order() {
+    let first = id(ResourceKind::Network, "first");
+    let second = id(ResourceKind::Network, "second");
+    let expected = vec![first.clone(), second.clone()];
+    let mut container = ContainerIntent::new(
+        id(ResourceKind::Container, "application"),
+        id(ResourceKind::Image, "registry.example.invalid/application:1"),
+    )
+    .expect("container");
+    container.set_network_order(expected.clone()).expect("network order");
+    assert!(container.set_network_order(vec![second]).is_err());
+    assert_eq!(container.network_order(), Some(expected.as_slice()));
+}
+
+#[test]
+fn network_cidrs_validate_containment_ranges_and_duplicate_setters_without_mutation() {
+    let ipv4_zero = NetworkCidr::new("0.0.0.0/0").expect("CIDR");
+    assert!(ipv4_zero.contains("203.0.113.1".parse().expect("address")));
+    assert!(!ipv4_zero.contains("2001:db8::1".parse().expect("address")));
+    assert_eq!(NetworkCidr::new("192.0.2.1/24").expect("CIDR").as_str(), "192.0.2.0/24");
+    let ipv4_host = NetworkCidr::new("192.0.2.10/32").expect("CIDR");
+    assert!(ipv4_host.contains("192.0.2.10".parse().expect("address")));
+    assert!(!ipv4_host.contains("192.0.2.11".parse().expect("address")));
+    let ipv6_zero = NetworkCidr::new("::/0").expect("CIDR");
+    assert!(ipv6_zero.contains("2001:db8::1".parse().expect("address")));
+    assert_eq!(
+        NetworkCidr::new("2001:db8::feed/64").expect("CIDR").as_str(),
+        "2001:db8::/64"
+    );
+    let ipv6_host = NetworkCidr::new("2001:db8::1/128").expect("CIDR");
+    assert!(ipv6_host.contains("2001:db8::1".parse().expect("address")));
+    assert!(!ipv6_host.contains("2001:db8::2".parse().expect("address")));
+    assert!(!ipv6_host.contains("192.0.2.1".parse().expect("address")));
+
+    let mut subnet = NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24").expect("CIDR"));
+    subnet
+        .set_gateway("192.0.2.1".parse().expect("gateway"))
+        .expect("gateway");
+    assert!(subnet.set_gateway("192.0.2.2".parse().expect("gateway")).is_err());
+    assert_eq!(subnet.gateway(), Some("192.0.2.1".parse().expect("gateway")));
+    assert!(
+        subnet
+            .set_range("192.0.1.10".parse().expect("start"), "192.0.2.20".parse().expect("end"))
+            .is_err()
+    );
+    subnet
+        .set_range("192.0.2.10".parse().expect("start"), "192.0.2.20".parse().expect("end"))
+        .expect("range");
+    assert!(
+        subnet
+            .set_range("192.0.2.21".parse().expect("start"), "192.0.2.22".parse().expect("end"))
+            .is_err()
+    );
+    assert_eq!(
+        subnet.range(),
+        Some(("192.0.2.10".parse().expect("start"), "192.0.2.20".parse().expect("end")))
+    );
+
+    let mut reversed = NetworkSubnet::new(NetworkCidr::new("2001:db8::/64").expect("CIDR"));
+    assert!(
+        reversed
+            .set_range(
+                "2001:db8::20".parse().expect("start"),
+                "2001:db8::10".parse().expect("end")
+            )
+            .is_err()
+    );
+    assert!(
+        reversed
+            .set_range(
+                "2001:db9::10".parse().expect("start"),
+                "2001:db8::20".parse().expect("end")
+            )
+            .is_err()
+    );
+    reversed
+        .set_range(
+            "2001:db8::10".parse().expect("start"),
+            "2001:db8::20".parse().expect("end"),
+        )
+        .expect("IPv6 range");
+    assert_eq!(
+        reversed.range(),
+        Some((
+            "2001:db8::10".parse().expect("start"),
+            "2001:db8::20".parse().expect("end")
+        ))
+    );
+
+    let mut route = NetworkRoute::new(
+        NetworkCidr::new("198.51.100.0/24").expect("CIDR"),
+        Some("198.51.100.1".parse().expect("gateway")),
+        RouteType::Unicast,
+    )
+    .expect("route");
+    route.set_metric(42).expect("metric");
+    assert!(route.set_metric(43).is_err());
+    assert_eq!(route.metric(), Some(42));
+}
+
+#[test]
+fn static_network_addresses_require_an_explicit_rootful_target_context() {
+    for (context, expected_fields) in [
+        (
+            TargetExecutionContext::Unknown,
+            vec![
+                "networks.static_ipv4_requires_rootful",
+                "networks.static_ipv6_requires_rootful",
+                "networks.static_mac_requires_rootful",
+            ],
+        ),
+        (
+            TargetExecutionContext::Rootless,
+            vec![
+                "networks.static_ipv4_requires_rootful",
+                "networks.static_ipv6_requires_rootful",
+                "networks.static_mac_requires_rootful",
+            ],
+        ),
+    ] {
+        let outcome = plan_with_all_static_network_values(context);
+        assert!(outcome.plan().is_none(), "{context:?}");
+        assert_eq!(
+            outcome
+                .findings()
+                .iter()
+                .filter_map(podman_lens::PlanningFinding::field)
+                .collect::<Vec<_>>(),
+            expected_fields,
+            "{context:?}"
+        );
+    }
+    assert!(plan_with_all_static_network_values(TargetExecutionContext::Rootful).is_success());
+}
+
+#[test]
+fn port_mapping_accepts_each_protocol_and_ipv6_bind_address() {
+    for protocol in [PortProtocol::Tcp, PortProtocol::Udp, PortProtocol::Sctp] {
+        let port =
+            PortMapping::new(Some("2001:db8::1".parse().expect("address")), 8443, 443, protocol).expect("port mapping");
+        assert_eq!(port.host_ip(), Some("2001:db8::1".parse().expect("address")));
+        assert_eq!(port.protocol(), protocol);
+    }
+}
+
+fn plan_with_all_static_network_values(context: TargetExecutionContext) -> podman_lens::PlanningOutcome {
+    let network = id(ResourceKind::Network, "network");
+    let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
+    let container = id(ResourceKind::Container, "application");
+    let mut attachment = NetworkAttachment::new(network.clone()).expect("attachment");
+    attachment
+        .set_static_ipv4("192.0.2.10".parse().expect("IPv4"))
+        .expect("IPv4");
+    attachment
+        .set_static_ipv6("2001:db8::10".parse().expect("IPv6"))
+        .expect("IPv6");
+    attachment
+        .set_static_mac(StaticMacAddress::new("02:42:ac:11:00:02").expect("MAC"))
+        .expect("MAC");
+    let mut container = ContainerIntent::new(container, image.clone()).expect("container");
+    container.add_network(attachment).expect("network");
+    let mut target = target("6.1.0");
+    target.set_execution_context(context);
+    let mut intent = DeploymentIntent::new(target);
+    intent.add_resource(DeploymentResource::Network(
+        NetworkIntent::new(network).expect("network"),
+    ));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container));
+    plan_deployment(&intent)
 }
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -463,7 +903,9 @@ fn complete_pod_intent(version: &str) -> DeploymentIntent {
     let container = id(ResourceKind::Container, "application-web");
 
     let mut pod_intent = PodIntent::new(pod).expect("pod identity");
-    pod_intent.add_network(network.clone()).expect("network identity");
+    pod_intent
+        .add_network(NetworkAttachment::new(network.clone()).expect("network attachment"))
+        .expect("network identity");
     pod_intent.add_member(container.clone()).expect("container identity");
 
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container identity");
@@ -867,7 +1309,9 @@ fn validation_collects_independent_missing_resources_and_startup_errors() {
     let missing_container = id(ResourceKind::Container, "missing-container");
     let mut broken = ContainerIntent::new(container.clone(), image).expect("container");
     broken.set_pod(pod.clone()).expect("pod identity");
-    broken.add_network(network).expect("network identity");
+    broken
+        .add_network(NetworkAttachment::new(network).expect("network attachment"))
+        .expect("network identity");
     broken.add_mount(mount(volume, "/var/lib/application"));
     broken.add_secret(secret).expect("secret identity");
     let mut intent = DeploymentIntent::new(target("6.1.0"));
@@ -1101,7 +1545,7 @@ fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references()
         "PLN0042"
     );
     let mut pod = PodIntent::new(id(ResourceKind::Pod, "pod")).expect("pod");
-    assert!(pod.add_network(id(ResourceKind::Volume, "wrong")).is_err());
+    assert!(NetworkAttachment::new(id(ResourceKind::Volume, "wrong")).is_err());
     assert!(
         NamedVolumeMount::new(
             id(ResourceKind::Network, "wrong"),
@@ -1117,7 +1561,7 @@ fn public_constructors_reject_wrong_kinds_and_invalid_non_sensitive_references()
         id(ResourceKind::Image, "registry.example.invalid/image:1"),
     )
     .expect("container");
-    assert!(container.add_network(id(ResourceKind::Volume, "wrong")).is_err());
+    assert!(NetworkAttachment::new(id(ResourceKind::Volume, "wrong")).is_err());
     assert!(container.add_secret(id(ResourceKind::Volume, "wrong")).is_err());
     assert!(StartupDependency::new(id(ResourceKind::Pod, "wrong"), id(ResourceKind::Container, "container")).is_err());
 }

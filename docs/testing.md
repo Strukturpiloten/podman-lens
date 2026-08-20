@@ -63,7 +63,7 @@ public API test compiles this contract as an external consumer. It also proves t
 operation intent and all deterministic external preconditions survive planning, while plan `Debug`
 output never exposes an external secret-material reference.
 
-M6 renderer tests cover every evidence-listed operation over every reviewed Podman release. The v3
+M6 renderer tests cover every evidence-listed operation over every reviewed Podman release. The v4
 catalogue records immutable CLI, model, and handler sources for every rendered setting as well as
 the operation route/body evidence. Parser mutation tests reject omitted, duplicate, unknown,
 wrong-claim, mutable-source, and substituted-release evidence. Byte-exact CLI/API and artifact goldens prove the emitted argv
@@ -78,3 +78,9 @@ for every reviewed target. Tests exercise valid and invalid boundaries,
 ordering, duplicate and conflicting settings, every restart policy, public-consumer compilation,
 and sentinel redaction for inline and external environment values. They use no live connection and
 never execute generated commands.
+
+M6-B2 foundation tests cover typed aliases, static addresses, MAC addresses, port mappings, DNS,
+host aliases, IPAM subnets, routes, address-family boundaries, CIDR containment, duplicate setter
+state preservation, and explicit rootful/rootless/unknown planning. Populated M6-B2 rendering is
+deliberately fail-closed until a per-release evidence matrix exists. These tests use no live
+connection and never run generated commands.

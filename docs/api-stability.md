@@ -62,11 +62,23 @@ declared values use `PublicLabelValue`, `PublicEnvironmentValue`, and
 observed sensitive values is provided. These
 M6-B1b makes the bounded public subset exact across the reviewed releases: command follows the
 image; entrypoint uses a JSON-array CLI flag; public labels and environment values retain declared
-CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v3 catalogue
+CLI order and become Libpod maps; volume JSON uses `Name`, `Dest`, and `Options`. The v4 catalogue
 requires revision-pinned CLI, model, and handler evidence for every emitted field. Inline and
 external environment variants remain all-or-nothing redacted `PLN0046` outcomes. Pod-member
 hostnames fail planning and pod-member restart policies remain `PLN0046`; bind/tmpfs mounts, ports,
 health checks, logging, security, namespace, and secret attachment targets remain later M6 contracts.
+
+M6-B2 adds provisional typed networking output values: `NetworkAttachment`, `PortMapping`,
+`DnsConfiguration`, `HostAlias`, `NetworkCidr`, `NetworkSubnet`, `NetworkRoute`, and the bounded
+`PortProtocol`, `RouteType`, and `StaticMacAddress` values. `PodIntent` owns pod-network namespace
+configuration; `ContainerIntent` owns it only when unpodded. The planner rejects member-owned
+attachments, ports, DNS, host aliases, or network order. An explicit container network order must
+be a permutation of all attached networks. M6-B2 does not claim runtime-assigned addresses,
+arbitrary network drivers/options, or unmanaged network namespace modes. Routes retain an optional
+native metric. Static attachment addresses require an explicitly rootful target context at planning
+time; unknown and rootless contexts produce field-level findings. Until the per-release
+common-module evidence matrix is complete, populated networking output remains fail-closed rather
+than being called exact.
 
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate

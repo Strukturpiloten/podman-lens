@@ -16,6 +16,7 @@ pub mod diagnostic;
 pub mod discovery;
 pub mod evidence;
 pub mod inventory;
+pub mod networking;
 pub mod probe;
 #[cfg(unix)]
 pub mod read_only_unix_transport;
@@ -48,6 +49,10 @@ pub use inventory::{
     NetworkDetails, ObservationState, ResourceEvidence, ResourceIdentity, ResourceInventory, ResourceKind,
     ResourceRecord, ResourceRelationship, SensitiveEnvironmentValue, UnknownNativeField, acquire_inventory,
 };
+pub use networking::{
+    DnsConfiguration, HostAlias, NetworkAttachment, NetworkCidr, NetworkRoute, NetworkSubnet, PortMapping,
+    PortProtocol, RouteType, StaticMacAddress,
+};
 pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 #[cfg(unix)]
 pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts};
@@ -64,4 +69,6 @@ pub use transport::{
     LibpodHeader, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse, LibpodTransport,
     LibpodTransportFuture, MAX_PATH_AND_QUERY_BYTES, TransportError, TransportLimits,
 };
-pub use version::{ObservedApiVersion, ObservedPodmanVersion, SupportedPodmanRange, TargetProfile};
+pub use version::{
+    ObservedApiVersion, ObservedPodmanVersion, SupportedPodmanRange, TargetExecutionContext, TargetProfile,
+};

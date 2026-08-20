@@ -21,12 +21,21 @@ Pod networks, pod-member container assignment, and unpodded-container networks a
 adds bounded, typed named-volume mounts (source, normalized destination, read-only, copy mode) for
 containers and explicitly named infra-container mounts for pods, plus
 container command, entrypoint, user, workdir, hostname, labels, environment, and restart policy to
-the semantic plan. M6-B1b upgrades the catalogue to v3: every exact emitted setting must have its
+the semantic plan. M6-B1b upgrades the catalogue to v4: every exact emitted setting must have its
 own revision-pinned CLI, model, and Libpod handler evidence on every reviewed line before rendering
 becomes exact. It renders only caller-declared public label and environment values; sensitive inline
 and external environment variants block the entire artifact with static, redacted findings. Secret
 attachment targets and related options remain unmodelled; secret bytes remain an explicit external
 input requirement.
+
+M6-B2 extends the same non-executing rendering boundary with typed declared networking. Pod
+attachments, ports, DNS, and host aliases will render on the infra container; unpodded containers
+will render them directly once the required evidence exists. Pod members cannot declare network
+namespace configuration. Static IPv4, IPv6, and MAC declarations require a caller-proven rootful
+target during planning. Exact attachment options, IPAM subnets, and routes remain fail-closed until
+their per-release matrix is committed. Explicit container network order and non-unicast routes are
+gated to Podman 6.0 and newer. This contract deliberately does not infer runtime addresses or
+invent a pod network ordering API.
 
 ## Consequences
 

@@ -9,6 +9,7 @@ have a demonstrated public-contract boundary.
 | `src/snapshot/`        | Versioned serialization-only always-redacted observation snapshots |
 | `src/artifact/`        | Versioned serialization-only deployment artifact contracts         |
 | `src/deployment.rs`    | Typed deployment intent and ordered transport-neutral semantics    |
+| `src/networking.rs`    | Typed declared networking, IPAM, DNS, ports, and host aliases      |
 | `src/render.rs`        | Review-only CLI and Libpod deployment representations              |
 | `catalogue/v1/`        | Versioned offline Podman compatibility and renderer evidence       |
 | `fixtures/corpus/`     | Fixed sanitized input and graph-boundary corpus                    |

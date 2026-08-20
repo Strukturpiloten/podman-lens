@@ -6,10 +6,12 @@ use std::time::Duration;
 use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentPlan, DeploymentResource,
-    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, ImagePullPolicy,
-    Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, ObservedApiVersion, ObservedPodmanVersion, PlanningFinding,
-    PlanningOutcome, PodIntent, PublicEnvironmentValue, PublicLabelValue, RestartPolicy, SemanticOperationAction,
-    SensitiveInlineEnvironmentValue, StartupDependency, TargetProfile, VolumeIntent, plan_deployment,
+    DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
+    ImageIntent, ImagePullPolicy, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment,
+    NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion,
+    PlanningFinding, PlanningOutcome, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue,
+    RestartPolicy, RouteType, SemanticOperationAction, SensitiveInlineEnvironmentValue, StartupDependency,
+    StaticMacAddress, TargetExecutionContext, TargetProfile, VolumeIntent, plan_deployment,
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
@@ -213,6 +215,57 @@ fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -
     )?;
     let _ = SemanticOperationAction::StartPod;
     let _ = SemanticOperationAction::StartContainer;
+    Ok(())
+}
+
+#[test]
+fn external_consumer_can_declare_typed_networking_output() -> Result<(), Box<dyn std::error::Error>> {
+    let network = DeploymentResourceId::new(ResourceKind::Network, "application-network")?;
+    let image = DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/application:1")?;
+    let container = DeploymentResourceId::new(ResourceKind::Container, "application")?;
+    let mut attachment = NetworkAttachment::new(network.clone())?;
+    attachment.add_alias("application")?;
+    attachment.set_static_ipv4("192.0.2.10".parse()?)?;
+    attachment.set_static_mac(StaticMacAddress::new("02:42:ac:11:00:02")?)?;
+    let mut network_intent = NetworkIntent::new(network.clone())?;
+    let mut subnet = NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24")?);
+    subnet.set_gateway("192.0.2.1".parse()?)?;
+    assert!(subnet.subnet().contains("192.0.2.2".parse()?));
+    network_intent.add_subnet(subnet)?;
+    network_intent.add_route(NetworkRoute::new(
+        NetworkCidr::new("198.51.100.0/24")?,
+        None,
+        RouteType::Blackhole,
+    )?)?;
+    let mut container_intent = ContainerIntent::new(container, image.clone())?;
+    container_intent.add_network(attachment)?;
+    container_intent.set_network_order(vec![network.clone()])?;
+    container_intent.add_port(PortMapping::new(None, 8080, 80, PortProtocol::Tcp)?)?;
+    container_intent.add_host_alias(HostAlias::new("192.0.2.53".parse()?, "database.test")?)?;
+    let dns: &mut DnsConfiguration = container_intent.dns_mut();
+    dns.add_server("192.0.2.53".parse()?)?;
+    dns.add_search("example.test")?;
+    dns.add_option("ndots:1")?;
+
+    let _ = network_intent.subnets();
+    let _ = network_intent.routes();
+    let _ = container_intent.networks();
+    let _ = container_intent.network_order();
+    let _ = container_intent.ports();
+    let _ = container_intent.dns();
+    let _ = container_intent.host_aliases();
+    Ok(())
+}
+
+#[test]
+fn external_consumer_can_set_explicit_target_execution_context() -> Result<(), Box<dyn std::error::Error>> {
+    let mut target = TargetProfile::new(
+        ObservedPodmanVersion::parse("6.1.0")?,
+        ObservedApiVersion::parse("4.0.0")?,
+    )?;
+    assert_eq!(target.execution_context(), TargetExecutionContext::Unknown);
+    target.set_execution_context(TargetExecutionContext::Rootful);
+    assert_eq!(target.execution_context(), TargetExecutionContext::Rootful);
     Ok(())
 }
 

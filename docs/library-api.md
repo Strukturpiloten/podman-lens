@@ -111,15 +111,38 @@ all-or-nothing `PLN0046` outcome and never expose an environment name, value, or
 
 `DeploymentRendering::shell_script` is generated solely from those argument arrays, requires
 explicit secret file paths, and safely names every external prerequisite in a review comment.
-Rendering accepts only an identical engine/API version listed in its committed v3 renderer evidence.
+Rendering accepts only an identical engine/API version listed in its committed v4 renderer evidence.
 Each reviewed line carries exact CLI, model, and handler provenance for every rendered setting.
-Pod networks, pod membership, unpodded-container networks, typed named-volume mounts, and the
-bounded public container settings are exact. Secret attachments remain unmodelled because their
-target and option semantics are not yet retained.
+Pod membership, unpodded-container topology, typed named-volume mounts, and the bounded public
+container settings are exact. Populated M6-B2 networking fields remain fail-closed until their
+per-release evidence is recorded. Secret attachments remain unmodelled because their target and
+option semantics are not yet retained.
+For the exact basic topology that is already rendered, Libpod create bodies use the native Go
+member spelling `Networks`; the lowercase JSON member is not emitted.
 
 `PlanningFinding::occurrence` is a one-based list position for a duplicate prerequisite or
 startup edge. Grouped duplicate or conflicting resource declarations have no single position;
 their `PlanningFinding::count` reports the number of declarations instead.
+
+## Declare networking output
+
+Use `NetworkAttachment` for every explicit network attachment. It keeps aliases and caller-declared
+static IPv4, IPv6, and MAC values distinct from runtime-assigned addresses. Add attachments, ports,
+DNS configuration, and host aliases to `PodIntent` when the target topology has a pod: Podman
+places these values on the infra container and shares the namespace with its members. An unpodded
+`ContainerIntent` can own the same values directly. The planner rejects these fields on a pod
+member; it does not move or silently discard them.
+
+`NetworkIntent` can hold explicit IPAM `NetworkSubnet` declarations and `NetworkRoute` values.
+`NetworkCidr::new` canonicalizes its address to the network address and its prefix to canonical
+decimal spelling, so host-bit variants identify the same declared subnet.
+Gateway and inclusive allocation-range endpoints must be in their declared CIDR; range endpoints
+must be ordered. Static IPv4, IPv6, and MAC declarations require an explicitly
+`TargetExecutionContext::Rootful` profile during planning. `Unknown` and `Rootless` contexts
+produce field-level findings and no plan rather than guessing a privilege boundary.
+Unicast routes require a gateway. Explicit unpodded-container network order is validated as an
+exact permutation of the attached networks and needs Podman 6.0 or newer; omit it to let Podman
+use its native default. Pod networking has no corresponding order contract.
 
 ## Non-goals
 

@@ -141,8 +141,16 @@ The review script emits deterministic, shell-quoted comments for every external 
 image, or secret prerequisite, but never a secret-material reference or value. It renders pod
 networks, pod-member assignment, unpodded-container networks, public settings, and named-volume
 mounts. Sensitive environment variants, pod-member restart policy, ambiguous CLI mount spellings,
-and secret attachment
-targets are not yet part of the semantic model.
+and secret attachment targets are not yet part of the semantic model. M6-B2 gives networking a
+typed declared-output model rather than recovering it from runtime observation: each pod owns its
+network attachments, ports, DNS configuration, and `/etc/hosts` aliases through its infra
+container; an unpodded container owns its corresponding configuration directly. A pod member
+cannot declare any of those fields. Network attachments retain aliases and explicitly declared
+static IPv4, IPv6, and MAC addresses. Managed networks retain bounded IPAM subnets and static
+routes. Pod network order is not representable and is rejected. Static addresses require an
+explicitly rootful target during planning; unknown and rootless contexts produce field-level
+findings. Exact rendering of populated M6-B2 networking fields remains fail-closed while the
+per-release Podman and `containers/common` source matrix is added.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.

@@ -87,10 +87,10 @@
         "body": {
           "kind": "json",
           "json": {
-            "name": "pod-one",
-            "networks": {
+            "Networks": {
               "network one": {}
-            }
+            },
+            "name": "pod-one"
           }
         }
       }

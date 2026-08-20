@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provenance": "Each release binds every emitted operation to the exact CLI command source and Libpod route registration at that immutable Podman revision. A body source appears only where M6-A emits a JSON or externally supplied body; empty-body operations intentionally have none. No live service is consulted by the renderer.",
   "reviewed_lines": [
     {
@@ -17,11 +17,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -33,11 +48,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -49,11 +79,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -65,11 +110,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -81,11 +141,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -97,11 +172,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -113,11 +203,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -129,11 +234,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -145,12 +265,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -162,64 +302,195 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
       ],
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "containers-common",
+        "path": "github.com/containers/common",
+        "version": "v0.62.0",
+        "revision": "cde1afdf623bdb9595d1fdc7acffa6e2f03a06b2"
+      }
     },
     {
       "version": "5.5.0",
@@ -228,50 +499,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -286,11 +662,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -302,11 +693,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -318,11 +724,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -334,11 +755,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -350,11 +786,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -366,11 +817,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -382,11 +848,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -398,11 +879,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -414,12 +910,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -431,14 +947,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "containers-common",
+        "path": "github.com/containers/common",
+        "version": "v0.63.0",
+        "revision": "92927328862e4837d87bcbc0725b713387399984"
+      }
     },
     {
       "version": "5.6.0",
@@ -447,50 +989,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -505,11 +1152,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -521,11 +1183,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -537,11 +1214,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -553,11 +1245,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -569,11 +1276,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -585,11 +1307,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -601,11 +1338,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -617,11 +1369,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -633,12 +1400,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -650,14 +1437,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "containers-common",
+        "path": "github.com/containers/common",
+        "version": "v0.64.1",
+        "revision": "c007f37a6c55a53a7d41419d094c815bf2e46ca3"
+      }
     },
     {
       "version": "5.7.0",
@@ -666,50 +1479,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -724,11 +1642,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -740,11 +1673,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -756,11 +1704,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -772,11 +1735,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -788,11 +1766,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -804,11 +1797,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -820,11 +1828,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -836,11 +1859,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -852,12 +1890,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -869,14 +1927,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "0370128fc8dcae93533334324ef838db8f8da8cb",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "podman-container-tools-container-libs",
+        "path": "go.podman.io/common",
+        "version": "v0.66.0",
+        "revision": "8163ca799c317e3dea886be7228406ec8cf06abc"
+      }
     },
     {
       "version": "5.8.6",
@@ -885,50 +1969,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -943,11 +2132,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -959,11 +2163,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -975,11 +2194,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -991,11 +2225,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -1007,11 +2256,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -1023,11 +2287,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -1039,11 +2318,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -1055,11 +2349,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -1071,12 +2380,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -1088,14 +2417,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a859fc66702c23e869c282c63e92d9b6cd264229",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "podman-container-tools-container-libs",
+        "path": "go.podman.io/common",
+        "version": "v0.67.1",
+        "revision": "c8b7f74383aa8bac5a84118db1a6fa870602af63"
+      }
     },
     {
       "version": "6.0.0",
@@ -1104,50 +2459,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -1162,11 +2622,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -1178,11 +2653,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -1194,11 +2684,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -1210,11 +2715,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -1226,11 +2746,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -1242,11 +2777,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -1258,11 +2808,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -1274,11 +2839,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -1290,12 +2870,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -1307,14 +2907,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "podman-container-tools-container-libs",
+        "path": "go.podman.io/common",
+        "version": "v0.68.0",
+        "revision": "bb6a37c8946a977f24a8eed4d97b2dc3608cd05e"
+      }
     },
     {
       "version": "6.1.0",
@@ -1323,50 +2949,155 @@
       "operations": [
         {
           "category": "network-create",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/networks/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_networks.go",
-          "body_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/networks.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/networks/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_networks.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/networks.go",
+            "module": null
+          }
         },
         {
           "category": "volume-create",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/volumes/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_volumes.go",
-          "body_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/volumes.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/volumes/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_volumes.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/volumes.go",
+            "module": null
+          }
         },
         {
           "category": "secret-create",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/secrets/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_secrets.go",
-          "body_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/secrets.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/secrets/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_secrets.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/secrets.go",
+            "module": null
+          }
         },
         {
           "category": "image-pull",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/images/pull.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_images.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/images/pull.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_images.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "pod-create",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/pods/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_pods.go",
-          "body_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/pods.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         },
         {
           "category": "container-create",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/containers/create.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_containers.go",
-          "body_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
+          "body_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "category": "pod-start",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/pods/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_pods.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/pods/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_pods.go",
+            "module": null
+          },
           "body_source": null
         },
         {
           "category": "container-start",
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/containers/start.go",
-          "libpod_endpoint_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_containers.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/containers/start.go",
+            "module": null
+          },
+          "libpod_endpoint_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/server/register_containers.go",
+            "module": null
+          },
           "body_source": null
         }
       ],
@@ -1381,11 +3112,26 @@
           "libpod": {
             "json_member": "command"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/containers/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/containers/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-entrypoint",
@@ -1397,11 +3143,26 @@
           "libpod": {
             "json_member": "entrypoint"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-user",
@@ -1413,11 +3174,26 @@
           "libpod": {
             "json_member": "user"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-workdir",
@@ -1429,11 +3205,26 @@
           "libpod": {
             "json_member": "work_dir"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-hostname",
@@ -1445,11 +3236,26 @@
           "libpod": {
             "json_member": "hostname"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-label",
@@ -1461,11 +3267,26 @@
           "libpod": {
             "json_member": "labels"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-environment",
@@ -1477,11 +3298,26 @@
           "libpod": {
             "json_member": "env"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-restart-policy",
@@ -1493,11 +3329,26 @@
           "libpod": {
             "json_member": "restart_policy"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "container-named-volume-mount",
@@ -1509,12 +3360,32 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/common/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/common/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/specgen.go",
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/specgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/containers_create.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/containers_create.go",
+            "module": null
+          }
         },
         {
           "field": "pod-infra-named-volume-mount",
@@ -1526,14 +3397,40 @@
           "libpod": {
             "json_member": "volumes"
           },
-          "cli_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/cmd/podman/pods/create.go",
+          "cli_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "cmd/podman/pods/create.go",
+            "module": null
+          },
           "model_sources": [
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/podspecgen.go",
-            "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/specgen/volumes.go"
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/podspecgen.go",
+              "module": null
+            },
+            {
+              "repository": "containers-podman",
+              "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+              "path": "pkg/specgen/volumes.go",
+              "module": null
+            }
           ],
-          "handler_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod/pods.go"
+          "handler_source": {
+            "repository": "containers-podman",
+            "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+            "path": "pkg/api/handlers/libpod/pods.go",
+            "module": null
+          }
         }
-      ]
+      ],
+      "common_module": {
+        "repository": "podman-container-tools-container-libs",
+        "path": "go.podman.io/common",
+        "version": "v0.69.1",
+        "revision": "e47c7ccf66a1b89b0807e053dd426ff26eedd7a7"
+      }
     }
   ]
 }

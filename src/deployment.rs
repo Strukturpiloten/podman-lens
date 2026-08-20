@@ -6,8 +6,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::networking::{
+    DnsConfiguration, HostAlias, NetworkAttachment, NetworkRoute, NetworkSubnet, PortMapping, add_attachment, add_host,
+    add_port, add_route, add_subnet,
+};
 use crate::settings::{ContainerSettings, NamedVolumeMount};
-use crate::{Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind, TargetProfile};
+use crate::{Diagnostic, DiagnosticCode, PodmanLensResult, ResourceKind, TargetExecutionContext, TargetProfile};
 
 const MAX_REFERENCE_BYTES: usize = 256;
 const MAX_CONNECTION_NAME_BYTES: usize = 64;
@@ -201,11 +205,65 @@ macro_rules! simple_resource {
     };
 }
 
-simple_resource!(
-    NetworkIntent,
-    ResourceKind::Network,
-    "One typed network creation intent."
-);
+/// One typed network creation intent.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkIntent {
+    identity: DeploymentResourceId,
+    subnets: Vec<NetworkSubnet>,
+    routes: Vec<NetworkRoute>,
+}
+
+impl NetworkIntent {
+    /// Creates one network creation intent with no caller-declared IPAM configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` when the identity is not a network identity.
+    pub fn new(identity: DeploymentResourceId) -> PodmanLensResult<Self> {
+        require_kind(&identity, ResourceKind::Network)?;
+        Ok(Self {
+            identity,
+            subnets: Vec::new(),
+            routes: Vec::new(),
+        })
+    }
+
+    /// Adds one subnet/IPAM declaration in declared order.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for duplicate subnets or capacity exhaustion.
+    pub fn add_subnet(&mut self, subnet: NetworkSubnet) -> PodmanLensResult<()> {
+        add_subnet(&mut self.subnets, subnet)
+    }
+
+    /// Adds one static route in declared order.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for duplicate routes or capacity exhaustion.
+    pub fn add_route(&mut self, route: NetworkRoute) -> PodmanLensResult<()> {
+        add_route(&mut self.routes, route)
+    }
+
+    /// Returns the target-side identity.
+    #[must_use]
+    pub fn identity(&self) -> &DeploymentResourceId {
+        &self.identity
+    }
+
+    /// Returns caller-declared IPAM subnets in input order.
+    #[must_use]
+    pub fn subnets(&self) -> &[NetworkSubnet] {
+        &self.subnets
+    }
+
+    /// Returns caller-declared static routes in input order.
+    #[must_use]
+    pub fn routes(&self) -> &[NetworkRoute] {
+        &self.routes
+    }
+}
 simple_resource!(
     VolumeIntent,
     ResourceKind::Volume,
@@ -277,7 +335,10 @@ impl SecretIntent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PodIntent {
     identity: DeploymentResourceId,
-    networks: Vec<DeploymentResourceId>,
+    networks: Vec<NetworkAttachment>,
+    ports: Vec<PortMapping>,
+    dns: DnsConfiguration,
+    hosts: Vec<HostAlias>,
     infra_mounts: Vec<NamedVolumeMount>,
     members: Vec<DeploymentResourceId>,
 }
@@ -293,20 +354,45 @@ impl PodIntent {
         Ok(Self {
             identity,
             networks: Vec::new(),
+            ports: Vec::new(),
+            dns: DnsConfiguration::default(),
+            hosts: Vec::new(),
             infra_mounts: Vec::new(),
             members: Vec::new(),
         })
     }
 
-    /// Adds one network that must exist before this pod is created.
+    /// Adds one network attachment owned by this pod's infra container.
     ///
     /// # Errors
     ///
-    /// Returns `PLN0034` when `network` is not a network identity.
-    pub fn add_network(&mut self, network: DeploymentResourceId) -> PodmanLensResult<()> {
-        require_kind(&network, ResourceKind::Network)?;
-        self.networks.push(network);
-        Ok(())
+    /// Returns `PLN0034` when the attachment does not name a network identity.
+    pub fn add_network(&mut self, network: NetworkAttachment) -> PodmanLensResult<()> {
+        add_attachment(&mut self.networks, network)
+    }
+
+    /// Adds one port mapping owned by this pod's infra container.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for a duplicate mapping or capacity exhaustion.
+    pub fn add_port(&mut self, port: PortMapping) -> PodmanLensResult<()> {
+        add_port(&mut self.ports, port)
+    }
+
+    /// Returns mutable DNS configuration owned by this pod's infra container.
+    #[must_use]
+    pub fn dns_mut(&mut self) -> &mut DnsConfiguration {
+        &mut self.dns
+    }
+
+    /// Adds one `/etc/hosts` entry owned by this pod's infra container.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for a duplicate alias or capacity exhaustion.
+    pub fn add_host_alias(&mut self, host: HostAlias) -> PodmanLensResult<()> {
+        add_host(&mut self.hosts, host)
     }
 
     /// Adds one mount for the Podman pod's infra container.
@@ -338,8 +424,26 @@ impl PodIntent {
 
     /// Returns declared network prerequisites in input order.
     #[must_use]
-    pub fn networks(&self) -> &[DeploymentResourceId] {
+    pub fn networks(&self) -> &[NetworkAttachment] {
         &self.networks
+    }
+
+    /// Returns declared pod-owned port mappings in input order.
+    #[must_use]
+    pub fn ports(&self) -> &[PortMapping] {
+        &self.ports
+    }
+
+    /// Returns declared pod-owned DNS configuration.
+    #[must_use]
+    pub fn dns(&self) -> &DnsConfiguration {
+        &self.dns
+    }
+
+    /// Returns declared pod-owned `/etc/hosts` aliases in input order.
+    #[must_use]
+    pub fn host_aliases(&self) -> &[HostAlias] {
+        &self.hosts
     }
 
     /// Returns declared infra-container mounts in input order.
@@ -361,7 +465,11 @@ pub struct ContainerIntent {
     identity: DeploymentResourceId,
     image: DeploymentResourceId,
     pod: Option<DeploymentResourceId>,
-    networks: Vec<DeploymentResourceId>,
+    networks: Vec<NetworkAttachment>,
+    network_order: Option<Vec<DeploymentResourceId>>,
+    ports: Vec<PortMapping>,
+    dns: DnsConfiguration,
+    hosts: Vec<HostAlias>,
     mounts: Vec<NamedVolumeMount>,
     secrets: Vec<DeploymentResourceId>,
     settings: Box<ContainerSettings>,
@@ -381,6 +489,10 @@ impl ContainerIntent {
             image,
             pod: None,
             networks: Vec::new(),
+            network_order: None,
+            ports: Vec::new(),
+            dns: DnsConfiguration::default(),
+            hosts: Vec::new(),
             mounts: Vec::new(),
             secrets: Vec::new(),
             settings: Box::default(),
@@ -405,15 +517,57 @@ impl ContainerIntent {
         }
     }
 
-    /// Adds a direct network prerequisite for an unpodded container.
+    /// Adds a direct network attachment for an unpodded container.
     ///
     /// # Errors
     ///
-    /// Returns `PLN0034` when `network` is not a network identity.
-    pub fn add_network(&mut self, network: DeploymentResourceId) -> PodmanLensResult<()> {
-        require_kind(&network, ResourceKind::Network)?;
-        self.networks.push(network);
+    /// Returns `PLN0034` when the attachment does not name a network identity.
+    pub fn add_network(&mut self, network: NetworkAttachment) -> PodmanLensResult<()> {
+        add_attachment(&mut self.networks, network)
+    }
+
+    /// Declares the exact network-connection order for this unpodded container.
+    ///
+    /// An omitted order lets the target choose its native default. An explicit order must contain
+    /// every declared attachment exactly once and is only available on reviewed Podman 6.0 and
+    /// newer targets.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0034` for an empty or non-network order and `PLN0038` when already set.
+    pub fn set_network_order(&mut self, order: Vec<DeploymentResourceId>) -> PodmanLensResult<()> {
+        if order.is_empty() || order.iter().any(|network| network.kind() != ResourceKind::Network) {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDeploymentIntent));
+        }
+        if self.network_order.is_some() {
+            return Err(Diagnostic::new(DiagnosticCode::DeploymentUnsupportedCombination));
+        }
+        self.network_order = Some(order);
         Ok(())
+    }
+
+    /// Adds one host-to-container port mapping for an unpodded container.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for a duplicate mapping or capacity exhaustion.
+    pub fn add_port(&mut self, port: PortMapping) -> PodmanLensResult<()> {
+        add_port(&mut self.ports, port)
+    }
+
+    /// Returns mutable DNS configuration for an unpodded container.
+    #[must_use]
+    pub fn dns_mut(&mut self) -> &mut DnsConfiguration {
+        &mut self.dns
+    }
+
+    /// Adds one `/etc/hosts` alias for an unpodded container.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0035` for a duplicate alias or capacity exhaustion.
+    pub fn add_host_alias(&mut self, host: HostAlias) -> PodmanLensResult<()> {
+        add_host(&mut self.hosts, host)
     }
 
     /// Adds one named-volume mount.
@@ -452,8 +606,32 @@ impl ContainerIntent {
 
     /// Returns direct network prerequisites.
     #[must_use]
-    pub fn networks(&self) -> &[DeploymentResourceId] {
+    pub fn networks(&self) -> &[NetworkAttachment] {
         &self.networks
+    }
+
+    /// Returns the explicit declared network order, when one is required.
+    #[must_use]
+    pub fn network_order(&self) -> Option<&[DeploymentResourceId]> {
+        self.network_order.as_deref()
+    }
+
+    /// Returns declared direct port mappings in input order.
+    #[must_use]
+    pub fn ports(&self) -> &[PortMapping] {
+        &self.ports
+    }
+
+    /// Returns declared direct DNS configuration.
+    #[must_use]
+    pub fn dns(&self) -> &DnsConfiguration {
+        &self.dns
+    }
+
+    /// Returns declared direct `/etc/hosts` aliases in input order.
+    #[must_use]
+    pub fn host_aliases(&self) -> &[HostAlias] {
+        &self.hosts
     }
 
     /// Returns named-volume mounts.
@@ -887,7 +1065,7 @@ impl DeploymentPlan {
 #[must_use]
 pub fn plan_deployment(intent: &DeploymentIntent) -> PlanningOutcome {
     let (resources, mut findings) = index_resources(intent.resources());
-    validate_resources(&resources, &mut findings);
+    validate_resources(&resources, intent.target.execution_context(), &mut findings);
     validate_startup_dependencies(intent, &resources, &mut findings);
     if findings.is_empty() {
         let mut nodes = BTreeMap::<DeploymentOperationId, BTreeSet<DeploymentOperationId>>::new();
@@ -995,6 +1173,7 @@ fn external_preconditions(
 
 fn validate_resources(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
+    execution_context: TargetExecutionContext,
     findings: &mut Vec<PlanningFinding>,
 ) {
     for resource in resources.values() {
@@ -1020,8 +1199,10 @@ fn validate_resources(
                     ));
                 }
             }
-            DeploymentResource::Pod(pod) => validate_pod(resources, pod, findings),
-            DeploymentResource::Container(container) => validate_container(resources, container, findings),
+            DeploymentResource::Pod(pod) => validate_pod(resources, pod, execution_context, findings),
+            DeploymentResource::Container(container) => {
+                validate_container(resources, container, execution_context, findings);
+            }
         }
     }
 }
@@ -1029,15 +1210,17 @@ fn validate_resources(
 fn validate_pod(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
     pod: &PodIntent,
+    execution_context: TargetExecutionContext,
     findings: &mut Vec<PlanningFinding>,
 ) {
-    validate_distinct(pod.networks(), pod.identity(), "networks", findings);
+    validate_network_attachments(pod.networks(), pod.identity(), "networks", findings);
+    validate_static_network_addresses(pod.networks(), pod.identity(), execution_context, findings);
     validate_mounts(resources, pod.infra_mounts(), pod.identity(), "infra_mounts", findings);
     validate_distinct(pod.members(), pod.identity(), "members", findings);
     for network in pod.networks() {
         require_resolved(
             resources,
-            network,
+            network.network(),
             ResourceKind::Network,
             pod.identity(),
             "networks",
@@ -1059,12 +1242,15 @@ fn validate_pod(
     }
 }
 
+#[allow(clippy::too_many_lines)] // Every pod/member namespace invariant is validated together.
 fn validate_container(
     resources: &BTreeMap<DeploymentResourceId, &DeploymentResource>,
     container: &ContainerIntent,
+    execution_context: TargetExecutionContext,
     findings: &mut Vec<PlanningFinding>,
 ) {
-    validate_distinct(container.networks(), container.identity(), "networks", findings);
+    validate_network_attachments(container.networks(), container.identity(), "networks", findings);
+    validate_static_network_addresses(container.networks(), container.identity(), execution_context, findings);
     validate_mounts(resources, container.mounts(), container.identity(), "mounts", findings);
     validate_distinct(container.secrets(), container.identity(), "secrets", findings);
     require_resolved(
@@ -1090,6 +1276,37 @@ fn validate_container(
                 Some("networks"),
             ));
         }
+        if !container.ports().is_empty() {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("ports"),
+            ));
+        }
+        if !container.dns().servers().is_empty()
+            || !container.dns().search().is_empty()
+            || !container.dns().options().is_empty()
+        {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("dns"),
+            ));
+        }
+        if !container.host_aliases().is_empty() {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("host_aliases"),
+            ));
+        }
+        if container.network_order().is_some() {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("network_order"),
+            ));
+        }
         if resolved(resources, pod, ResourceKind::Pod).is_none() {
             findings.push(PlanningFinding::detailed(
                 DiagnosticCode::DeploymentUnresolvedPrerequisite,
@@ -1111,12 +1328,96 @@ fn validate_container(
             }
         }
     }
-    for (references, kind, field) in [
-        (container.networks(), ResourceKind::Network, "networks"),
-        (container.secrets(), ResourceKind::Secret, "secrets"),
-    ] {
-        for reference in references {
-            require_resolved(resources, reference, kind, container.identity(), field, findings);
+    for network in container.networks() {
+        require_resolved(
+            resources,
+            network.network(),
+            ResourceKind::Network,
+            container.identity(),
+            "networks",
+            findings,
+        );
+    }
+    if let Some(order) = container.network_order() {
+        let declared = container
+            .networks()
+            .iter()
+            .map(NetworkAttachment::network)
+            .collect::<BTreeSet<_>>();
+        let ordered = order.iter().collect::<BTreeSet<_>>();
+        if declared.len() != container.networks().len() || order.len() != ordered.len() || declared != ordered {
+            findings.push(PlanningFinding::new(
+                DiagnosticCode::DeploymentUnsupportedCombination,
+                Some(container.identity().clone()),
+                Some("network_order"),
+            ));
+        }
+    }
+    for secret in container.secrets() {
+        require_resolved(
+            resources,
+            secret,
+            ResourceKind::Secret,
+            container.identity(),
+            "secrets",
+            findings,
+        );
+    }
+}
+
+fn validate_static_network_addresses(
+    attachments: &[NetworkAttachment],
+    owner: &DeploymentResourceId,
+    execution_context: TargetExecutionContext,
+    findings: &mut Vec<PlanningFinding>,
+) {
+    if execution_context == TargetExecutionContext::Rootful {
+        return;
+    }
+    for attachment in attachments {
+        for (configured, field) in [
+            (
+                attachment.static_ipv4().is_some(),
+                "networks.static_ipv4_requires_rootful",
+            ),
+            (
+                attachment.static_ipv6().is_some(),
+                "networks.static_ipv6_requires_rootful",
+            ),
+            (
+                attachment.static_mac().is_some(),
+                "networks.static_mac_requires_rootful",
+            ),
+        ] {
+            if configured {
+                findings.push(PlanningFinding::new(
+                    DiagnosticCode::DeploymentUnsupportedCombination,
+                    Some(owner.clone()),
+                    Some(field),
+                ));
+            }
+        }
+    }
+}
+
+fn validate_network_attachments(
+    attachments: &[NetworkAttachment],
+    owner: &DeploymentResourceId,
+    field: &'static str,
+    findings: &mut Vec<PlanningFinding>,
+) {
+    for (index, attachment) in attachments.iter().enumerate() {
+        if attachments[..index]
+            .iter()
+            .any(|previous| previous.network() == attachment.network())
+        {
+            findings.push(PlanningFinding::detailed(
+                DiagnosticCode::DeploymentDuplicateResource,
+                Some(owner.clone()),
+                vec![attachment.network().clone()],
+                Some(field),
+                Some(index + 1),
+            ));
         }
     }
 }
@@ -1158,8 +1459,8 @@ fn create_dependencies(
         | DeploymentResource::Secret(_) => {}
         DeploymentResource::Pod(pod) => {
             for network in pod.networks() {
-                if is_managed(resources, network) {
-                    dependencies.insert(create_operation(network));
+                if is_managed(resources, network.network()) {
+                    dependencies.insert(create_operation(network.network()));
                 }
             }
             for mount in pod.infra_mounts() {
@@ -1181,8 +1482,8 @@ fn create_dependencies(
                 }
             }
             for network in container.networks() {
-                if is_managed(resources, network) {
-                    dependencies.insert(create_operation(network));
+                if is_managed(resources, network.network()) {
+                    dependencies.insert(create_operation(network.network()));
                 }
             }
             for mount in container.mounts() {

@@ -5,11 +5,12 @@
 use podman_lens::{
     AbsoluteContainerPath, ArgumentArray, ContainerHostname, ContainerIntent, ContainerUser, ContainerWorkdir,
     DeploymentConnectionReference, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
-    DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, ImageIntent, Label, LabelKey,
-    NamedVolumeCopyMode, NamedVolumeMount, NetworkIntent, ObservedApiVersion, ObservedPodmanVersion, PodIntent,
-    PublicEnvironmentValue, PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy,
-    SecretIntent, SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetProfile, VolumeIntent,
-    artifact::deployment_v1, plan_deployment, render_deployment,
+    DeploymentResourceId, DnsConfiguration, EnvironmentAssignment, EnvironmentName, ExternalPrecondition, HostAlias,
+    ImageIntent, Label, LabelKey, NamedVolumeCopyMode, NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent,
+    NetworkRoute, NetworkSubnet, ObservedApiVersion, ObservedPodmanVersion, PodIntent, PortMapping, PortProtocol,
+    PublicEnvironmentValue, PublicLabelValue, RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, RouteType,
+    SecretIntent, SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetExecutionContext, TargetProfile,
+    VolumeIntent, artifact::deployment_v1, plan_deployment, render_deployment,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -40,7 +41,9 @@ fn complete_plan(version: &str) -> podman_lens::DeploymentPlan {
     let pod = id(ResourceKind::Pod, "pod-one");
     let container = id(ResourceKind::Container, "container-one");
     let mut pod_intent = PodIntent::new(pod.clone()).expect("pod");
-    pod_intent.add_network(network.clone()).expect("network");
+    pod_intent
+        .add_network(NetworkAttachment::new(network.clone()).expect("network attachment"))
+        .expect("network");
     pod_intent.add_member(container.clone()).expect("member");
     let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
     container_intent.set_pod(pod).expect("pod assignment");
@@ -66,7 +69,9 @@ fn all_operation_plan(version: &str) -> podman_lens::DeploymentPlan {
     let member = id(ResourceKind::Container, "member");
     let standalone = id(ResourceKind::Container, "standalone");
     let mut pod_intent = PodIntent::new(pod.clone()).expect("pod");
-    pod_intent.add_network(network.clone()).expect("network");
+    pod_intent
+        .add_network(NetworkAttachment::new(network.clone()).expect("network attachment"))
+        .expect("network");
     pod_intent.add_member(member.clone()).expect("member");
     let mut member_intent = ContainerIntent::new(member, image.clone()).expect("member");
     member_intent.set_pod(pod).expect("pod assignment");
@@ -94,7 +99,9 @@ fn all_operation_plan(version: &str) -> podman_lens::DeploymentPlan {
 }
 
 fn external_precondition_plan() -> podman_lens::DeploymentPlan {
-    let mut intent = DeploymentIntent::new(target("6.1.0", "6.1.0"));
+    let mut selected_target = target("6.1.0", "6.1.0");
+    selected_target.set_execution_context(TargetExecutionContext::Rootful);
+    let mut intent = DeploymentIntent::new(selected_target);
     intent.set_connection(DeploymentConnectionReference::new("review-remote").expect("connection"));
     for (kind, name) in [
         (ResourceKind::Network, "outside-network"),
@@ -286,9 +293,14 @@ fn reviewed_versions_render_the_complete_m5_surface_deterministically() {
             pod.libpod().body(),
             &RenderedHttpBody::Json(serde_json::json!({
                 "name": "pod-one",
-                "networks": {"network one": {}}
+                "Networks": {"network one": {}}
             }))
         );
+        assert!(matches!(
+            pod.libpod().body(),
+            RenderedHttpBody::Json(pod_body)
+                if pod_body.get("Networks").is_some() && pod_body.get("networks").is_none()
+        ));
         let container = first
             .operations()
             .iter()
@@ -338,7 +350,7 @@ fn reviewed_versions_render_every_core_setting_exactly_and_in_declaration_order(
             pod.libpod().body(),
             &RenderedHttpBody::Json(serde_json::json!({
                 "name": "infra-pod",
-                "networks": {},
+                "Networks": {},
                 "volumes": [{"Name": "application-data", "Dest": "/var/lib/infra", "Options": ["ro", "nocopy"]}],
             }))
         );
@@ -378,7 +390,7 @@ fn reviewed_versions_render_every_core_setting_exactly_and_in_declaration_order(
             container.libpod().body(),
             &RenderedHttpBody::Json(serde_json::json!({
                 "image": "registry.example.invalid/app:1",
-                "networks": {},
+                "Networks": {},
                 "command": ["serve", "--foreground"],
                 "entrypoint": ["/init", "--safe"],
                 "user": "1000:1000",
@@ -590,7 +602,7 @@ fn every_reviewed_release_has_exact_cli_and_libpod_renderings_for_all_operation_
                 format!("/v{version}/libpod/pods/create"),
                 RenderedHttpBody::Json(serde_json::json!({
                     "name": "pod",
-                    "networks": {"network": {}}
+                    "Networks": {"network": {}}
                 })),
             ),
             (
@@ -714,7 +726,9 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
         ImageIntent::new(managed_image.clone(), "registry.example.invalid/actual-source:1").expect("image"),
     ));
     let mut container_intent = ContainerIntent::new(container, managed_image).expect("container");
-    container_intent.add_network(network).expect("network");
+    container_intent
+        .add_network(NetworkAttachment::new(network).expect("network attachment"))
+        .expect("network");
     managed.add_resource(DeploymentResource::Container(container_intent));
     let managed_plan = plan_deployment(&managed).plan().cloned().expect("plan");
     let managed_rendering = render_deployment(&managed_plan)
@@ -744,7 +758,7 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
         managed_container.libpod().body(),
         &RenderedHttpBody::Json(serde_json::json!({
             "image": "registry.example.invalid/actual-source:1",
-            "networks": {"standalone-network": {}}
+            "Networks": {"standalone-network": {}}
         }))
     );
 
@@ -773,6 +787,93 @@ fn unpodded_networks_and_resolved_managed_or_external_images_are_rendered_exactl
     assert_eq!(
         external_container.cli().argv().last(),
         Some(&external_image.name().to_owned())
+    );
+}
+
+#[test]
+fn populated_networking_intent_fails_closed_until_the_evidence_catalogue_covers_it() {
+    let network = id(ResourceKind::Network, "application-network");
+    let image = id(ResourceKind::Image, "registry.example.invalid/application:1");
+    let container = id(ResourceKind::Container, "application");
+    let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
+    network_intent
+        .add_subnet(NetworkSubnet::new(NetworkCidr::new("192.0.2.0/24").expect("subnet")))
+        .expect("subnet");
+    let mut attachment = NetworkAttachment::new(network.clone()).expect("attachment");
+    attachment.add_alias("application").expect("alias");
+    attachment
+        .set_static_mac(podman_lens::StaticMacAddress::new("02:42:ac:11:00:02").expect("mac"))
+        .expect("mac");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent.add_network(attachment).expect("network");
+    container_intent
+        .add_port(PortMapping::new(None, 8080, 80, PortProtocol::Tcp).expect("port"))
+        .expect("port");
+    container_intent
+        .add_host_alias(HostAlias::new("192.0.2.53".parse().expect("host"), "database.test").expect("alias"))
+        .expect("host alias");
+    let dns: &mut DnsConfiguration = container_intent.dns_mut();
+    dns.add_server("192.0.2.53".parse().expect("dns")).expect("dns");
+    let mut selected_target = target("6.1.0", "6.1.0");
+    selected_target.set_execution_context(TargetExecutionContext::Rootful);
+    let mut intent = DeploymentIntent::new(selected_target);
+    intent.add_resource(DeploymentResource::Network(network_intent));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/team/application:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    let fields = outcome
+        .findings()
+        .iter()
+        .filter_map(podman_lens::RenderingFinding::field)
+        .collect::<Vec<_>>();
+    for field in ["dns", "host_aliases", "networks.attachment_options", "ports", "subnets"] {
+        assert!(fields.contains(&field), "missing {field}: {fields:?}");
+    }
+}
+
+#[test]
+fn networking_target_boundaries_block_inexact_rendering() {
+    let network = id(ResourceKind::Network, "network");
+    let image = id(ResourceKind::Image, "registry.example.invalid/image:1");
+    let container = id(ResourceKind::Container, "container");
+    let mut network_intent = NetworkIntent::new(network.clone()).expect("network");
+    network_intent
+        .add_route(
+            NetworkRoute::new(
+                NetworkCidr::new("198.51.100.0/24").expect("destination"),
+                None,
+                RouteType::Unreachable,
+            )
+            .expect("route"),
+        )
+        .expect("route");
+    let mut container_intent = ContainerIntent::new(container, image.clone()).expect("container");
+    container_intent
+        .add_network(NetworkAttachment::new(network.clone()).expect("attachment"))
+        .expect("network");
+    container_intent
+        .set_network_order(vec![network.clone()])
+        .expect("order");
+    let mut intent = DeploymentIntent::new(target("5.8.6", "5.8.6"));
+    intent.add_resource(DeploymentResource::Network(network_intent));
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(image, "registry.example.invalid/team/image:1").expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container_intent));
+    let plan = plan_deployment(&intent).plan().cloned().expect("plan");
+    let outcome = render_deployment(&plan);
+    assert!(!outcome.is_success());
+    assert_eq!(
+        outcome
+            .findings()
+            .iter()
+            .filter_map(podman_lens::RenderingFinding::field)
+            .collect::<Vec<_>>(),
+        ["network_order", "routes"]
     );
 }
 
@@ -1031,7 +1132,7 @@ fn deployment_artifact_schema_is_strict_and_redacts_sensitive_values() -> Result
 fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Result<(), Box<dyn std::error::Error>> {
     let evidence: serde_json::Value =
         serde_json::from_str(include_str!("../catalogue/v1/podman-deployment-rendering.json"))?;
-    assert_eq!(evidence["schema_version"], 3);
+    assert_eq!(evidence["schema_version"], 4);
     let lines = evidence["reviewed_lines"].as_array().expect("lines");
     assert_eq!(lines.len(), 7);
     assert_eq!(
@@ -1054,34 +1155,32 @@ fn committed_renderer_evidence_covers_every_operation_and_reviewed_line() -> Res
         assert_eq!(fields.len(), 10);
         for operation in operations {
             for source in ["cli_source", "libpod_endpoint_source"] {
-                assert!(
-                    operation[source]
-                        .as_str()
-                        .is_some_and(|source| source.contains(revision)),
-                    "{source} must use the immutable release revision"
-                );
+                assert_eq!(operation[source]["repository"], "containers-podman");
+                assert_eq!(operation[source]["revision"], revision);
+                assert!(operation[source]["module"].is_null());
             }
-            if let Some(source) = operation["body_source"].as_str() {
-                assert!(
-                    source.contains(revision),
-                    "body source must use the immutable release revision"
-                );
+            if operation["body_source"].is_object() {
+                assert_eq!(operation["body_source"]["repository"], "containers-podman");
+                assert_eq!(operation["body_source"]["revision"], revision);
             } else {
-                assert!(operation["body_source"].is_null(), "body source must be a URL or null");
+                assert!(operation["body_source"].is_null());
             }
         }
         for field in fields {
             for source in ["cli_source", "handler_source"] {
-                assert!(
-                    field[source].as_str().is_some_and(|source| source.contains(revision)),
-                    "{source} must use the immutable release revision"
-                );
+                assert_eq!(field[source]["repository"], "containers-podman");
+                assert_eq!(field[source]["revision"], revision);
+                assert!(field[source]["module"].is_null());
             }
-            assert!(field["model_sources"].as_array().is_some_and(|sources| {
-                sources
-                    .iter()
-                    .all(|source| source.as_str().is_some_and(|source| source.contains(revision)))
-            }));
+            assert!(
+                field["model_sources"]
+                    .as_array()
+                    .is_some_and(
+                        |sources| sources.iter().all(|source| source["repository"] == "containers-podman"
+                            && source["revision"] == revision
+                            && source["module"].is_null())
+                    )
+            );
         }
     }
     Ok(())

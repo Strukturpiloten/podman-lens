@@ -157,7 +157,9 @@ impl ReadOnlyUnixTransport {
                 biased;
                 response = &mut response_future => response,
                 result = &mut connection => {
-                    result.map_err(|error| classify_hyper_error(&error))?;
+                    // Keep driving the connection, but the phase future owns classification. A
+                    // completed connection can race a still-ready response on macOS.
+                    let _connection_result = result;
                     response_future.await
                 }
             };
@@ -176,7 +178,8 @@ impl ReadOnlyUnixTransport {
                 biased;
                 body = &mut body_future => body,
                 result = &mut connection => {
-                    result.map_err(|error| classify_body_hyper_error(&error))?;
+                    // As above, body framing is authoritative after headers were accepted.
+                    let _connection_result = result;
                     body_future.await
                 }
             };

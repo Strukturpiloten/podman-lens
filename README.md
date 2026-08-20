@@ -5,8 +5,8 @@ applications. It is the native Podman boundary used by
 [BoxFerry](https://github.com/Strukturpiloten/boxferry), but it will not depend on BoxFerry.
 
 > [!NOTE]
-> The stable native input contract is complete. Deployment planning is under active development,
-> and the library is not ready for production use yet.
+> The stable native input contract and transport-neutral deployment semantics are complete. Exact
+> command/API renderings and broad native output coverage remain under active development.
 
 PodmanLens will:
 
@@ -14,7 +14,7 @@ PodmanLens will:
   Libpod REST API;
 - build an evidence-backed resource graph from explicit selectors;
 - preserve Podman-specific data and the Podman version that gives it meaning;
-- produce ordered deployment operations with CLI and Libpod API representations; and
+- produce ordered transport-neutral deployment semantics before M6 CLI and Libpod API rendering; and
 - keep environment and secret material protected by default.
 
 PodmanLens will not choose cross-format mappings, parse Compose or Quadlet, execute deployment
@@ -40,3 +40,10 @@ The stable input call flow is `acquire_inventory` → `DiscoveryRequest` → `di
 graph exposes requested and resolved roots, groups, prerequisites, findings, and explanations.
 Runtime environment values are redacted by default; secret payload endpoints are never requested,
 and snapshots redact protected values even when a caller included environment values in memory.
+
+M5 adds `DeploymentIntent` → `plan_deployment` → `PlanningOutcome`. It uses target-side resource
+identities, explicit managed resources or external network/volume/image/secret preconditions,
+portable host-qualified managed image sources, external secret-material references, and deterministic
+create/start semantics. A pod with members gets one `StartPod`; unpodded containers get
+`StartContainer`. The plan contains no shell, HTTP, environment, or secret-payload representation;
+M6 owns those renderings.

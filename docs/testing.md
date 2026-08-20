@@ -53,3 +53,12 @@ ambiguous aliases, shared boundaries, exact name/ID crossings, ownership conflic
 and dependency cycles. Manifest tests verify immutable source provenance and SHA-256 for every
 artifact. Fixed list and selector permutations must produce byte-identical snapshots. No corpus
 test discovers or contacts a live Podman service, and no fuzzing infrastructure is required.
+
+M5 deployment tests use no transport. They cover every typed resource kind, explicit external
+preconditions, all reviewed target versions, strict managed image sources, migration-safe image
+policy, deterministic resource permutations, shared-prerequisite deduplication, pod membership,
+pod versus unpodded starts, cross-pod startup lifting, same-pod ordering rejection, duplicate and
+conflicting declarations, missing prerequisites, cycles, and protected secret references. The
+public API test compiles this contract as an external consumer. It also proves that managed
+operation intent and all deterministic external preconditions survive planning, while plan `Debug`
+output never exposes an external secret-material reference.

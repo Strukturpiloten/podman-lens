@@ -9,6 +9,12 @@ use podman_lens::{
     ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, discover, probe_libpod_service,
     snapshot::v1,
 };
+use podman_lens::{
+    ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentPlan, DeploymentResource,
+    DeploymentResourceId, ExternalPrecondition, ImageIntent, ImagePullPolicy, ObservedApiVersion,
+    ObservedPodmanVersion, PlanningFinding, PlanningOutcome, SemanticOperationAction, StartupDependency, TargetProfile,
+    plan_deployment,
+};
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
 
@@ -114,6 +120,54 @@ fn external_consumer_can_use_the_stable_input_and_snapshot_contracts() -> Result
 
     let _ = consume_inventory_snapshot;
     let _ = consume_graph_contract;
+    Ok(())
+}
+
+#[test]
+fn external_consumer_can_create_a_transport_neutral_semantic_deployment_plan() -> Result<(), Box<dyn std::error::Error>>
+{
+    let target = TargetProfile::new(
+        ObservedPodmanVersion::parse("6.1.0")?,
+        ObservedApiVersion::parse("4.0.0")?,
+    )?;
+    let image = DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/web:1")?;
+    let container = DeploymentResourceId::new(ResourceKind::Container, "web")?;
+    let mut intent = DeploymentIntent::new(target);
+    intent.set_connection(DeploymentConnectionReference::new("production")?);
+    intent.add_resource(DeploymentResource::ExternalPrecondition(ExternalPrecondition::new(
+        image.clone(),
+    )?));
+    intent.add_resource(DeploymentResource::Container(ContainerIntent::new(
+        container.clone(),
+        image,
+    )?));
+    intent.add_startup_dependency(StartupDependency::new(container.clone(), container.clone())?);
+    let outcome = plan_deployment(&intent);
+    let _: &PlanningOutcome = &outcome;
+    let _: &[PlanningFinding] = outcome.findings();
+    let _: Option<&DeploymentPlan> = outcome.plan();
+    assert!(!outcome.is_success());
+    let finding = &outcome.findings()[0];
+    assert_eq!(finding.code().as_str(), "PLN0039");
+    assert!(!finding.message().is_empty());
+    let _ = finding.subject();
+    let _ = finding.related();
+    let _ = finding.field();
+    let _ = finding.occurrence();
+    let _ = finding.count();
+    if let Some(plan) = outcome.plan() {
+        let _ = plan.external_preconditions();
+        for operation in plan.operations() {
+            let _ = operation.resource_intent();
+        }
+    }
+    assert_eq!(ImagePullPolicy::Missing, ImagePullPolicy::default());
+    let _ = ImageIntent::new(
+        DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/managed:1")?,
+        "registry.example.invalid/managed:1",
+    )?;
+    let _ = SemanticOperationAction::StartPod;
+    let _ = SemanticOperationAction::StartContainer;
     Ok(())
 }
 

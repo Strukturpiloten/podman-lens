@@ -7,6 +7,7 @@ have a demonstrated public-contract boundary.
 | --------------------- | ----------------------------------------------------------------- |
 | `src/`                | Public library and private implementation modules                 |
 | `src/snapshot/`       | Versioned serialization-only redacted export contracts            |
+| `src/deployment.rs`   | Typed deployment intent and ordered transport-neutral semantics   |
 | `catalogue/v1/`       | Versioned offline Podman compatibility evidence                   |
 | `fixtures/corpus/`    | Fixed sanitized input and graph-boundary corpus                   |
 | `fixtures/snapshots/` | Exact versioned snapshot goldens                                  |

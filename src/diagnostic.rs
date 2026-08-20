@@ -72,6 +72,28 @@ pub enum DiagnosticCode {
     RelationshipAmbiguous,
     /// A valid network-boundary override did not cross any selected dependency boundary.
     BoundaryOverrideUnused,
+    /// A typed deployment intent is malformed or violates a required resource-kind boundary.
+    InvalidDeploymentIntent,
+    /// A deployment intent repeats a resource identity or one exact prerequisite.
+    DeploymentDuplicateResource,
+    /// Two target-side declarations conflict for the same stable identity.
+    DeploymentConflictingResource,
+    /// A deployment intent refers to a resource declaration that is not present.
+    DeploymentUnresolvedPrerequisite,
+    /// A deployment intent combines otherwise supported concepts in an unsupported way.
+    DeploymentUnsupportedCombination,
+    /// Semantic deployment operations contain a dependency cycle.
+    DeploymentCycle,
+    /// A deployment intent attempts to embed sensitive bytes rather than an external reference.
+    SensitivePayloadEmbedded,
+    /// An image source cannot be represented as one strict native image reference.
+    InvalidImageReference,
+    /// An external precondition is malformed or conflicts with a managed resource.
+    InvalidExternalPrecondition,
+    /// Explicit target-side pod membership is incomplete or disagrees with a container declaration.
+    DeploymentPodMembership,
+    /// A requested startup order cannot be represented inside one Podman pod.
+    SamePodStartupDependency,
 }
 
 impl DiagnosticCode {
@@ -112,6 +134,17 @@ impl DiagnosticCode {
             Self::AdvisoryLabelConflict => "PLN0031",
             Self::RelationshipAmbiguous => "PLN0032",
             Self::BoundaryOverrideUnused => "PLN0033",
+            Self::InvalidDeploymentIntent => "PLN0034",
+            Self::DeploymentDuplicateResource => "PLN0035",
+            Self::DeploymentConflictingResource => "PLN0036",
+            Self::DeploymentUnresolvedPrerequisite => "PLN0037",
+            Self::DeploymentUnsupportedCombination => "PLN0038",
+            Self::DeploymentCycle => "PLN0039",
+            Self::SensitivePayloadEmbedded => "PLN0040",
+            Self::InvalidImageReference => "PLN0041",
+            Self::InvalidExternalPrecondition => "PLN0042",
+            Self::DeploymentPodMembership => "PLN0043",
+            Self::SamePodStartupDependency => "PLN0044",
         }
     }
 }
@@ -195,6 +228,31 @@ impl Diagnostic {
                 }
                 DiagnosticCode::BoundaryOverrideUnused => {
                     "a network-boundary override did not cross a selected dependency boundary"
+                }
+                DiagnosticCode::InvalidDeploymentIntent => "the typed Podman deployment intent is invalid",
+                DiagnosticCode::DeploymentDuplicateResource => {
+                    "a deployment resource identity or prerequisite is duplicated"
+                }
+                DiagnosticCode::DeploymentConflictingResource => {
+                    "target-side declarations conflict for one resource identity"
+                }
+                DiagnosticCode::DeploymentUnresolvedPrerequisite => {
+                    "a deployment prerequisite is not declared by the intent"
+                }
+                DiagnosticCode::DeploymentUnsupportedCombination => {
+                    "a deployment intent uses an unsupported semantic combination"
+                }
+                DiagnosticCode::DeploymentCycle => "deployment operations contain a dependency cycle",
+                DiagnosticCode::SensitivePayloadEmbedded => "a deployment plan cannot embed sensitive payload material",
+                DiagnosticCode::InvalidImageReference => {
+                    "an image source is not a strict supported Podman image reference"
+                }
+                DiagnosticCode::InvalidExternalPrecondition => "an external deployment precondition is invalid",
+                DiagnosticCode::DeploymentPodMembership => {
+                    "explicit target-side pod membership is incomplete or conflicting"
+                }
+                DiagnosticCode::SamePodStartupDependency => {
+                    "a startup dependency cannot order containers within one Podman pod"
                 }
             },
         }

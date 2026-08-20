@@ -36,6 +36,15 @@ shape requires a new versioned module and schema; compatible additions must stil
 always-redacted boundary recorded in ADR 0008. These contracts intentionally do not promise SSH or
 TLS transport implementations or deployment plans.
 
+M5 introduces provisional typed output semantics: `DeploymentIntent`, target-side
+`DeploymentResourceId`, managed resource intents, `ExternalPrecondition`,
+`SensitiveInputReference`, `StartupDependency`, `plan_deployment`, `PlanningOutcome`, and ordered
+semantic operations. Every operation retains its exact typed managed-resource intent, while the
+plan retains deterministic explicit external preconditions. They deliberately contain neither CLI
+syntax nor Libpod HTTP DTOs. Planning
+returns all sorted structured findings and no partial plan on an error. Exact output renderings,
+serialized plan schemas, and shell artifacts remain M6 contracts and are not implied by M5.
+
 Within a released `0.x.y` patch line, supported public APIs remain source compatible. A user-visible
 break must use a breaking Conventional Commit title, be documented, and receive the appropriate
 pre-1.0 minor release. Private Libpod wire types never become public compatibility commitments.

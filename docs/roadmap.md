@@ -109,20 +109,33 @@ sanitized, provenance-bearing, hash-verified, offline, and fixed rather than fuz
 
 ## M5: Ordered deployment planning
 
-- [ ] Define the versioned deployment-plan JSON schema.
-- [ ] Define semantic create and start operations for supported resources.
-- [ ] Topologically order networks, volumes, secrets, pods, containers, and start operations.
-- [ ] Emit each shared prerequisite once before its consumers.
-- [ ] Generate exact CLI program and argument arrays.
-- [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
-- [ ] Prove CLI and API equivalence for every dual-representation operation.
-- [ ] Represent sensitive inputs as references rather than serialized payloads.
-- [ ] Reject cycles and unresolved prerequisites before rendering.
+- [x] Define typed, target-side resource identities and fully resolved managed intent.
+- [x] Make external preconditions explicit rather than treating omitted resources as external.
+- [x] Define semantic image acquisition, create, `StartPod`, and `StartContainer` operations.
+- [x] Topologically order networks, volumes, secrets, images, pods, containers, and starts.
+- [x] Emit each managed shared prerequisite once before its consumers.
+- [x] Validate pod membership, duplicates, conflicts, missing references, unsupported combinations,
+      same-pod startup requests, and semantic cycles as sorted structured findings.
+- [x] Keep secret material external and protect it from plan/debug output.
 
-Exit: one ordered plan can drive both copyable CLI output and a native API client without execution.
+Exit: one typed intent produces one deterministic, transport-neutral semantic plan without execution.
+
+M5 is complete. `DeploymentIntent` uses a reviewed `TargetProfile`, typed target-side resources,
+and intent-level `StartupDependency` edges. A managed image has a bounded portable pull-reference
+grammar and the migration-safe `ImagePullPolicy::Missing`; a plan never hides an image pull inside container
+creation. Pod members are created before exactly one `StartPod`; unpodded containers get their own
+`StartContainer`. Cross-pod start edges are lifted to those pod starts, while same-pod ordering is
+rejected. `PlanningOutcome` returns a plan only when its sorted findings are empty.
+Every operation retains the complete typed managed-resource intent and every explicit network,
+volume, image, or secret precondition is retained on the plan in deterministic order. Secret bytes
+remain external; only a redacted external material reference is available to M6.
 
 ## M6: Podman output coverage
 
+- [ ] Define the versioned deployment-plan JSON schema.
+- [ ] Generate exact CLI program and argument arrays.
+- [ ] Generate exact native Libpod HTTP methods, paths, and typed bodies.
+- [ ] Prove CLI and API equivalence for every dual-representation operation.
 - [ ] Cover pods, containers, networks, named volumes, images, and secrets in dependency order.
 - [ ] Preserve explicit pod membership and validate unpodded output intent.
 - [ ] Cover environment, mounts, ports, health, restart, security, namespace, and resource settings.

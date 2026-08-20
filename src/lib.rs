@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 pub mod connection;
+pub mod deployment;
 pub mod diagnostic;
 pub mod discovery;
 pub mod evidence;
@@ -23,6 +24,12 @@ pub mod version;
 pub use connection::{
     ConnectionKind, ConnectionSpec, MutualTlsPolicy, OpaqueReference, SshConnection, TcpMutualTlsConnection,
     UnixConnection,
+};
+pub use deployment::{
+    ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentOperation, DeploymentOperationId,
+    DeploymentPlan, DeploymentResource, DeploymentResourceId, ExternalPrecondition, ImageIntent, ImagePullPolicy,
+    NetworkIntent, PlanningFinding, PlanningOutcome, PodIntent, SecretIntent, SemanticOperationAction,
+    SensitiveInputReference, StartupDependency, VolumeIntent, plan_deployment,
 };
 pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use discovery::{

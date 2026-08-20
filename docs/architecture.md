@@ -14,7 +14,8 @@ cross-format semantics.
 | Native resource inspection and relationships | Loss-policy authorization                        |
 | Native resource discovery and boundaries     | Output-directory lifecycle and reports           |
 | Ordered Podman deployment operations         | Deciding pod layout for cross-format input       |
-| CLI and Libpod API operation renderings      | Whether and how a plan is executed               |
+| M5 semantic operation planning               | Whether and how a plan is executed               |
+| M6 CLI and Libpod API operation renderings   | Whether and how a plan is executed               |
 
 PodmanLens is a library. It must not shell out to `podman` to acquire input, depend on BoxFerry, or
 execute generated operations.
@@ -45,9 +46,9 @@ explicit Podman deployment intent
              |
              v
  ordered semantic operations
-       |                 |
-       v                 v
-  CLI `argv`       Libpod HTTP request
+             |
+             v
+ M6 CLI/API/JSON renderers
 ```
 
 The Docker-compatible API is not the canonical protocol because it cannot represent every
@@ -126,47 +127,26 @@ snapshots or treat them as trusted input.
 
 The order of `operations` is authoritative. `depends_on` records why the order exists and permits a
 consumer to validate or safely parallelize independent work. The semantic resource action is the
-source of truth; CLI and HTTP forms are generated representations.
+source of truth. M5 owns only this semantic plan; M6 adds CLI, HTTP, JSON, and shell
+representations.
 
 Executing every operation sequentially in array order must always be valid. Parallel execution is
 an optional optimization derived from `depends_on`, not a requirement for consuming the plan.
 
-```json
-{
-  "schema_version": 1,
-  "target": {
-    "connection": "production",
-    "podman_version": "6.1.0",
-    "api": "libpod"
-  },
-  "operations": [
-    {
-      "id": "pod.immich",
-      "action": "create",
-      "resource": {
-        "kind": "pod",
-        "name": "immich"
-      },
-      "depends_on": ["network.immich"],
-      "representations": {
-        "cli": {
-          "argv": ["podman", "--connection", "production", "pod", "create", "--name", "immich"]
-        },
-        "api": {
-          "method": "POST",
-          "path": "/v6.1.0/libpod/pods/create",
-          "body": {
-            "name": "immich"
-          }
-        }
-      }
-    }
-  ]
-}
-```
+Managed target-side resources have `DeploymentResourceId`, not acquired `ResourceIdentity`.
+`ExternalPrecondition` makes an intentional unmanaged network, volume, image, or secret prerequisite
+visible and `DeploymentPlan` retains those preconditions in deterministic identity order. Every
+managed operation retains its complete typed resource intent, so an M6 renderer has the image
+source, resource configuration, or redacted secret-material reference it needs without rebuilding
+meaning from IDs. Omitted references are findings, never an implicit external boundary. Pods and
+containers remain managed in M5. Image acquisition is explicit with migration-safe
+`ImagePullPolicy::Missing` and a bounded portable pull-reference grammar; container creation must
+not hide a pull.
 
-A caller may render `deployment.sh` from the same CLI representations. PodmanLens never executes
-that script or the HTTP requests.
+Pods with members have one `StartPod` after all member create operations. Unpodded containers have
+`StartContainer`. Intent-level container order is lifted to pod starts across pod boundaries;
+same-pod order is rejected because Podman starts those members as a unit. PodmanLens never executes
+future rendered commands or HTTP requests.
 
 ## Expected BoxFerry integration
 
@@ -180,13 +160,13 @@ contracts:
   exceptional crossing.
 - `--pod-layout` is a BoxFerry mapping policy applied before Podman output intent reaches
   PodmanLens.
-- `--output-connection` is recorded in the plan and rendered into CLI operations. Planning does not
-  connect to that destination.
-- `--output-directory` receives `deployment-plan.json` and `deployment.sh`; generated artifacts do
-  not replace the human or JSON conversion report on standard output.
+- `--output-connection` is recorded as non-sensitive plan metadata. M6 will render it into CLI/API
+  forms; M5 never connects to that destination.
+- M6 will provide `deployment-plan.json` and `deployment.sh`; BoxFerry will own their output
+  directory lifecycle and reporting.
 
-PodmanLens returns structured data and rendered artifacts. BoxFerry remains responsible for
-output-directory safety, diagnostic presentation, and loss-policy authorization.
+PodmanLens returns structured data and, from M6, rendered artifacts. BoxFerry remains responsible
+for output-directory safety, diagnostic presentation, and loss-policy authorization.
 
 ## Discovery and resource groups
 

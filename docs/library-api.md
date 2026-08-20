@@ -62,6 +62,37 @@ Snapshots still contain operational metadata such as resource IDs and names, ima
 environment variable names, network subnets, evidence URLs, and source field paths. Always-redacted
 does not mean anonymous; callers must still handle reports as operational data.
 
+## Plan native deployment semantics
+
+Create one `DeploymentIntent` with an explicit reviewed `TargetProfile`, then add fully resolved
+target-side `DeploymentResource` values. `DeploymentResourceId` is deliberately separate from an
+observed `ResourceIdentity`: output names are declarations, not input observations. A required
+network, volume, image, or secret outside the plan must be present as `ExternalPrecondition`; a
+missing reference is never assumed to exist. Pods and containers remain managed in M5 so their
+lifecycle and membership are validated.
+
+`plan_deployment` returns `PlanningOutcome`. A successful outcome has one deterministic semantic
+plan; an unsuccessful outcome has sorted `PlanningFinding` values and no partial plan. The only
+M5 operations are image acquisition, resource creation, `StartPod`, and `StartContainer`. Managed
+images use a bounded portable pull-reference grammar: a host-qualified lower-case registry/repository
+with either a tag or a `sha256` digest. Local, unqualified, and malformed spellings are rejected.
+They use explicit migration-safe `ImagePullPolicy::Missing`.
+
+Pods can depend on networks and named volumes; containers declare matching membership in both
+directions. A pod with members gets one
+`StartPod` after every member create; unpodded containers get `StartContainer`. Add semantic
+container ordering with `StartupDependency`: cross-pod edges are lifted to pod starts, while a
+same-pod edge is rejected. Secret material uses `SensitiveInputReference` and never becomes plan
+content; the typed external reference is retained on the managed secret operation so M6 can render
+it without recovering data from the caller. Every operation likewise retains its complete typed
+managed-resource intent, and `DeploymentPlan::external_preconditions` preserves all explicit
+network, volume, image, and secret boundaries in deterministic order. M6 will add CLI, Libpod
+HTTP, JSON, and shell representations.
+
+`PlanningFinding::occurrence` is a one-based list position for a duplicate prerequisite or
+startup edge. Grouped duplicate or conflicting resource declarations have no single position;
+their `PlanningFinding::count` reports the number of declarations instead.
+
 ## Non-goals
 
 The input API does not discover an ambient connection, parse `podman` command output, execute

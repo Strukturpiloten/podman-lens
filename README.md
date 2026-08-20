@@ -47,3 +47,7 @@ portable host-qualified managed image sources, external secret-material referenc
 create/start semantics. A pod with members gets one `StartPod`; unpodded containers get
 `StartContainer`. The plan contains no shell, HTTP, environment, or secret-payload representation;
 M6 owns those renderings.
+
+The inventory's currently accepted native fields are declared in a strict machine-readable ledger.
+Unmodeled data is retained only as bounded, redacted metadata; a partial record or overflow finding
+means that metadata is explicitly incomplete rather than an exhaustive native configuration export.

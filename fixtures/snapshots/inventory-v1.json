@@ -389,30 +389,7 @@
           "memory_swappiness": null,
           "is_infra": null,
           "secret_driver": "file",
-          "unknown_fields": [
-            {
-              "path": "$.Spec.Driver",
-              "json_kind": "string",
-              "resource": {
-                "kind": "secret",
-                "id": "secret-1",
-                "name": "db-password"
-              },
-              "evidence": {
-                "engine_version": "6.1.0",
-                "api_version": "6.1.0",
-                "podman_minor_line": "6.1",
-                "minimum_podman_version": "6.1.0",
-                "maximum_exclusive_podman_version": "6.2.0",
-                "minimum_libpod_api_version": "4.0.0",
-                "observed_podman_version": "6.1.0",
-                "observed_libpod_api_version": "6.1.0",
-                "evidence_source": "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/rawversion/rawversion.go",
-                "evidence_revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
-                "evidence_release_tag": "v6.1.0"
-              }
-            }
-          ],
+          "unknown_fields": [],
           "findings": [
             {
               "code": "PLN0018",
@@ -422,16 +399,6 @@
                 "name": "db-password"
               },
               "field_path": null,
-              "occurrence": null
-            },
-            {
-              "code": "PLN0023",
-              "resource": {
-                "kind": "secret",
-                "id": "secret-1",
-                "name": "db-password"
-              },
-              "field_path": "$.Spec.Driver",
               "occurrence": null
             }
           ],

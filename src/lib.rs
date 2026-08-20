@@ -11,6 +11,7 @@
 /// Versioned, serialization-only deployment artifacts.
 pub mod artifact;
 pub mod connection;
+pub mod coverage;
 pub mod deployment;
 pub mod diagnostic;
 pub mod discovery;
@@ -30,6 +31,7 @@ pub use connection::{
     ConnectionKind, ConnectionSpec, MutualTlsPolicy, OpaqueReference, SshConnection, TcpMutualTlsConnection,
     UnixConnection,
 };
+pub use coverage::{NativeFieldCoverageClassification, NativeFieldCoverageEntry, native_field_coverage_catalogue};
 pub use deployment::{
     ContainerIntent, DeploymentConnectionReference, DeploymentIntent, DeploymentOperation, DeploymentOperationId,
     DeploymentPlan, DeploymentResource, DeploymentResourceId, ExternalPrecondition, ImageIntent, ImagePullPolicy,

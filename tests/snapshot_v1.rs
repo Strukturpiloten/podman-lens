@@ -98,6 +98,29 @@ async fn inventory_snapshot_matches_the_versioned_golden_json() -> Result<(), Bo
 }
 
 #[tokio::test]
+async fn secret_driver_is_typed_not_unsupported_in_inventory_snapshots() -> Result<(), Box<dyn std::error::Error>> {
+    let snapshot = serde_json::to_value(v1::inventory(&inventory().await?))?;
+    let secret = snapshot["sections"]
+        .as_array()
+        .ok_or("inventory snapshot sections must be an array")?
+        .iter()
+        .find(|section| section["kind"] == "secret")
+        .and_then(|section| section["records"].as_array())
+        .and_then(|records| records.first())
+        .ok_or("inventory snapshot must contain the secret record")?;
+    assert_eq!(secret["secret_driver"], "file");
+    assert_eq!(secret["unknown_fields"], json!([]));
+    assert!(
+        secret["findings"]
+            .as_array()
+            .ok_or("secret snapshot findings must be an array")?
+            .iter()
+            .all(|finding| finding["field_path"] != "$.Spec.Driver")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn graph_snapshot_matches_the_versioned_golden_json() -> Result<(), Box<dyn std::error::Error>> {
     let mut request = DiscoveryRequest::new();
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "a")?);

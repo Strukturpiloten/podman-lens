@@ -15,9 +15,9 @@ use podman_lens::{
 };
 use podman_lens::{
     AcquisitionOptions, ConnectionSpec, DiscoveryRequest, LabelSelector, LibpodHeaders, LibpodPath, LibpodRequest,
-    LibpodResponse, LibpodTransport, LibpodTransportFuture, OpaqueReference, ResourceInventory, ResourceKind,
-    ResourceSelector, SshConnection, TransportError, UnixConnection, acquire_inventory, artifact::deployment_v1,
-    discover, probe_libpod_service, snapshot::v1,
+    LibpodResponse, LibpodTransport, LibpodTransportFuture, NativeFieldCoverageClassification, OpaqueReference,
+    ResourceInventory, ResourceKind, ResourceSelector, SshConnection, TransportError, UnixConnection,
+    acquire_inventory, artifact::deployment_v1, discover, probe_libpod_service, snapshot::v1,
 };
 #[cfg(unix)]
 use podman_lens::{ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits};
@@ -98,6 +98,22 @@ fn external_consumer_can_select_the_redacted_inventory_contract() {
         transport,
         AcquisitionOptions::include_environment_values(),
     ));
+}
+
+#[test]
+fn external_consumer_can_inspect_the_strict_native_field_coverage_ledger() -> Result<(), Box<dyn std::error::Error>> {
+    let entries = podman_lens::native_field_coverage_catalogue()?;
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0035"
+            && entry.native_path() == "$.Spec.Driver"
+            && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0038"
+            && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
+            && entry.public_contract() == "ResourceRecord::unknown_fields_complete"
+    }));
+    Ok(())
 }
 
 #[test]

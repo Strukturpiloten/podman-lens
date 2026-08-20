@@ -15,3 +15,4 @@ do not let code silently change it.
 | [0008: Versioned observational snapshots are serialization-only and always redacted](0008-versioned-redacted-snapshots.md) | Accepted |
 | [0009: Explicit image acquisition and pod-start lifting](0009-explicit-image-acquisition-and-pod-start-lifting.md)         | Accepted |
 | [0010: Versioned non-executing output rendering](0010-versioned-nonexecuting-output-rendering.md)                          | Accepted |
+| [0011: Native field coverage is an explicit, strict ledger](0011-native-field-coverage-ledger.md)                          | Accepted |

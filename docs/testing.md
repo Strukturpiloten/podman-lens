@@ -35,6 +35,12 @@ inspect paths; partial races; malformed and duplicate list records; secret-metad
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
 
+The native-field coverage ledger is parsed as a strict public catalogue. Its unit tests reject
+schema, identifier, diagnostic, decoder-reference, planner/renderer applicability, and expected-row
+mutations. Inventory tests prove that unmodeled `HostConfig` members become bounded unsupported
+metadata, `Secret.Spec.Driver` does not become unknown metadata, and overflow or partial inspection
+makes `ResourceRecord::unknown_fields_complete()` false.
+
 M3 discovery tests use fixture transports only. They cover all six exact resource-root kinds;
 label-presence, label-value, empty-value, and rejected selectors; dependent-to-prerequisite closure;
 cycle-free pod membership; shared prerequisites; explicit shared roots; exact network name-or-ID

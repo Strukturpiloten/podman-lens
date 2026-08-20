@@ -17,6 +17,10 @@ remain private. The inventory carries all six fixed sections, per-section availa
 records for non-atomic races, labels, relationships, source/version evidence, field-path and JSON
 kind metadata for unsupported fields, and structured findings. `SensitiveEnvironmentValue` may be
 used only through its callback accessor; it does not serialize or print its plaintext value.
+`native_field_coverage_catalogue()` exposes the strict, packaged M2 native-field ledger. Its rows
+name decoder, planner/renderer applicability, public access point, diagnostic, and focused tests.
+`ResourceRecord::unknown_fields_complete()` prevents callers from treating bounded unknown metadata
+as exhaustive after `PLN0021` or a partial inspection.
 
 M3 introduced `ResourceSelector`, `LabelSelector`, `DiscoveryRequest`,
 `discover`, and deterministic `ResourceGraph` contracts. The graph exposes requested

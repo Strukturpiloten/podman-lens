@@ -110,6 +110,10 @@ unavailable. A `404` or malformed inspect response creates a partial record with
 identity, leaving every unrelated list and record available. Unknown data is represented only by
 path, JSON kind, record identity, and source/version evidence—not raw JSON. Podman image names and
 IDs are treated as raw identifiers and percent-encoded once before an inspect path is generated.
+The strict native-field ledger names every M2 decoder field and its public contract. Accepting a
+nested object does not accept its unmodeled descendants: they become `PLN0023` metadata. That
+metadata is bounded; `PLN0021` and `ResourceRecord::unknown_fields_complete()` explicitly mark it
+as incomplete after overflow or a partial record.
 
 ## M4 stable input and snapshots
 

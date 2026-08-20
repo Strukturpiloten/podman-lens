@@ -98,6 +98,8 @@ pub enum DiagnosticCode {
     RenderingTargetMismatch,
     /// A semantic operation has no reviewed renderer representation.
     RenderingUnsupported,
+    /// The packaged native-field coverage catalogue is malformed or incomplete.
+    NativeFieldCoverageUnavailable,
 }
 
 impl DiagnosticCode {
@@ -151,6 +153,7 @@ impl DiagnosticCode {
             Self::SamePodStartupDependency => "PLN0044",
             Self::RenderingTargetMismatch => "PLN0045",
             Self::RenderingUnsupported => "PLN0046",
+            Self::NativeFieldCoverageUnavailable => "PLN0047",
         }
     }
 }
@@ -264,6 +267,9 @@ impl Diagnostic {
                     "the selected Libpod API version lacks exact renderer evidence for the target engine"
                 }
                 DiagnosticCode::RenderingUnsupported => "a semantic operation has no reviewed renderer representation",
+                DiagnosticCode::NativeFieldCoverageUnavailable => {
+                    "the native-field coverage catalogue is malformed or incomplete"
+                }
             },
         }
     }

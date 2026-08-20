@@ -506,6 +506,7 @@ pub struct ResourceRecord {
     is_infra: Option<bool>,
     secret_driver: Option<String>,
     unknown_fields: Vec<UnknownNativeField>,
+    unknown_fields_complete: bool,
     findings: Vec<InventoryFinding>,
     evidence: ResourceEvidence,
 }
@@ -524,6 +525,7 @@ impl ResourceRecord {
             is_infra: None,
             secret_driver: None,
             unknown_fields: Vec::new(),
+            unknown_fields_complete: false,
             findings: vec![InventoryFinding::for_resource(finding, identity)],
             evidence,
         }
@@ -595,6 +597,16 @@ impl ResourceRecord {
         &self.unknown_fields
     }
 
+    /// Returns whether [`Self::unknown_fields`] accounts for every unmodeled native field.
+    ///
+    /// A partial inspection and an [`DiagnosticCode::UnknownFieldOverflow`] finding make the
+    /// retained metadata incomplete. Callers must use the finding and this flag rather than
+    /// treating the bounded slice as an exhaustive record of unsupported native configuration.
+    #[must_use]
+    pub const fn unknown_fields_complete(&self) -> bool {
+        self.unknown_fields_complete
+    }
+
     /// Returns non-fatal findings attached to this record.
     #[must_use]
     pub fn findings(&self) -> &[InventoryFinding] {
@@ -623,6 +635,7 @@ impl fmt::Debug for ResourceRecord {
             .field("is_infra", &self.is_infra)
             .field("has_secret_driver", &self.secret_driver.is_some())
             .field("unknown_fields", &self.unknown_fields)
+            .field("unknown_fields_complete", &self.unknown_fields_complete)
             .field("findings", &self.findings)
             .field("evidence", &self.evidence)
             .finish()
@@ -1067,6 +1080,7 @@ fn decode_record(
         is_infra,
         secret_driver,
         unknown_fields,
+        unknown_fields_complete: !unknown_field_overflow,
         findings,
         evidence,
     })
@@ -1970,12 +1984,21 @@ fn unknown_nested_fields(kind: ResourceKind, object: &Map<String, Value>, fields
                 &["ID", "Name"],
                 fields,
             );
+            // `MemorySwappiness` is the only currently typed HostConfig member. Every other
+            // direct member is deliberately retained as unsupported metadata instead of being
+            // hidden by the accepted HostConfig object.
+            unknown_object_members(object.get("HostConfig"), "$.HostConfig", &["MemorySwappiness"], fields);
         }
         ResourceKind::Pod => unknown_array_object_members(object.get("Containers"), "$.Containers", &["Id"], fields),
         ResourceKind::Network => unknown_array_object_members(object.get("subnets"), "$.subnets", &["subnet"], fields),
         ResourceKind::Image => unknown_object_members(object.get("Config"), "$.Config", &["Env"], fields),
         ResourceKind::Secret => {
-            unknown_object_members(object.get("Spec"), "$.Spec", &["Name", "Labels", "SecretData"], fields);
+            unknown_object_members(
+                object.get("Spec"),
+                "$.Spec",
+                &["Name", "Labels", "Driver", "SecretData"],
+                fields,
+            );
         }
         ResourceKind::Volume => {}
     }

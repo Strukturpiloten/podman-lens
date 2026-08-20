@@ -107,6 +107,12 @@ deserializes and always removes environment values, secret payloads, connection 
 JSON, label values, driver-option values, and Compose ownership values. Corpus artifacts are
 sanitized, provenance-bearing, hash-verified, offline, and fixed rather than fuzz-generated.
 
+The M2 input surface is now guarded by `catalogue/v1/native-field-coverage.json`: a strict,
+machine-readable ledger with one row per accepted native field and links to decoder ownership,
+public contract, diagnostics, and focused tests. It records observation-only and manual boundaries
+without implying output support. Unknown-field metadata is intentionally bounded; overflow and
+partial inspection explicitly make the retained metadata incomplete.
+
 ## M5: Ordered deployment planning
 
 - [x] Define typed, target-side resource identities and fully resolved managed intent.

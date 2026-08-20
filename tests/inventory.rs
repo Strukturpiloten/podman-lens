@@ -214,6 +214,12 @@ async fn acquisition_probes_lists_every_kind_then_inspects_canonical_stable_ids(
     let secret = &inventory.section(ResourceKind::Secret).expect("secret").records()[0];
     assert_eq!(secret.secret_driver(), Some("file"));
     assert!(
+        !secret
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path() == "$.Spec.Driver")
+    );
+    assert!(
         secret
             .findings()
             .iter()
@@ -375,6 +381,10 @@ async fn every_inspect_status_and_shape_failure_retains_a_partial_stable_identit
                 "{kind:?} must remain partial"
             );
             assert!(!record.identity().id().is_empty());
+            assert!(
+                !record.unknown_fields_complete(),
+                "{kind:?} partial records cannot claim exhaustive unknown metadata"
+            );
             assert!(
                 record
                     .findings()
@@ -571,6 +581,78 @@ async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_valu
 }
 
 #[tokio::test]
+async fn host_config_members_not_yet_modeled_are_retained_as_unknown_metadata() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"a","HostConfig":{"MemorySwappiness":10,"NanoCpus":2000000000,"LogConfig":{"Type":"journald"}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let record = &inventory
+        .section(ResourceKind::Container)
+        .expect("containers")
+        .records()[0];
+    assert_eq!(record.memory_swappiness(), Some(10));
+    assert_eq!(
+        record
+            .unknown_fields()
+            .iter()
+            .map(podman_lens::UnknownNativeField::path)
+            .collect::<Vec<_>>(),
+        ["$.HostConfig.LogConfig", "$.HostConfig.NanoCpus"]
+    );
+    assert!(record.unknown_fields_complete());
+    assert!(
+        record
+            .findings()
+            .iter()
+            .filter(|finding| finding.code() == DiagnosticCode::NativeFieldUnsupported)
+            .all(|finding| matches!(
+                finding.field_path(),
+                Some("$.HostConfig.LogConfig" | "$.HostConfig.NanoCpus")
+            ))
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn secret_driver_is_modeled_without_unsupported_metadata() -> Result<(), Box<dyn std::error::Error>> {
+    for version in ["5.4.0", "6.1.0"] {
+        let mut responses = fixture_responses(version)?;
+        responses[14] = json(r#"{"ID":"secret-1","Spec":{"Name":"database-password","Driver":"file"}}"#)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let record = &inventory.section(ResourceKind::Secret).expect("secrets").records()[0];
+        assert_eq!(record.secret_driver(), Some("file"), "{version}");
+        assert!(
+            !record
+                .unknown_fields()
+                .iter()
+                .any(|field| field.path() == "$.Spec.Driver"),
+            "{version} must not classify Secret.Spec.Driver as unsupported"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn secret_payload_is_discarded_from_metadata_inspection() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[14] = json(
+        r#"{"ID":"secret-1","Spec":{"Name":"database-password","SecretData":"must-not-be-retained"},"SecretData":"must-not-be-retained"}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let record = &inventory.section(ResourceKind::Secret).expect("secrets").records()[0];
+    assert!(
+        record
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::SecretPayloadDiscarded)
+    );
+    assert!(!format!("{record:?}").contains("must-not-be-retained"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Result<(), Box<dyn std::error::Error>> {
     let mut responses = fixture_responses("6.1.0")?;
     let mut record = serde_json::json!({"Id": "container-a", "Name": "a"});
@@ -594,6 +676,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::UnknownFieldOverflow)
     );
+    assert!(!record.unknown_fields_complete());
 
     let mut responses = fixture_responses("6.1.0")?;
     let ids = (0..17).map(|index| format!("container-{index:02}")).collect::<Vec<_>>();
@@ -628,6 +711,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
             .iter()
             .any(|finding| finding.code() == DiagnosticCode::UnknownFieldOverflow)
     }));
+    assert!(records.iter().any(|record| !record.unknown_fields_complete()));
     Ok(())
 }
 

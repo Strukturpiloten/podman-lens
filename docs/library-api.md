@@ -13,6 +13,21 @@ acquire_inventory → DiscoveryRequest → discover → ResourceGraph
 containers, pods, networks, volumes, images, and secret metadata, then inspects stable resource IDs.
 The result preserves partial and malformed observations as evidence or structured findings.
 
+## Inspect native-field coverage
+
+`native_field_coverage_catalogue()` returns the packaged, strict ledger for the currently accepted
+M2 input fields. Each row links one native path to its decoder, output applicability, public
+accessor, diagnostic rule, and focused positive and negative tests. `not_applicable` in the planner
+and renderer references means only that the observed field has no native deployment-output contract
+yet; it does not authorize a conversion.
+
+`ResourceRecord::unknown_fields()` retains bounded metadata for unmodeled native fields without raw
+values. Call `ResourceRecord::unknown_fields_complete()` before treating that metadata as an
+exhaustive account: it is false for partial records and after `PLN0021` unknown-field overflow.
+`HostConfig.MemorySwappiness` is typed, while any other direct `HostConfig` member is explicitly
+unsupported metadata. `Secret.Spec.Driver` is typed metadata; secret payload material is discarded
+and reported as `PLN0018`.
+
 ## Select roots
 
 Add exact resource roots with `ResourceSelector::exact`. A reference is one exact resource name,

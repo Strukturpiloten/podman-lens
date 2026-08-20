@@ -23,6 +23,7 @@ include = [
   "/.vscode/**",
   "/AGENTS.md",
   "/catalogue/**",
+  "/catalogue/v1/native-field-coverage.json",
   "/catalogue/v1/podman-deployment-rendering.json",
   "/fixtures/corpus/**",
   "/fixtures/deployment/**",

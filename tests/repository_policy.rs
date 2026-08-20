@@ -17,6 +17,7 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/docs/schemas/podman-lens-snapshot-v1.schema.json",
         "/docs/schemas/podman-lens-deployment-v1.schema.json",
         "/catalogue/v1/podman-deployment-rendering.json",
+        "/catalogue/v1/native-field-coverage.json",
         "/fixtures/deployment/**",
         "/fixtures/corpus/**",
         "/fixtures/snapshots/**",
@@ -88,6 +89,14 @@ fn deployment_renderer_evidence_schema_and_exact_goldens_exist() {
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }
+}
+
+#[test]
+fn native_field_coverage_ledger_exists() {
+    assert!(
+        Path::new("catalogue/v1/native-field-coverage.json").is_file(),
+        "missing native-field coverage ledger"
+    );
 }
 
 #[test]

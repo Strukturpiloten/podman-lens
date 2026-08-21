@@ -236,6 +236,31 @@ fn json(body: impl AsRef<[u8]>) -> Result<LibpodResponse, Box<dyn std::error::Er
     )?)
 }
 
+fn json_with_content_types(
+    body: impl AsRef<[u8]>,
+    content_types: &[&str],
+) -> Result<LibpodResponse, Box<dyn std::error::Error>> {
+    let headers = content_types
+        .iter()
+        .map(|value| LibpodHeader::new("Content-Type", *value))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(LibpodResponse::new(
+        200,
+        LibpodHeaders::new(headers),
+        body.as_ref().to_vec(),
+    )?)
+}
+
+fn oversized_json_string(private_sentinel: &str) -> Vec<u8> {
+    let mut body = Vec::with_capacity(podman_lens::MAX_INVENTORY_JSON_BYTES + 1);
+    body.push(b'"');
+    body.extend_from_slice(private_sentinel.as_bytes());
+    body.resize(podman_lens::MAX_INVENTORY_JSON_BYTES, b'x');
+    body.push(b'"');
+    assert_eq!(body.len(), podman_lens::MAX_INVENTORY_JSON_BYTES + 1);
+    body
+}
+
 fn status(status: u16) -> Result<LibpodResponse, Box<dyn std::error::Error>> {
     Ok(LibpodResponse::new(status, LibpodHeaders::default(), Vec::new())?)
 }
@@ -1149,55 +1174,60 @@ async fn infra_configuration_inconsistencies_and_malformed_members_fail_closed()
 }
 
 #[tokio::test]
-async fn deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted()
+async fn deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted()
 -> Result<(), Box<dyn std::error::Error>> {
-    let mut responses = fixture_responses("6.1.0")?;
-    responses[0] = LibpodResponse::new(
-        200,
-        LibpodHeaders::new(vec![LibpodHeader::new("libpod-api-version", "5.8.6")?]),
-        Vec::new(),
-    )?;
-    responses[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"5.8.6"}]}"#)?;
-    responses[10] = json(
-        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"StaticIP":"10.88.0.5","StaticMAC":"02:42:ac:11:00:02"}}"#,
-    )?;
-    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-    let ResourceDetails::Pod(pod) = inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0].details()
-    else {
-        return Err("fixture must decode as a pod".into());
-    };
-    let networking = pod.networking().observed().ok_or("infra networking")?.value();
-    assert_eq!(
-        networking.static_ip().observed().map(|value| value.value().to_string()),
-        Some("10.88.0.5".to_owned())
-    );
-    assert!(matches!(networking.static_mac(), ObservationField::VersionInapplicable));
+    for (version, static_ip_is_applicable) in [("5.8.0", true), ("5.8.6", true), ("5.8.7", true), ("6.0.0", false)] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[0] = LibpodResponse::new(
+            200,
+            LibpodHeaders::new(vec![LibpodHeader::new("libpod-api-version", version)?]),
+            Vec::new(),
+        )?;
+        responses[1] = json(format!(
+            r#"{{"Components":[{{"Name":"Podman Engine","Version":"{version}"}}]}}"#
+        ))?;
+        responses[10] = json(
+            r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"StaticIP":"10.88.0.5","StaticMAC":"02:42:ac:11:00:02"}}"#,
+        )?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0];
+        let ResourceDetails::Pod(pod) = observation.details() else {
+            return Err("fixture must decode as a pod".into());
+        };
+        let networking = pod.networking().observed().ok_or("infra networking")?.value();
 
-    let mut responses = fixture_responses("6.1.0")?;
-    responses[0] = LibpodResponse::new(
-        200,
-        LibpodHeaders::new(vec![LibpodHeader::new("libpod-api-version", "6.0.0")?]),
-        Vec::new(),
-    )?;
-    responses[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"6.0.0"}]}"#)?;
-    responses[10] = json(
-        r#"{"Id":"pod-1","Name":"pod-one","CreateInfra":true,"InfraConfig":{"StaticIP":"10.88.0.5","StaticMAC":"not-a-mac"}}"#,
-    )?;
-    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
-    let ResourceDetails::Pod(pod) = inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0].details()
-    else {
-        return Err("fixture must decode as a pod".into());
-    };
-    let networking = pod.networking().observed().ok_or("infra networking")?.value();
-    assert!(matches!(networking.static_ip(), ObservationField::VersionInapplicable));
-    assert!(matches!(networking.static_mac(), ObservationField::VersionInapplicable));
-    assert!(
-        !inventory.section(ResourceKind::Pod).ok_or("pods")?.observations()[0]
-            .header()
-            .unmodelled_fields()
-            .iter()
-            .any(|field| field.path() == "$.InfraConfig.StaticMAC")
-    );
+        if static_ip_is_applicable {
+            assert_eq!(
+                networking.static_ip().observed().map(|value| value.value().to_string()),
+                Some("10.88.0.5".to_owned()),
+                "{version}"
+            );
+        } else {
+            assert!(
+                matches!(networking.static_ip(), ObservationField::VersionInapplicable),
+                "{version}"
+            );
+            assert!(observation.header().findings().iter().any(|finding| {
+                finding.code() == DiagnosticCode::VersionInapplicableField
+                    && finding.field_path() == Some("$.InfraConfig.StaticIP")
+            }));
+        }
+        assert!(
+            matches!(networking.static_mac(), ObservationField::VersionInapplicable),
+            "{version}"
+        );
+        assert!(observation.header().findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::VersionInapplicableField
+                && finding.field_path() == Some("$.InfraConfig.StaticMAC")
+        }));
+        assert!(
+            !observation
+                .header()
+                .unmodelled_fields()
+                .iter()
+                .any(|field| { matches!(field.path(), "$.InfraConfig.StaticIP" | "$.InfraConfig.StaticMAC") })
+        );
+    }
     Ok(())
 }
 
@@ -1436,6 +1466,199 @@ async fn unavailable_lists_and_disappeared_inspects_remain_visible_as_partial_in
         inventory.section(ResourceKind::Secret).expect("secrets").availability(),
         podman_lens::InventorySectionAvailability::Available
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn truncated_and_oversized_raw_list_json_only_malforms_its_section() -> Result<(), Box<dyn std::error::Error>> {
+    const PRIVATE_SENTINEL: &str = "RAW_LIST_PRIVATE_SENTINEL";
+    for (case, body) in [
+        (
+            "truncated",
+            format!(r#"[{{"Id":"container-a","Private":"{PRIVATE_SENTINEL}"}}"#).into_bytes(),
+        ),
+        ("oversized", oversized_json_string(PRIVATE_SENTINEL)),
+    ] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[2] = json(body)?;
+        responses.remove(9);
+        responses.remove(8);
+        let transport = RecordingTransport::new(responses);
+        let inventory = acquire_inventory(&transport, AcquisitionOptions::redacted()).await?;
+        let containers = inventory.section(ResourceKind::Container).expect("containers");
+        assert_eq!(
+            containers.availability(),
+            podman_lens::InventorySectionAvailability::Malformed,
+            "{case}"
+        );
+        assert!(containers.observations().is_empty(), "{case}");
+        assert_eq!(containers.findings().len(), 1, "{case}");
+        assert_eq!(containers.findings()[0].code(), DiagnosticCode::InventoryJson, "{case}");
+        assert!(
+            inventory
+                .sections()
+                .iter()
+                .filter(|section| section.kind() != ResourceKind::Container)
+                .all(|section| section.availability() == podman_lens::InventorySectionAvailability::Available),
+            "{case}"
+        );
+        assert!(
+            transport
+                .requests()
+                .iter()
+                .all(|(_, path)| !path.contains("/containers/container-")),
+            "{case}"
+        );
+        assert!(!format!("{inventory:?}").contains(PRIVATE_SENTINEL), "{case}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn truncated_and_oversized_raw_inspect_json_retains_a_safe_partial_identity()
+-> Result<(), Box<dyn std::error::Error>> {
+    const PRIVATE_SENTINEL: &str = "RAW_INSPECT_PRIVATE_SENTINEL";
+    for (case, body) in [
+        (
+            "truncated",
+            format!(r#"{{"Id":"container-a","Private":"{PRIVATE_SENTINEL}""#).into_bytes(),
+        ),
+        ("oversized", oversized_json_string(PRIVATE_SENTINEL)),
+    ] {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let containers = inventory.section(ResourceKind::Container).expect("containers");
+        assert_eq!(
+            containers.availability(),
+            podman_lens::InventorySectionAvailability::Available,
+            "{case}"
+        );
+        let observation = &containers.observations()[0];
+        assert_eq!(observation.identity().id(), "container-a", "{case}");
+        assert_eq!(
+            observation.header().state(),
+            podman_lens::ResourceObservationState::Malformed,
+            "{case}"
+        );
+        assert!(!observation.unknown_fields_complete(), "{case}");
+        assert!(
+            observation
+                .findings()
+                .iter()
+                .any(|finding| finding.code() == DiagnosticCode::InventoryJson),
+            "{case}"
+        );
+        let sibling = containers
+            .observations()
+            .iter()
+            .find(|candidate| candidate.identity().id() == "container-z")
+            .ok_or("container-z must remain present")?;
+        assert_eq!(
+            sibling.header().state(),
+            podman_lens::ResourceObservationState::Complete,
+            "{case}"
+        );
+        assert!(!format!("{inventory:?}").contains(PRIVATE_SENTINEL), "{case}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn inventory_json_content_type_is_case_insensitive_and_allows_parameters_for_lists_and_inspects()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    for response_index in [2, 8] {
+        let body = responses[response_index].body().to_vec();
+        responses[response_index] = json_with_content_types(body, &["Application/Json; charset=utf-8"])?;
+    }
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let containers = inventory.section(ResourceKind::Container).expect("containers");
+    assert_eq!(
+        containers.availability(),
+        podman_lens::InventorySectionAvailability::Available
+    );
+    assert_eq!(containers.observations()[0].state(), ObservationState::Complete);
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_duplicate_or_non_json_content_type_is_structured_for_lists_and_inspects()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (case, content_types) in [
+        ("missing", Vec::new()),
+        ("duplicate", vec!["application/json", "application/json"]),
+        ("non-json", vec!["text/plain"]),
+    ] {
+        let mut list_responses = fixture_responses("6.1.0")?;
+        let list_body = list_responses[2].body().to_vec();
+        list_responses[2] = json_with_content_types(list_body, &content_types)?;
+        list_responses.remove(9);
+        list_responses.remove(8);
+        let inventory =
+            acquire_inventory(&RecordingTransport::new(list_responses), AcquisitionOptions::redacted()).await?;
+        let containers = inventory.section(ResourceKind::Container).expect("containers");
+        assert_eq!(
+            containers.availability(),
+            podman_lens::InventorySectionAvailability::Malformed,
+            "{case} list"
+        );
+        assert_eq!(containers.findings().len(), 1, "{case} list");
+        assert!(containers.observations().is_empty(), "{case} list");
+        assert_eq!(
+            containers.findings()[0].code(),
+            DiagnosticCode::InventoryShape,
+            "{case} list"
+        );
+        assert!(
+            inventory
+                .sections()
+                .iter()
+                .filter(|section| section.kind() != ResourceKind::Container)
+                .all(|section| section.availability() == podman_lens::InventorySectionAvailability::Available),
+            "{case} list"
+        );
+
+        let mut inspect_responses = fixture_responses("6.1.0")?;
+        let inspect_body = inspect_responses[8].body().to_vec();
+        inspect_responses[8] = json_with_content_types(inspect_body, &content_types)?;
+        let inventory = acquire_inventory(
+            &RecordingTransport::new(inspect_responses),
+            AcquisitionOptions::redacted(),
+        )
+        .await?;
+        let containers = inventory.section(ResourceKind::Container).expect("containers");
+        assert_eq!(
+            containers.availability(),
+            podman_lens::InventorySectionAvailability::Available,
+            "{case} inspect"
+        );
+        let observation = &containers.observations()[0];
+        assert_eq!(observation.identity().id(), "container-a", "{case} inspect");
+        assert_eq!(
+            observation.header().state(),
+            podman_lens::ResourceObservationState::Malformed,
+            "{case} inspect"
+        );
+        assert!(!observation.unknown_fields_complete(), "{case} inspect");
+        assert!(
+            observation
+                .findings()
+                .iter()
+                .any(|finding| finding.code() == DiagnosticCode::InventoryShape),
+            "{case} inspect"
+        );
+        let sibling = containers
+            .observations()
+            .iter()
+            .find(|candidate| candidate.identity().id() == "container-z")
+            .ok_or("container-z must remain present")?;
+        assert_eq!(
+            sibling.header().state(),
+            podman_lens::ResourceObservationState::Complete,
+            "{case} inspect"
+        );
+    }
     Ok(())
 }
 

@@ -138,7 +138,7 @@
             "destination": "198.51.100.0/24",
             "gateway": "10.61.0.1",
             "metric": 61,
-            "type": "unicast"
+            "route_type": "unicast"
           }
         ]
       }

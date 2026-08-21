@@ -1391,8 +1391,8 @@
       "target_versions": [],
       "public_contract": "NativeNetworkingObservation::static_ip",
       "finding": "PLN0022",
-      "positive_test": "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted",
-      "negative_test": "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted"
+      "positive_test": "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted",
+      "negative_test": "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted"
     },
     {
       "id": "PLN-FLD-0090",
@@ -1407,8 +1407,8 @@
       "target_versions": [],
       "public_contract": "NativeNetworkingObservation::static_mac",
       "finding": "PLN0022",
-      "positive_test": "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted",
-      "negative_test": "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted"
+      "positive_test": "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted",
+      "negative_test": "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted"
     },
     {
       "id": "PLN-FLD-0091",

@@ -24,6 +24,63 @@ cargo test --test current_patch_conformance -- --ignored
 The expected version must be exactly `5.8.6` or `6.1.0`; the test never discovers a connection,
 retries, or sends a mutating Libpod request.
 
+## Complex cassette conformance
+
+The complex cassette suite is governed by
+`docs/schemas/podman-lens-cassette-v1.schema.json` and replayed by
+`tests/support/cassette.rs`. Its 14 fixtures cover all seven reviewed versions in simulated
+rootless and rootful contexts. They are source-derived, synthetic, sanitized fixtures, not exports
+of live Podman environments.
+
+Replay matches the exact HTTP method and complete path plus query, requires every interaction to
+be consumed, and rejects reordered, repeated, missing, unconsumed, or duplicate expected request
+method/path keys. The manifest additionally validates each fixture's immutable provenance and
+SHA-256 digest.
+
+The main matrix exercises typed inventories and origins for all six resource kinds; exact and label
+roots; dependency closure and shared prerequisites; stopped and authorized network crossings;
+malformed, unavailable, and ambiguous overlays; deterministic permutations; redaction;
+version-specific `StaticIP` and `route_type`; and matching-context planning with nonexecuting
+rendering. The matching-context case preserves both pods, four unpodded containers, four network
+boundaries, three shared volumes, three images, and two external secrets. It promotes configured
+image, command, membership, and dependency facts only; network attachments and mounts are
+explicitly test-authored policy, while effective IPAM, ownership, runtime settings, local image
+resolution, bind sources, and unreconstructable secret grants stay out of target intent. It asserts
+the complete 23-operation pre-5.6 or 26-operation 5.6+ plan dependency structure and matching
+CLI/Libpod operation semantics. Podman 6.0 and 6.1 cases also prove that typed `route_type` evidence
+does not remain as stale unmodelled route metadata in either simulated execution context.
+
+Run the focused cassette gates with:
+
+```shell
+cargo test --test cassette_contract
+cargo test --test complex_corpus
+cargo test --test input_corpus corpus_manifest_verifies_fixed_provenance_and_hashes
+```
+
+## Deferred live version matrix
+
+The committed offline response fixtures are source-derived, synthetic, sanitized test inputs. They
+are not exports of running Podman environments and do not constitute live rootful or rootless
+conformance evidence. [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3)
+tracks a separate live workflow after reproducible environments exist for all 14 required cells:
+Podman 5.4.0, 5.5.0, 5.6.0, 5.7.0, 5.8.6, 6.0.0, and 6.1.0, each in rootless and rootful mode.
+
+No partial placeholder workflow is committed now. The future workflow is `workflow_dispatch` only:
+it has no nightly schedule, pull-request trigger, excluded matrix cell, tolerated failure, or silent
+skip. Every cell must use a reproducible digest-pinned environment, verify its exact engine and API
+version, select an isolated cell-local Unix socket explicitly, and destroy its private runtime and
+storage after the run. Privileged rootful execution must not expose the host Podman socket or run
+untrusted pull-request code; rootless execution must use a dedicated user, subordinate IDs, and
+isolated writable runtime and storage paths.
+
+Live acquisition must continue through the production read-only Unix transport. A separate test
+harness may provision a disposable source engine and apply rendered operations to a disposable
+target engine, but that does not add mutation or execution to PodmanLens. Comparisons bind every
+expected request and evaluate normalized, sanitized observations and semantic results rather than
+volatile raw IDs, timestamps, addresses, or response bytes. Raw responses, connection details,
+environment values, credentials, and secret material must never enter logs or uploaded artifacts.
+
 The built-in Unix transport tests prove that mutation methods, body-bearing acquisition requests,
 caller-supplied `Host`, and over-limit requests fail before a socket is opened. The Unix-only module
 is conditionally compiled so platform-neutral connection and caller-provided transport contracts
@@ -34,6 +91,12 @@ boundaries; probe-before-list ordering; canonical list sorting; exact list queri
 inspect paths; partial races; malformed and duplicate list records; secret-metadata-only requests;
 unknown-field metadata; and both environment retention policies. No ordinary test contacts a live
 Podman service or contains a real secret or environment value.
+
+Raw response-boundary tables exercise lists and inspections independently with truncated and
+oversized JSON, case-insensitive parameterized JSON content types, and missing, duplicate, or
+non-JSON content types. A malformed list remains section-local and prevents inspect requests; a
+malformed inspection retains only its safe list identity while sibling observations remain
+complete. Distinctive private sentinels prove raw bodies never enter debug output.
 
 The coverage ledger is parsed as a strict public two-plane catalogue with 142 input-observation and
 50 output-intent rows (192 total). Its unit tests reject schema,
@@ -100,8 +163,10 @@ and dependency cycles. Manifest tests verify immutable source provenance and SHA
 artifact. Fixed list and selector permutations must produce byte-identical snapshots. No corpus
 test discovers or contacts a live Podman service, and no fuzzing infrastructure is required.
 
-M7 adds revision-pinned all-six-resource-kind streams for Podman 5.7.0, 6.0.0, and bounded 6.1.0.
-`tests/input_corpus.rs` proves every section is available and complete at each boundary.
+M7 retains the revision-pinned bounded all-six-resource-kind Podman 6.1 stream used by the
+downstream golden. M8's request-aware matrix proves every section is available and complete for
+Podman 5.4.0 through 6.1.0 in both simulated contexts. The manifest contains those 14 cassettes and
+seven focused regression or golden artifacts; superseded 5.7 and 6.0 BoxFerry streams are removed.
 `tests/boxferry_adapter.rs` is a public-only downstream consumer. Its 6.1 scenario covers
 acquisition, discovery, typed observation/origin decisions, a neutral application projection,
 deployment-intent construction, planning, and deterministic CLI/Libpod rendering against
@@ -143,8 +208,9 @@ M7-B2b tests use only pinned or synthesized offline inspect responses. They prov
 `InfraConfig` is authoritative over disagreeing member runtime values; `CreateInfra` and
 `InfraConfig` inconsistencies fail closed; unpodded `HostConfig` values retain configured origin;
 and resolver/hosts gates suppress their dependent fields. `CreateNetNS` is preserved separately,
-while port bindings remain validated when that gate is absent or false. The explicit 5.8.6/6.0
-boundary proves deprecated `StaticIP` and permanently inapplicable `StaticMAC` behavior.
+while port bindings remain validated when that gate is absent or false. Explicit 5.8.0, 5.8.6,
+5.8.7, and 6.0.0 cases prove deprecated `StaticIP` covers every supported 5.x patch while
+`StaticMAC` remains permanently inapplicable.
 Snapshot tests assert state,
 origin, and counts only, never addresses, host entries, DNS strings, port values, network names,
 or opaque option data.

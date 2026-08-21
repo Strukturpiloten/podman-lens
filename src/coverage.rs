@@ -1225,8 +1225,8 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "not_applicable",
         "NativeNetworkingObservation::static_ip",
         "PLN0022",
-        "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted",
-        "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted"
+        "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted",
+        "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted"
     ),
     expected!(
         "PLN-FLD-0090",
@@ -1238,8 +1238,8 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "not_applicable",
         "NativeNetworkingObservation::static_mac",
         "PLN0022",
-        "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted",
-        "tests::inventory::deprecated_infra_static_ip_ends_at_podman_5_8_6_and_static_mac_is_never_promoted"
+        "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted",
+        "tests::inventory::deprecated_infra_static_ip_covers_all_supported_5_x_patches_and_static_mac_is_never_promoted"
     ),
     expected!(
         "PLN-FLD-0091",

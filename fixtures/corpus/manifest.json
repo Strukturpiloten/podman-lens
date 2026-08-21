@@ -98,42 +98,6 @@
       ]
     },
     {
-      "name": "BoxFerry all-resource Podman 5.7",
-      "engine_version": "5.7.0",
-      "api_version": "5.7.0",
-      "release_tag": "v5.7.0",
-      "commit": "0370128fc8dcae93533334324ef838db8f8da8cb",
-      "source_url": "https://github.com/containers/podman/tree/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod",
-      "artifact": "boxferry-5.7.responses.json",
-      "sha256": "c777a59b0fcb7201e4ae3dafd8772ed6a0a6fb28cf6da1c4bdec6df61cf258f1",
-      "synthetic": true,
-      "coverage": [
-        "all six native resource kinds",
-        "configured container image",
-        "pod membership",
-        "named volume and secret grant",
-        "pre-route-type compatibility boundary"
-      ]
-    },
-    {
-      "name": "BoxFerry all-resource Podman 6.0",
-      "engine_version": "6.0.0",
-      "api_version": "6.0.0",
-      "release_tag": "v6.0.0",
-      "commit": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
-      "source_url": "https://github.com/containers/podman/tree/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod",
-      "artifact": "boxferry-6.0.responses.json",
-      "sha256": "38d0e0dac83d4b4d2f616fb28a774bb86ce31c6b7f5c1c6876b55b5de6e95255",
-      "synthetic": true,
-      "coverage": [
-        "all six native resource kinds",
-        "configured container image",
-        "pod membership",
-        "named volume and secret grant",
-        "Podman 6 route-type boundary"
-      ]
-    },
-    {
       "name": "BoxFerry bounded all-resource Podman 6.1",
       "engine_version": "6.1.0",
       "api_version": "6.1.0",
@@ -141,7 +105,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
       "artifact": "boxferry-6.1.responses.json",
-      "sha256": "599f84cdf11f4d4d3bf7753229097aa62a31e32de9a68f690e37e5973af81224",
+      "sha256": "5ffe1457eb77c4396863932067f1a72fa8d7981d190c279d9b0f9dc8e46998d7",
       "synthetic": true,
       "coverage": [
         "all six native resource kinds",
@@ -160,13 +124,293 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
       "artifact": "boxferry-adapter-6.1.expected.json",
-      "sha256": "d9c5446c0c52a3e3372bad85d2c8d12520ad46e4e48b0bf155f2edf1feb2ecf7",
+      "sha256": "0ff6701b1721c569011b510bed4fdc27253c81cb480e1e82910f5d1da2771c89",
       "synthetic": true,
       "coverage": [
         "public-only downstream adapter",
         "explicit neutral mapping decisions",
         "deployment planning",
         "CLI and Libpod rendering fingerprints"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 5.4.0",
+      "engine_version": "5.4.0",
+      "api_version": "5.4.0",
+      "release_tag": "v5.4.0",
+      "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+      "source_url": "https://github.com/containers/podman/tree/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod",
+      "artifact": "complex-5.4.0-rootful.cassette.json",
+      "sha256": "8e79b5f2f8f1771e8c8866edbeccb4b972c2554fb4163699c624264641ad5993",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 5.4.0",
+      "engine_version": "5.4.0",
+      "api_version": "5.4.0",
+      "release_tag": "v5.4.0",
+      "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+      "source_url": "https://github.com/containers/podman/tree/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/libpod",
+      "artifact": "complex-5.4.0-rootless.cassette.json",
+      "sha256": "18d7dd5855b04517b349859de7efb8a49d7a380817d666bd34b0a0ffefb64613",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 5.5.0",
+      "engine_version": "5.5.0",
+      "api_version": "5.5.0",
+      "release_tag": "v5.5.0",
+      "commit": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+      "source_url": "https://github.com/containers/podman/tree/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod",
+      "artifact": "complex-5.5.0-rootful.cassette.json",
+      "sha256": "5706d5133cf9eaa35ede9dc7b4f9653ad5238fff9835181af440810508549174",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 5.5.0",
+      "engine_version": "5.5.0",
+      "api_version": "5.5.0",
+      "release_tag": "v5.5.0",
+      "commit": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+      "source_url": "https://github.com/containers/podman/tree/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/libpod",
+      "artifact": "complex-5.5.0-rootless.cassette.json",
+      "sha256": "4de75c7985b4c7187c8847409f991a3f913f17c834be7d1f127529273b0426a3",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 5.6.0",
+      "engine_version": "5.6.0",
+      "api_version": "5.6.0",
+      "release_tag": "v5.6.0",
+      "commit": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+      "source_url": "https://github.com/containers/podman/tree/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod",
+      "artifact": "complex-5.6.0-rootful.cassette.json",
+      "sha256": "3ec6ea56c31174c29dd6cc8c30dcb237bb889fa5d1361692c000149d78d3a091",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 5.6.0",
+      "engine_version": "5.6.0",
+      "api_version": "5.6.0",
+      "release_tag": "v5.6.0",
+      "commit": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+      "source_url": "https://github.com/containers/podman/tree/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/libpod",
+      "artifact": "complex-5.6.0-rootless.cassette.json",
+      "sha256": "1efbd7fb6ec2549b1cfe286ae6ebc542ba72d5f09011b16873078ef5626638f0",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 5.7.0",
+      "engine_version": "5.7.0",
+      "api_version": "5.7.0",
+      "release_tag": "v5.7.0",
+      "commit": "0370128fc8dcae93533334324ef838db8f8da8cb",
+      "source_url": "https://github.com/containers/podman/tree/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod",
+      "artifact": "complex-5.7.0-rootful.cassette.json",
+      "sha256": "7eb6ebec98b017f98df41a6ccafdb2c64d17b63394fa0bf5632bc9c642d76581",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 5.7.0",
+      "engine_version": "5.7.0",
+      "api_version": "5.7.0",
+      "release_tag": "v5.7.0",
+      "commit": "0370128fc8dcae93533334324ef838db8f8da8cb",
+      "source_url": "https://github.com/containers/podman/tree/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/libpod",
+      "artifact": "complex-5.7.0-rootless.cassette.json",
+      "sha256": "1736b06fe89a61d7e1d4ec9d37a475074754b392552acdf6fa784d1db7720788",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 5.8.6",
+      "engine_version": "5.8.6",
+      "api_version": "5.8.6",
+      "release_tag": "v5.8.6",
+      "commit": "a859fc66702c23e869c282c63e92d9b6cd264229",
+      "source_url": "https://github.com/containers/podman/tree/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod",
+      "artifact": "complex-5.8.6-rootful.cassette.json",
+      "sha256": "051171f87fb42119bba151f67131d818d915b6bf2cb6afe04d4716425c1c161b",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 5.8.6",
+      "engine_version": "5.8.6",
+      "api_version": "5.8.6",
+      "release_tag": "v5.8.6",
+      "commit": "a859fc66702c23e869c282c63e92d9b6cd264229",
+      "source_url": "https://github.com/containers/podman/tree/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/libpod",
+      "artifact": "complex-5.8.6-rootless.cassette.json",
+      "sha256": "ae7ebba5bb3ddd2c02f3d7f80065b2d162a3edec53dc0b2fe4465395f96f7960",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 6.0.0",
+      "engine_version": "6.0.0",
+      "api_version": "6.0.0",
+      "release_tag": "v6.0.0",
+      "commit": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+      "source_url": "https://github.com/containers/podman/tree/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod",
+      "artifact": "complex-6.0.0-rootful.cassette.json",
+      "sha256": "5388f670cb1350ddb93f1327f74a815e6bd036ddfa39523454e7f0a73ca36616",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 6.0.0",
+      "engine_version": "6.0.0",
+      "api_version": "6.0.0",
+      "release_tag": "v6.0.0",
+      "commit": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+      "source_url": "https://github.com/containers/podman/tree/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/libpod",
+      "artifact": "complex-6.0.0-rootless.cassette.json",
+      "sha256": "55fb9223741df992cd6a42598d7202ccf661f84c60677f9087cb9144f4dfff9e",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootful Podman 6.1.0",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "artifact": "complex-6.1.0-rootful.cassette.json",
+      "sha256": "9c810b8e974eb6c610930c7871a56c7d0b92ebf307a6c83749dca2e63bddaa5e",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootful cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
+      ]
+    },
+    {
+      "name": "Complex simulated rootless Podman 6.1.0",
+      "engine_version": "6.1.0",
+      "api_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "artifact": "complex-6.1.0-rootless.cassette.json",
+      "sha256": "a254bd3c21e8723ebba4efd0fec7a9250d6179172b5b3a47dd3a7492ae079201",
+      "synthetic": true,
+      "coverage": [
+        "request-bound complex rootless cassette",
+        "all six native resource kinds",
+        "two pods and podded and unpodded containers",
+        "shared and isolated networks",
+        "shared RW and RO volumes, multiple images, and metadata-only secrets",
+        "health restart logging security namespace and resource observations",
+        "version-bound static IP and route-type fields"
       ]
     }
   ]

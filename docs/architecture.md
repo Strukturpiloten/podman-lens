@@ -170,8 +170,9 @@ hosts-file management gates prevent promotion of their associated values. Port b
 lists, pod host-network state, and network references have typed stateful views;
 free-form `NetworkOptions` are opaque and `HostAdd` remains value-free unmodelled hosts-file data.
 Runtime addresses, runtime port assignments, MAC addresses, and arbitrary option values are never
-portable intent. Deprecated `StaticIP` is usable only through 5.8.6; `StaticMAC` is version-
-inapplicable throughout the reviewed range.
+portable intent. Deprecated `StaticIP` is usable throughout the complete supported 5.x range and
+becomes version-inapplicable at 6.0.0; `StaticMAC` is version-inapplicable throughout the reviewed
+range.
 
 M7-B3a adds typed, observation-only container restart policy, normal and startup health checks,
 health-failure action, and logging. Every one is effective inspect evidence: restart and logging

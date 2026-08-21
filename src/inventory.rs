@@ -4237,7 +4237,7 @@ fn decode_native_networking(
         findings,
     );
     let static_ip = if semver::Version::parse(evidence.engine_version())
-        .is_ok_and(|version| version <= semver::Version::new(5, 8, 6))
+        .is_ok_and(|version| version < semver::Version::new(6, 0, 0))
     {
         native_ip_field(
             object.get("StaticIP"),

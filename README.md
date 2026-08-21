@@ -6,8 +6,9 @@ applications. It is the native Podman boundary used by
 
 > [!NOTE]
 > The stable native input contract, transport-neutral deployment semantics, bounded M6-B1–B4
-> CLI/API renderings, and M7 BoxFerry integration-readiness contract are complete. Broader native
-> output coverage remains explicitly deferred.
+> CLI/API renderings, M7 BoxFerry integration-readiness contract, and post-0.1 deterministic
+> complex-cassette layer are complete. Broader native output coverage and live Podman conformance
+> remain explicitly deferred.
 
 PodmanLens will:
 
@@ -65,6 +66,16 @@ bounded, redacted metadata; an incomplete observation or overflow finding means 
 explicitly incomplete rather than an exhaustive native configuration export.
 
 M7 adds the exact origin-gated PodmanLens-to-BoxFerry mapping contract, public compatibility
-matrices, pinned all-six-resource corpora for Podman 5.7, 6.0, and bounded 6.1, and a public-only
-downstream scenario from acquisition through CLI and Libpod rendering. Version 0.1.0 is the
+matrices, a pinned bounded all-six-resource Podman 6.1 corpus, and a public-only downstream
+scenario from acquisition through CLI and Libpod rendering. Version 0.1.0 is the
 maintainer-controlled first-release semver baseline.
+
+Post-0.1 M8 conformance hardening adds a strict request-aware cassette contract and 14 complex
+offline scenarios: Podman 5.4.0, 5.5.0, 5.6.0, 5.7.0, 5.8.6, 6.0.0, and 6.1.0, each with simulated
+rootless and rootful context. Every cassette binds each response to its expected Libpod method and
+path and contains all six resource kinds with interacting pods, containers, networks, volumes,
+images, and secret metadata. These fixtures are source-derived, synthetic, and sanitized; they are
+not exports of live Podman environments. Together with seven retained focused regression and
+golden artifacts, the corpus manifest hash-verifies 21 artifacts. The complete live matrix remains deferred to
+[GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3), with no nightly or
+pull-request workflow claimed here.

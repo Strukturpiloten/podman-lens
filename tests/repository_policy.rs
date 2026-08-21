@@ -127,10 +127,33 @@ fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
         "fixtures/corpus/malformed-6.1.responses.json",
         "fixtures/corpus/graph-boundaries-6.1.responses.json",
         "fixtures/corpus/network-ipam-routes-6.0.responses.json",
-        "fixtures/corpus/boxferry-5.7.responses.json",
-        "fixtures/corpus/boxferry-6.0.responses.json",
         "fixtures/corpus/boxferry-6.1.responses.json",
         "fixtures/corpus/boxferry-adapter-6.1.expected.json",
+    ] {
+        assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+#[test]
+fn request_aware_complex_corpus_has_its_schema_tests_and_complete_version_context_matrix() {
+    for file in [
+        "docs/schemas/podman-lens-cassette-v1.schema.json",
+        "tests/cassette_contract.rs",
+        "tests/complex_corpus.rs",
+        "fixtures/corpus/complex-5.4.0-rootless.cassette.json",
+        "fixtures/corpus/complex-5.4.0-rootful.cassette.json",
+        "fixtures/corpus/complex-5.5.0-rootless.cassette.json",
+        "fixtures/corpus/complex-5.5.0-rootful.cassette.json",
+        "fixtures/corpus/complex-5.6.0-rootless.cassette.json",
+        "fixtures/corpus/complex-5.6.0-rootful.cassette.json",
+        "fixtures/corpus/complex-5.7.0-rootless.cassette.json",
+        "fixtures/corpus/complex-5.7.0-rootful.cassette.json",
+        "fixtures/corpus/complex-5.8.6-rootless.cassette.json",
+        "fixtures/corpus/complex-5.8.6-rootful.cassette.json",
+        "fixtures/corpus/complex-6.0.0-rootless.cassette.json",
+        "fixtures/corpus/complex-6.0.0-rootful.cassette.json",
+        "fixtures/corpus/complex-6.1.0-rootless.cassette.json",
+        "fixtures/corpus/complex-6.1.0-rootful.cassette.json",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }

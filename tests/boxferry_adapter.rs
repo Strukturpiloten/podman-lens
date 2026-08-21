@@ -16,8 +16,8 @@ use podman_lens::{
     LibpodRequest, LibpodResponse, LibpodTransport, LibpodTransportFuture, MountAccess, NamedVolumeCopyMode,
     NamedVolumeMount, NetworkAttachment, NetworkIntent, ObservationField, ObservationOrigin, ObservedApiVersion,
     ObservedPodmanVersion, PodIntent, RenderedHttpBody, RenderedHttpMethod, ResourceDetails, ResourceInventory,
-    ResourceKind, ResourceObservation, SecretGrant, SemanticOperationAction, StartupDependency, TargetProfile,
-    TransportError, VolumeIntent, acquire_inventory, discover, plan_deployment, render_deployment,
+    ResourceKind, ResourceObservation, SemanticOperationAction, StartupDependency, TargetProfile, TransportError,
+    VolumeIntent, acquire_inventory, discover, plan_deployment, render_deployment,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -268,30 +268,6 @@ fn adapt_mounts(container: &podman_lens::ContainerObservation) -> Result<Vec<Neu
     )
 }
 
-fn adapt_secrets(
-    inventory: &ResourceInventory,
-    container: &podman_lens::ContainerObservation,
-) -> Result<Vec<String>, io::Error> {
-    container
-        .secret_grants()
-        .observed()
-        .map(|value| {
-            value
-                .value()
-                .iter()
-                .filter_map(|grant| {
-                    grant
-                        .reference()
-                        .observed()
-                        .and_then(|reference| reference.value().name().or_else(|| reference.value().id()))
-                        .map(|reference| resource_name(inventory, ResourceKind::Secret, reference.reference()))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .transpose()
-        .map(Option::unwrap_or_default)
-}
-
 fn adapt_service(inventory: &ResourceInventory, reference: &str) -> Result<NeutralService, Box<dyn std::error::Error>> {
     let observation = observation(inventory, ResourceKind::Container, reference)?;
     let identity = observation.header().identity();
@@ -358,7 +334,6 @@ fn adapt_service(inventory: &ResourceInventory, reference: &str) -> Result<Neutr
             .unwrap_or_default()
     };
     let mounts = adapt_mounts(container)?;
-    let secrets = adapt_secrets(inventory, container)?;
 
     Ok(NeutralService {
         name: identity.name().unwrap_or(identity.id()).to_owned(),
@@ -367,13 +342,58 @@ fn adapt_service(inventory: &ResourceInventory, reference: &str) -> Result<Neutr
         group,
         networks,
         mounts,
-        secrets,
+        // Inspect retains a secret reference and grant metadata, but not the
+        // delivery form or target. Desired grants require separate authoring.
+        secrets: Vec::new(),
         command,
         entrypoint,
         user,
         workdir,
         dependencies,
     })
+}
+
+fn validate_secret_grant_boundary(
+    inventory: &ResourceInventory,
+    api: &podman_lens::ContainerObservation,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let secret_grants = require_origin(
+        api.secret_grants(),
+        ObservationOrigin::Effective,
+        "container secret grants",
+    )?;
+    assert_eq!(secret_grants.len(), 1);
+    let secret_grant = &secret_grants[0];
+    let secret_reference = require_origin(
+        secret_grant.reference(),
+        ObservationOrigin::Configured,
+        "container secret reference",
+    )?;
+    let secret_reference = secret_reference
+        .name()
+        .or_else(|| secret_reference.id())
+        .ok_or_else(|| io::Error::other("container secret reference must name one secret"))?;
+    assert_eq!(
+        resource_name(inventory, ResourceKind::Secret, secret_reference.reference())?,
+        "database-password"
+    );
+    assert_eq!(
+        require_origin(secret_grant.uid(), ObservationOrigin::Effective, "container secret UID")?,
+        &1000
+    );
+    assert_eq!(
+        require_origin(secret_grant.gid(), ObservationOrigin::Effective, "container secret GID")?,
+        &1000
+    );
+    assert_eq!(
+        require_origin(
+            secret_grant.mode(),
+            ObservationOrigin::Effective,
+            "container secret mode"
+        )?,
+        &0o440
+    );
+    Ok(())
 }
 
 fn validate_observation_boundaries(inventory: &ResourceInventory) -> Result<(), Box<dyn std::error::Error>> {
@@ -394,6 +414,7 @@ fn validate_observation_boundaries(inventory: &ResourceInventory) -> Result<(), 
             .len(),
         2
     );
+    validate_secret_grant_boundary(inventory, api)?;
     let bind = require_origin(api.mounts(), ObservationOrigin::Effective, "api mounts")?
         .iter()
         .find(|mount| mount.kind() == ContainerMountKind::Bind)
@@ -476,6 +497,12 @@ fn mapping_decisions() -> Vec<MappingDecision> {
             target: "Service.mounts",
             outcome: "manual",
             reason: "host source is local-resolution evidence",
+        },
+        MappingDecision {
+            source: "Container.Config.Secrets",
+            target: "Service.secret_grants",
+            outcome: "manual",
+            reason: "inspect does not preserve delivery form or target",
         },
         MappingDecision {
             source: "Network.subnets",
@@ -601,9 +628,10 @@ fn build_intent(
                 NamedVolumeCopyMode::Copy,
             )?);
         }
-        for secret_name in &service.secrets {
-            container.add_secret_grant(SecretGrant::mount(deployment_id(ResourceKind::Secret, secret_name)?)?);
-        }
+        assert!(
+            service.secrets.is_empty(),
+            "observed secret references must not become desired grants without an authored form and target"
+        );
         container
             .settings_mut()
             .set_command(ArgumentArray::new(service.command.clone())?)?;
@@ -623,8 +651,8 @@ fn build_intent(
         intent.add_resource(DeploymentResource::Container(container));
         for prerequisite in &service.dependencies {
             intent.add_startup_dependency(StartupDependency::new(
-                service_id.clone(),
                 deployment_id(ResourceKind::Container, prerequisite)?,
+                service_id.clone(),
             )?);
         }
     }
@@ -674,6 +702,55 @@ fn sha256_lines(lines: impl IntoIterator<Item = String>) -> String {
     })
 }
 
+fn assert_worker_precedes_application(plan: &podman_lens::DeploymentPlan) -> Result<(), io::Error> {
+    let worker_start_index = plan
+        .operations()
+        .iter()
+        .position(|operation| {
+            operation.id().action() == SemanticOperationAction::StartContainer
+                && operation.id().resource().kind() == ResourceKind::Container
+                && operation.id().resource().name() == "worker"
+        })
+        .ok_or_else(|| io::Error::other("worker start operation must exist"))?;
+    let application_start_index = plan
+        .operations()
+        .iter()
+        .position(|operation| {
+            operation.id().action() == SemanticOperationAction::StartPod
+                && operation.id().resource().kind() == ResourceKind::Pod
+                && operation.id().resource().name() == "application"
+        })
+        .ok_or_else(|| io::Error::other("application pod start operation must exist"))?;
+    assert!(worker_start_index < application_start_index);
+    assert!(
+        plan.operations()[application_start_index]
+            .depends_on()
+            .contains(plan.operations()[worker_start_index].id())
+    );
+    Ok(())
+}
+
+fn inventory_counts(inventory: &ResourceInventory) -> BTreeMap<&'static str, usize> {
+    [
+        ResourceKind::Container,
+        ResourceKind::Pod,
+        ResourceKind::Network,
+        ResourceKind::Volume,
+        ResourceKind::Image,
+        ResourceKind::Secret,
+    ]
+    .into_iter()
+    .map(|kind| {
+        (
+            kind_name(kind),
+            inventory
+                .section(kind)
+                .map_or(0, |section| section.observations().len()),
+        )
+    })
+    .collect()
+}
+
 #[tokio::test]
 async fn public_boxferry_adapter_scenario_is_deterministic() -> Result<(), Box<dyn std::error::Error>> {
     let inventory = acquire_inventory(
@@ -695,34 +772,17 @@ async fn public_boxferry_adapter_scenario_is_deterministic() -> Result<(), Box<d
     let plan = planning
         .plan()
         .ok_or_else(|| io::Error::other("adapter intent must produce a plan"))?;
+    assert_worker_precedes_application(plan)?;
     let rendering = render_deployment(plan);
     assert!(rendering.findings().is_empty());
     let rendered = rendering
         .rendering()
         .ok_or_else(|| io::Error::other("adapter plan must render exactly"))?;
 
-    let inventory_counts = [
-        ResourceKind::Container,
-        ResourceKind::Pod,
-        ResourceKind::Network,
-        ResourceKind::Volume,
-        ResourceKind::Image,
-        ResourceKind::Secret,
-    ]
-    .into_iter()
-    .map(|kind| {
-        (
-            kind_name(kind),
-            inventory
-                .section(kind)
-                .map_or(0, |section| section.observations().len()),
-        )
-    })
-    .collect();
     let golden = AdapterGolden {
         engine_version: inventory.service().engine_version().original().to_owned(),
         api_version: inventory.service().api_version().original().to_owned(),
-        inventory_counts,
+        inventory_counts: inventory_counts(&inventory),
         discovery: DiscoveryGolden {
             resolved_roots: graph
                 .resolved_roots()

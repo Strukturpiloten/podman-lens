@@ -38,7 +38,7 @@
         "mounts": [
           { "source": "application-data", "destination": "/var/lib/application", "writable": true }
         ],
-        "secrets": ["database-password"],
+        "secrets": [],
         "command": ["serve", "--http"],
         "entrypoint": ["/usr/bin/application"],
         "user": "1000:1000",
@@ -113,6 +113,12 @@
       "reason": "host source is local-resolution evidence"
     },
     {
+      "source": "Container.Config.Secrets",
+      "target": "Service.secret_grants",
+      "outcome": "manual",
+      "reason": "inspect does not preserve delivery form or target"
+    },
+    {
       "source": "Network.subnets",
       "target": "Network.ipam",
       "outcome": "observation-only",
@@ -138,11 +144,11 @@
     "create:pod:application",
     "create:container:api",
     "create:container:worker",
-    "start-pod:pod:application",
-    "start-container:container:worker"
+    "start-container:container:worker",
+    "start-pod:pod:application"
   ],
   "render_status": "exact",
   "rendered_operation_count": 8,
-  "rendered_cli_sha256": "63cdd178bff3d56dc758860a1a7da53687e4a1db2ff33ecfd87f45a3af22cce0",
-  "rendered_libpod_sha256": "9528bc07f0906aaf1417e54ac497c13510987eba85b5664910b113f3e02ab4f6"
+  "rendered_cli_sha256": "e6eb77ffbe58e7c2d6d758a0bb9980e47ead04ba5da98e4de3e513ab0b08cbe0",
+  "rendered_libpod_sha256": "b4a4c63bc1c8ab74ce4bacca39bed4ab9628f580c14db1caa2802d0cd6f2f9b9"
 }

@@ -161,7 +161,8 @@ fn corpus_manifest_verifies_fixed_provenance_and_hashes() -> Result<(), Box<dyn 
     assert_eq!(manifest.schema_version, 1);
     assert_eq!(manifest.evidence_kind, "source-derived-synthetic-sanitized");
     assert!(manifest.sanitization.contains("no real"));
-    assert_eq!(manifest.artifacts.len(), 9);
+    assert_eq!(manifest.artifacts.len(), 21);
+    let mut complex_matrix = std::collections::BTreeSet::new();
     for artifact in manifest.artifacts {
         assert!(artifact.synthetic, "{} must explicitly be synthetic", artifact.name);
         assert!(artifact.engine_version.starts_with("5.") || artifact.engine_version.starts_with("6."));
@@ -172,51 +173,82 @@ fn corpus_manifest_verifies_fixed_provenance_and_hashes() -> Result<(), Box<dyn 
         assert!(artifact.source_url.starts_with("https://"));
         assert!(!artifact.coverage.is_empty());
         let bytes = fs::read(corpus_root().join(&artifact.artifact))?;
+        if artifact.artifact.starts_with("complex-") {
+            let cassette: Value = serde_json::from_slice(&bytes)?;
+            let mode = cassette["execution_context"]
+                .as_str()
+                .ok_or("complex cassette execution context must be a string")?;
+            assert_eq!(cassette["schema_version"].as_u64(), Some(1));
+            assert_eq!(cassette["fixture_kind"].as_str(), Some("libpod-cassette"));
+            assert_eq!(
+                cassette["engine_version"].as_str(),
+                Some(artifact.engine_version.as_str())
+            );
+            assert_eq!(cassette["api_version"].as_str(), Some(artifact.api_version.as_str()));
+            assert_eq!(cassette["synthetic"].as_bool(), Some(true));
+            assert_eq!(cassette["scenario_revision"].as_u64(), Some(1));
+            assert_eq!(
+                cassette["provenance"]["release_tag"].as_str(),
+                Some(artifact.release_tag.as_str())
+            );
+            assert_eq!(
+                cassette["provenance"]["revision"].as_str(),
+                Some(artifact.commit.as_str())
+            );
+            assert!(cassette["provenance"]["source_urls"].as_array().is_some_and(|sources| {
+                sources
+                    .iter()
+                    .any(|source| source.as_str() == Some(&artifact.source_url))
+            }));
+            assert_eq!(cassette["interactions"].as_array().map(Vec::len), Some(30));
+            assert!(artifact.artifact.ends_with(&format!("-{mode}.cassette.json")));
+            assert!(complex_matrix.insert((artifact.engine_version.clone(), mode.to_owned())));
+        }
         let mut digest = String::new();
-        for byte in Sha256::digest(bytes) {
+        for byte in Sha256::digest(&bytes) {
             write!(&mut digest, "{byte:02x}").expect("writing into a String cannot fail");
         }
         assert_eq!(digest, artifact.sha256, "{} hash", artifact.name);
     }
+    let expected_matrix = ["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"]
+        .into_iter()
+        .flat_map(|version| {
+            ["rootless", "rootful"]
+                .into_iter()
+                .map(move |mode| (version.to_owned(), mode.to_owned()))
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(complex_matrix, expected_matrix);
     Ok(())
 }
 
 #[tokio::test]
-async fn pinned_boxferry_corpora_cover_all_six_resource_kinds() -> Result<(), Box<dyn std::error::Error>> {
-    for (fixture, version, container_count) in [
-        ("boxferry-5.7.responses.json", "5.7.0", 1),
-        ("boxferry-6.0.responses.json", "6.0.0", 1),
-        ("boxferry-6.1.responses.json", "6.1.0", 2),
-    ] {
-        let inventory = inventory(fixture).await?;
-        assert_eq!(inventory.service().engine_version().original(), version);
-        assert_eq!(inventory.service().api_version().original(), version);
+async fn pinned_boxferry_corpus_covers_all_six_resource_kinds() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = "boxferry-6.1.responses.json";
+    let inventory = inventory(fixture).await?;
+    assert_eq!(inventory.service().engine_version().original(), "6.1.0");
+    assert_eq!(inventory.service().api_version().original(), "6.1.0");
 
-        for kind in [
-            ResourceKind::Container,
-            ResourceKind::Pod,
-            ResourceKind::Network,
-            ResourceKind::Volume,
-            ResourceKind::Image,
-            ResourceKind::Secret,
-        ] {
-            let section = inventory.section(kind).ok_or("all fixed sections must exist")?;
-            assert_eq!(
-                section.availability(),
-                podman_lens::InventorySectionAvailability::Available,
-                "{fixture} {kind:?} must be available"
-            );
-            let expected = if kind == ResourceKind::Container {
-                container_count
-            } else {
-                1
-            };
-            assert_eq!(section.observations().len(), expected, "{fixture} {kind:?}");
-            assert!(section.observations().iter().all(|observation| {
-                observation.header().state() == podman_lens::ResourceObservationState::Complete
-                    && observation.header().evidence().engine_version() == version
-            }));
-        }
+    for kind in [
+        ResourceKind::Container,
+        ResourceKind::Pod,
+        ResourceKind::Network,
+        ResourceKind::Volume,
+        ResourceKind::Image,
+        ResourceKind::Secret,
+    ] {
+        let section = inventory.section(kind).ok_or("all fixed sections must exist")?;
+        assert_eq!(
+            section.availability(),
+            podman_lens::InventorySectionAvailability::Available,
+            "{fixture} {kind:?} must be available"
+        );
+        let expected = if kind == ResourceKind::Container { 2 } else { 1 };
+        assert_eq!(section.observations().len(), expected, "{fixture} {kind:?}");
+        assert!(section.observations().iter().all(|observation| {
+            observation.header().state() == podman_lens::ResourceObservationState::Complete
+                && observation.header().evidence().engine_version() == "6.1.0"
+        }));
     }
     Ok(())
 }
@@ -249,7 +281,7 @@ async fn rootless_and_rootful_corpus_cases_acquire_then_discover() -> Result<(),
         graph
             .groups()
             .iter()
-            .any(|group| group.members().iter().any(|member| member.id() == "rootless-web"))
+            .any(|group| { group.members().iter().any(|member| member.id() == "rootless-web") })
     );
 
     let rootful = inventory("rootful-6.1.responses.json").await?;

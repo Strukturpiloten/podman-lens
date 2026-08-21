@@ -250,7 +250,7 @@ Exit: BoxFerry can add Podman input and output routes using only public PodmanLe
 M7 is complete. The normative mapping contract is `docs/boxferry-integration.md`; compatibility
 matrices are in `docs/compatibility.md`; `docs/release-readiness.md` records the public API,
 schema, diagnostics, redaction, release-policy, semver, and M0-M7 acceptance audits. Revision-pinned
-5.7, 6.0, and bounded 6.1 corpora cover all six kinds. The public-only adapter golden proves
+bounded 6.1 input and adapter corpora cover all six kinds. The public-only adapter golden proves
 acquisition, discovery, typed observation consumption, explicit neutral decisions, deployment
 intent, planning, and both non-executing renderers.
 
@@ -258,7 +258,39 @@ M7-A is complete when `ResourceObservation` exposes one kind-safe `ResourceDetai
 every modeled field reports an `ObservationField` state. Configured, effective,
 runtime-assigned, and local-resolution values remain distinct. Container configured image spelling
 and local image resolution remain separate; discovery uses only configured image evidence. This is
-an in-place reset because the library has not been released; no obsolete record projection is kept.
+the in-place reset completed before version 0.1.0 was released; no obsolete record projection is
+kept.
+
+## M8: Post-0.1 conformance hardening
+
+- [x] Define a strict request-aware cassette v1 schema and test-only replay transport that bind every
+      response to its expected Libpod method and path.
+- [x] Reject unexpected, missing, repeated, reordered, or unconsumed requests without exposing
+      response bodies through failures.
+- [x] Add 14 stable complex cassettes across Podman 5.4.0, 5.5.0, 5.6.0, 5.7.0, 5.8.6, 6.0.0,
+      and 6.1.0 in simulated rootless and rootful contexts.
+- [x] Cover all six native resource kinds, podded and unpodded containers, dependencies, shared and
+      isolated networks, network boundaries, shared volumes, image evidence, secret metadata,
+      health, restart, logging, security, namespaces, and resource controls in every scenario.
+- [x] Keep every cassette source-derived, synthetic, sanitized, deterministic, provenance-bearing,
+      and hash-verified; never represent it as an export of a running Podman environment.
+- [x] Run multiple acquisition and discovery cases against every cassette, including deterministic
+      permutations, exact and label roots, dependency closure, grouping, shared prerequisites,
+      authorized and stopped network crossings, redaction, and version-specific findings.
+- [x] Prove matching-version planning and both non-executing renderers accept each simulated
+      rootless or rootful target context without turning the cassette harness into an executor.
+- [x] Correct compatibility defects exposed by the expanded matrix: pod infra `StaticIP` remains
+      applicable throughout supported 5.x, and Podman 6 route type uses native `route_type`.
+- [x] Consolidate superseded 5.7 and 6.0 BoxFerry response streams into the request-aware matrix,
+      retain seven focused regression/golden artifacts, and verify 21 manifest artifacts.
+- [ ] Add the complete live Podman version/context matrix after all reproducible environments
+      exist, tracked separately in
+      [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3).
+
+M8 deterministic offline hardening is complete without changing the production execution boundary.
+The 14 contexts are simulated evidence dimensions, not live exports. The deferred live matrix is
+`workflow_dispatch` only and must cover every version in rootless and rootful mode without skips;
+no nightly schedule or pull-request workflow is claimed or added here.
 
 ## Deferred
 

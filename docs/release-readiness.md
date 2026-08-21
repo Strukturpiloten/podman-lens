@@ -13,9 +13,33 @@ is deliberately maintainer-controlled and is not part of merging the implementat
 | Deployment schema      | `artifact::deployment_v1` is serialization-only, strict Draft 2020-12, retains external prerequisites without material, and matches the shell rendering's semantic plan.                                                                                                                     | Deployment, render, schema, and exact artifact tests                                  |
 | Diagnostics            | Acquisition, discovery, planning, and rendering return bounded structured findings with stable codes and field/resource context. Malformed and partial input never becomes silent absence; plans/renderings are all-or-nothing on errors.                                                    | Negative inventory/corpus/discovery/deployment/render suites                          |
 | Redaction              | Debug, diagnostics, snapshots, fixtures, and artifacts exclude connection secrets, environment values, health-command arguments, secret payloads, secret driver option names/values, host-specific unknown values, and protected label values. Secret payload endpoints are never requested. | Redaction tests, sentinel scans, corpus policy tests                                  |
-| Compatibility          | Podman 5.4 through 6.1 uses explicit half-open ranges and revision-pinned evidence. All six kinds have pinned 5.7, 6.0, and bounded 6.1 offline corpora.                                                                                                                                     | Capability, rendering, corpus-hash, all-six-kind, and current-patch conformance tests |
+| Compatibility          | Podman 5.4 through 6.1 uses explicit half-open ranges and revision-pinned evidence. The 14 request-aware cassettes cover all six kinds in both simulated contexts; focused 6.1 and route corpora retain downstream and boundary evidence.                                                    | Capability, rendering, corpus-hash, all-six-kind, and current-patch conformance tests |
 | Downstream integration | The exact mapping policy handles field state and origin before neutral intent. The public-only scenario covers acquisition through both renderers with a committed expected result.                                                                                                          | `docs/boxferry-integration.md`, `tests/boxferry_adapter.rs`                           |
 | Release mechanics      | Release-plz prepares release PRs. The protected release workflow alone publishes, tags, attests, and creates the GitHub release.                                                                                                                                                             | Repository-policy tests and workflow validation                                       |
+
+The post-0.1 current gate adds 14 complex cassettes: every reviewed Podman version in simulated
+rootless and rootful contexts. Schema validation, strict request replay and complete consumption,
+manifest provenance and SHA-256 checks across 21 artifacts, scenario coverage, deterministic results, and redaction are
+enforced by `tests/cassette_contract.rs`, `tests/complex_corpus.rs`, and `tests/input_corpus.rs`.
+These synthetic sanitized fixtures strengthen deterministic conformance; they are not live-runtime
+evidence.
+
+## Deferred live conformance
+
+First-release readiness is based on the deterministic offline gate and the explicit current-patch
+probe; source-derived synthetic fixtures are not represented as live Podman exports. The complete
+live conformance workflow remains tracked in
+[GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3) until reproducible pinned
+environments exist for Podman 5.4.0, 5.5.0, 5.6.0, 5.7.0, 5.8.6, 6.0.0, and 6.1.0 in both rootless
+and rootful mode.
+
+That future workflow must be manually dispatched, cover all 14 cells without skips, and have no
+nightly or pull-request trigger. Each cell must use an isolated explicit Unix socket and private
+runtime and storage, verify the exact engine/API version, keep privileged execution away from
+untrusted code, redact every retained diagnostic, and compare normalized semantic results rather
+than volatile raw responses. Any provisioning or round-trip application belongs to the disposable
+test harness: the library's read-only acquisition and non-executing rendering contracts remain
+unchanged.
 
 ## Redaction guarantees
 
@@ -56,16 +80,16 @@ release workflow.
 
 ## M0-M7 acceptance
 
-| Milestone             | Acceptance evidence                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 Foundation         | Pinned Rust 2024/MSRV workspace, governance, dependency/release policy, complete local gate                                                                         |
-| M1 Version/transport  | Explicit connections, read-only transport, version probe, reviewed 5.4-6.1 catalogue                                                                                |
-| M2 Inventory          | Non-atomic six-kind acquisition, inspect-once behavior, protected environment policy, partial/malformed findings                                                    |
-| M3 Discovery          | Deterministic roots/groups/dependencies, ownership evidence, network boundaries, explanations                                                                       |
-| M4 Stable input       | Public typed inventory/graph, private DTOs, redacted snapshot v1, fixed malformed/rootless/rootful/graph corpora                                                    |
-| M5 Planning           | Fully resolved target intent, deterministic operations, external prerequisites, no execution                                                                        |
-| M6 Output             | Strict-ledger-backed B1-B4 CLI and Libpod descriptions, target gates, exact artifacts, no silent lossy rendering                                                    |
-| M7 BoxFerry readiness | Typed native observations, exact mapping contract, compatibility matrices, all-six-kind 5.7/6.0/6.1 corpora, public downstream scenario, audits and semver baseline |
+| Milestone             | Acceptance evidence                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M0 Foundation         | Pinned Rust 2024/MSRV workspace, governance, dependency/release policy, complete local gate                                                                        |
+| M1 Version/transport  | Explicit connections, read-only transport, version probe, reviewed 5.4-6.1 catalogue                                                                               |
+| M2 Inventory          | Non-atomic six-kind acquisition, inspect-once behavior, protected environment policy, partial/malformed findings                                                   |
+| M3 Discovery          | Deterministic roots/groups/dependencies, ownership evidence, network boundaries, explanations                                                                      |
+| M4 Stable input       | Public typed inventory/graph, private DTOs, redacted snapshot v1, fixed malformed/rootless/rootful/graph corpora                                                   |
+| M5 Planning           | Fully resolved target intent, deterministic operations, external prerequisites, no execution                                                                       |
+| M6 Output             | Strict-ledger-backed B1-B4 CLI and Libpod descriptions, target gates, exact artifacts, no silent lossy rendering                                                   |
+| M7 BoxFerry readiness | Typed native observations, exact mapping contract, compatibility matrices, bounded all-six-kind 6.1 corpus, public downstream scenario, audits and semver baseline |
 
 Deferred execution, broader native fields, Docker/Kubernetes protocols, persistent grouping
 configuration, arbitrary mutation, and built-in secret encryption are explicitly outside this

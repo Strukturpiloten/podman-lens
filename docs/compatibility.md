@@ -9,20 +9,29 @@ input and output field; rendering has its own revision-pinned evidence catalogue
 All reviewed lines require Libpod API 4.0.0 or newer. A target outside the half-open range is
 rejected even when its JSON happens to decode.
 
-| Podman line | Accepted range  | Pinned evidence      | Offline input evidence                                                     | Output status                                                              |
-| ----------- | --------------- | -------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 5.4         | >=5.4.0, <5.5.0 | v5.4.0 / `f9f7d48b…` | Rootless full inventory boundary                                           | Bounded M6 B1-B3 fields; B4 UID/GID and image-policy features target-gated |
-| 5.5         | >=5.5.0, <5.6.0 | v5.5.0 / `0dbcb514…` | Capability and rendering catalogue                                         | Same 5.x bounded rendering gates                                           |
-| 5.6         | >=5.6.0, <5.7.0 | v5.6.0 / `da671ef6…` | Capability and rendering catalogue                                         | Adds reviewed UID/GID, unlimited-rlimit, and image-policy support          |
-| 5.7         | >=5.7.0, <5.8.0 | v5.7.0 / `0370128f…` | Pinned all-six-kind BoxFerry corpus                                        | Bounded B1-B4 rendering; route type remains input-version-inapplicable     |
-| 5.8         | >=5.8.0, <6.0.0 | v5.8.6 / `a859fc66…` | Opt-in current-patch conformance plus catalogue                            | Bounded B1-B4 rendering; non-unicast route/order features remain gated     |
-| 6.0         | >=6.0.0, <6.1.0 | v6.0.0 / `a8ed4b6d…` | Pinned all-six-kind and IPAM/route corpora                                 | Adds reviewed route types, network order, and journald-label support       |
-| 6.1         | >=6.1.0, <6.2.0 | v6.1.0 / `cade97a5…` | Pinned bounded all-six-kind adapter, rootful, malformed, and graph corpora | Complete current bounded B1-B4 rendering                                   |
+| Podman line | Accepted range  | Pinned evidence      | Offline input evidence                                                                                                         | Output status                                                              |
+| ----------- | --------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| 5.4         | >=5.4.0, <5.5.0 | v5.4.0 / `f9f7d48b…` | Rootless full inventory boundary; complex 5.4.0 simulated rootless/rootful cassettes                                           | Bounded M6 B1-B3 fields; B4 UID/GID and image-policy features target-gated |
+| 5.5         | >=5.5.0, <5.6.0 | v5.5.0 / `0dbcb514…` | Capability and rendering catalogue; complex 5.5.0 simulated rootless/rootful cassettes                                         | Same 5.x bounded rendering gates                                           |
+| 5.6         | >=5.6.0, <5.7.0 | v5.6.0 / `da671ef6…` | Capability and rendering catalogue; complex 5.6.0 simulated rootless/rootful cassettes                                         | Adds reviewed UID/GID, unlimited-rlimit, and image-policy support          |
+| 5.7         | >=5.7.0, <5.8.0 | v5.7.0 / `0370128f…` | Complex 5.7.0 simulated rootless/rootful cassettes                                                                             | Bounded B1-B4 rendering; route type remains input-version-inapplicable     |
+| 5.8         | >=5.8.0, <6.0.0 | v5.8.6 / `a859fc66…` | Opt-in current-patch conformance plus catalogue; complex 5.8.6 simulated rootless/rootful cassettes                            | Bounded B1-B4 rendering; non-unicast route/order features remain gated     |
+| 6.0         | >=6.0.0, <6.1.0 | v6.0.0 / `a8ed4b6d…` | Pinned focused IPAM/route corpus; complex 6.0.0 simulated rootless/rootful cassettes                                           | Adds reviewed route types, network order, and journald-label support       |
+| 6.1         | >=6.1.0, <6.2.0 | v6.1.0 / `cade97a5…` | Pinned bounded all-six-kind adapter, rootful, malformed, and graph corpora; complex 6.1.0 simulated rootless/rootful cassettes | Complete current bounded B1-B4 rendering                                   |
 
 The complete revisions and source URLs live in `catalogue/v1/podman-capabilities.json`,
 `catalogue/v1/podman-deployment-rendering.json`, and `fixtures/corpus/manifest.json`. The
 ignored current-patch conformance test is an explicit network/runtime check and is not part of the
 offline gate.
+
+The offline evidence in this matrix is source-derived, synthetic, and sanitized; it is not a live
+export or a claim that every line has run in both privilege modes. A complete live matrix is
+deferred to [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3) until pinned,
+reproducible environments exist for every reviewed release in rootless and rootful mode. That
+future manually dispatched matrix must cover all 14 cells without exclusions or tolerated failures,
+isolate each Unix service and storage, keep privileged execution away from untrusted pull requests,
+and compare sanitized semantic results rather than volatile raw response bytes. No nightly or
+pull-request workflow is part of the current compatibility claim.
 
 ## Resource kinds
 

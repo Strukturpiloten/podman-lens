@@ -1,0 +1,19 @@
+toml-version = "v1.0.0"
+
+[files]
+include = ["**/*.toml"]
+respect-ignore-files = true
+
+[format.rules]
+line-ending = "lf"
+
+[lint.rules]
+dotted-keys-out-of-order = "error"
+key-empty = "error"
+tables-out-of-order = "error"
+
+# The embedded Cargo schema refers to remote schemas that are intentionally unavailable to offline
+# validation. Cargo remains the authoritative semantic validator for manifests.
+[[schemas]]
+path = "docs/schemas/tombi-cargo-offline.schema.json"
+include = ["Cargo.toml", "**/Cargo.toml"]

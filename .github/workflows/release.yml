@@ -1,0 +1,262 @@
+---
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_GITHUB_API_VERSION: "2026-03-10"
+
+jobs:
+  validate:
+    name: Validate release
+    if: github.repository == 'Strukturpiloten/podman-lens'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install configured Rust toolchain
+        run: rustup show active-toolchain
+      - name: Install pinned Node.js toolchain
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # renovate: datasource=node-version depName=node
+          node-version: 24.18.1
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked Node file-quality tools
+        run: |
+          npm ci --ignore-scripts
+          printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
+      - name: Install checksum-pinned native file-quality tools
+        run: sudo bash scripts/install-file-tools.sh /usr/local/bin
+      - name: Check non-Rust file formatting and lint
+        run: bash scripts/check-files.sh --check
+      - name: Check local documentation links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --root-dir '${{ github.workspace }}' --offline './**/*.md'
+          fail: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Derive and validate release metadata
+        id: metadata
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" ]] || {
+            echo "Run releases from the default branch (${DEFAULT_BRANCH})." >&2
+            exit 1
+          }
+          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "podman-lens") | .version')"
+          notes="${RUNNER_TEMP}/podman-lens-release-notes-${version}.md"
+          crate="target/package/podman-lens-${version}.crate"
+          bash scripts/extract-release-notes.sh "${version}" > "${notes}"
+          {
+            printf 'version=%s\n' "${version}"
+            printf 'tag=v%s\n' "${version}"
+            printf 'notes=%s\n' "${notes}"
+            printf 'crate=%s\n' "${crate}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check all targets
+        run: cargo ci-check
+      - name: Check repository policies
+        run: cargo ci-policy
+      - name: Run Clippy
+        run: cargo ci-clippy
+      - name: Run tests
+        run: cargo ci-test
+      - name: Run documentation tests
+        run: cargo ci-doctest
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo ci-doc
+      - name: Install LLVM coverage tools
+        run: rustup component add llvm-tools-preview
+      - name: Install pinned cargo-llvm-cov
+        # renovate: datasource=crate depName=cargo-llvm-cov
+        run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Clean coverage artifacts
+        run: cargo llvm-cov clean --locked
+      - name: Measure release coverage
+        run: cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
+      - name: Read the workspace MSRV
+        id: msrv
+        shell: bash
+        run: |
+          msrv="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '[.packages[].rust_version] | unique | if length == 1 and .[0] != null then .[0] else error("workspace packages must declare one common rust-version") end')"
+          printf 'version=%s\n' "${msrv}" >> "${GITHUB_OUTPUT}"
+      - name: Install minimum supported Rust
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "${RUST_MSRV}" --profile minimal
+      - name: Check all targets with the MSRV
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+${RUST_MSRV}" ci-check
+      - name: Check repository policies with the MSRV
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+${RUST_MSRV}" ci-policy
+      - name: Audit dependencies, licenses, bans, and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features
+      - name: Build release package and checksum
+        env:
+          CRATE: ${{ steps.metadata.outputs.crate }}
+        run: |
+          cargo ci-package
+          sha256sum "${CRATE}" > "${CRATE}.sha256"
+      - name: Attest release package
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: ${{ steps.metadata.outputs.crate }}
+
+  semver:
+    name: SemVer
+    needs: validate
+    if: github.repository == 'Strukturpiloten/podman-lens'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check for a published baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --user-agent 'PodmanLens release workflow (+https://github.com/Strukturpiloten/podman-lens)' --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' https://crates.io/api/v1/crates/podman-lens)"
+          case "${status}" in
+            200) echo 'published=true' >> "${GITHUB_OUTPUT}" ;;
+            404) echo 'published=false' >> "${GITHUB_OUTPUT}" ;;
+            *) echo "Unexpected crates.io response: HTTP ${status}." >&2; exit 1 ;;
+          esac
+      - name: Check public API compatibility
+        if: steps.baseline.outputs.published == 'true'
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: podman-lens
+          feature-group: all-features
+
+  publish:
+    name: Publish PodmanLens
+    needs: [validate, semver]
+    if: github.repository == 'Strukturpiloten/podman-lens'
+    environment: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Derive release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "podman-lens") | .version')"
+          notes="${RUNNER_TEMP}/podman-lens-release-notes-${version}.md"
+          bash scripts/extract-release-notes.sh "${version}" > "${notes}"
+          {
+            printf 'version=%s\n' "${version}"
+            printf 'tag=v%s\n' "${version}"
+            printf 'notes=%s\n' "${notes}"
+            printf 'crate=target/package/podman-lens-%s.crate\n' "${version}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Build release package and checksum
+        env:
+          CRATE: ${{ steps.metadata.outputs.crate }}
+        run: |
+          cargo ci-package
+          sha256sum "${CRATE}" > "${CRATE}.sha256"
+      - name: Attest release package
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: ${{ steps.metadata.outputs.crate }}
+      - name: Create or verify annotated release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+            [[ "$(git rev-list -n 1 "${TAG}")" == "${GITHUB_SHA}" ]]
+          else
+            tag_object_sha="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" -f tag="${TAG}" -f message="PodmanLens ${TAG}" -f object="${GITHUB_SHA}" -f type=commit --jq '.sha')"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" -f ref="refs/tags/${TAG}" -f sha="${tag_object_sha}"
+          fi
+      - name: Create or replace draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.metadata.outputs.notes }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --draft --title "PodmanLens ${VERSION}" --notes-file "${NOTES}"
+          fi
+      - name: Upload draft GitHub release assets
+        env:
+          CRATE: ${{ steps.metadata.outputs.crate }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: gh release upload "${TAG}" --clobber "${CRATE}" "${CRATE}.sha256"
+      - name: Check crates.io publication state
+        id: registry
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --user-agent 'PodmanLens release workflow (+https://github.com/Strukturpiloten/podman-lens)' --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' "https://crates.io/api/v1/crates/podman-lens/${VERSION}")"
+          case "${status}" in
+            200) echo 'published=true' >> "${GITHUB_OUTPUT}" ;;
+            404) echo 'published=false' >> "${GITHUB_OUTPUT}" ;;
+            *) echo "Unexpected crates.io response: HTTP ${status}." >&2; exit 1 ;;
+          esac
+      - name: Authenticate to crates.io with trusted publishing
+        id: crates-auth
+        if: steps.registry.outputs.published != 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish crate with trusted publishing
+        if: steps.registry.outputs.published != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+        run: cargo publish --locked
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: gh release edit "${TAG}" --draft=false --latest

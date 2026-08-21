@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "sanitized-graph-boundaries",
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "6.1.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "6.1.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "c-api", "Names": ["api"] },
+        { "Id": "c-cycle-a", "Names": ["cycle-a"] },
+        { "Id": "c-cycle-b", "Names": ["cycle-b"] },
+        { "Id": "c-database", "Names": ["database"] },
+        { "Id": "c-external", "Names": ["external"] },
+        { "Id": "c-worker", "Names": ["worker"] }
+      ]
+    },
+    { "status": 200, "headers": [], "body": [] },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "id": "n-internal", "name": "application" },
+        { "id": "n-shared", "name": "shared" }
+      ]
+    },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "graph-data" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "Id": "sha256:graph", "Names": ["example.invalid/graph:1"] }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "graph-secret", "Spec": { "Name": "graph-secret" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "c-api",
+        "Name": "api",
+        "Image": "sha256:graph",
+        "Dependencies": ["c-database"],
+        "NetworkSettings": { "Networks": { "application": {}, "shared": {} } },
+        "Config": {
+          "Labels": {
+            "com.docker.compose.project": "graph",
+            "com.docker.compose.service": "api",
+            "com.docker.compose.config-hash": "same",
+            "io.podman.compose.project": "graph",
+            "io.podman.compose.service": "api",
+            "io.podman.compose.config-hash": "same"
+          },
+          "Secrets": [{ "ID": "graph-secret" }]
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "c-cycle-a", "Name": "cycle-a", "Dependencies": ["c-cycle-b"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "c-cycle-b", "Name": "cycle-b", "Dependencies": ["c-cycle-a"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "c-database",
+        "Name": "database",
+        "Image": "sha256:graph",
+        "NetworkSettings": { "Networks": { "application": {} } },
+        "Mounts": [{ "Type": "volume", "Name": "graph-data" }],
+        "Config": {
+          "Labels": {
+            "com.docker.compose.project": "graph",
+            "com.docker.compose.service": "database",
+            "com.docker.compose.config-hash": "same",
+            "io.podman.compose.project": "graph",
+            "io.podman.compose.service": "database",
+            "io.podman.compose.config-hash": "same"
+          }
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "c-external",
+        "Name": "external",
+        "Image": "sha256:graph",
+        "NetworkSettings": { "Networks": { "shared": {} } },
+        "Config": {
+          "Labels": {
+            "com.docker.compose.project": "other",
+            "com.docker.compose.service": "external",
+            "com.docker.compose.config-hash": "other",
+            "io.podman.compose.project": "different",
+            "io.podman.compose.service": "external",
+            "io.podman.compose.config-hash": "other"
+          }
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "c-worker",
+        "Name": "worker",
+        "Image": "sha256:graph",
+        "NetworkSettings": { "Networks": { "application": {} } },
+        "Config": {
+          "Labels": {
+            "com.docker.compose.project": "graph",
+            "com.docker.compose.service": "worker",
+            "io.podman.compose.project": "graph",
+            "io.podman.compose.service": "worker",
+            "io.podman.compose.config-hash": "orphaned"
+          }
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "id": "n-internal", "name": "application", "internal": true }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "id": "n-shared", "name": "shared", "internal": false }
+    },
+    { "status": 200, "headers": [], "body": { "Name": "graph-data" } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "sha256:graph", "RepoTags": ["example.invalid/graph:1"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "ID": "graph-secret", "Spec": { "Name": "graph-secret" } }
+    }
+  ]
+}

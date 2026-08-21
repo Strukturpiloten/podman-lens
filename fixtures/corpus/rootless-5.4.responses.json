@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "sanitized-rootless-inventory",
+  "engine_version": "5.4.0",
+  "api_version": "5.4.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "5.4.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "5.4.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "rootless-web", "Names": ["web"] },
+        { "Id": "rootless-worker", "Names": ["worker"] }
+      ]
+    },
+    { "status": 200, "headers": [], "body": [] },
+    { "status": 200, "headers": [], "body": [{ "id": "rootless-net", "name": "user-net" }] },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "rootless-data" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "Id": "sha256:rootless", "Names": ["example.invalid/rootless:1"] }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "rootless-secret", "Spec": { "Name": "rootless-secret" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "rootless-web",
+        "Name": "web",
+        "Image": "sha256:rootless",
+        "NetworkSettings": { "Networks": { "user-net": {} } },
+        "Mounts": [{ "Type": "volume", "Name": "rootless-data" }],
+        "Config": { "Labels": { "com.example.scope": "rootless" }, "Env": ["PORT=8080"] }
+      }
+    },
+    { "status": 404, "headers": [], "body": null },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "id": "rootless-net",
+        "name": "user-net",
+        "internal": false,
+        "options": { "mtu": "synthetic" }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Name": "rootless-data", "Labels": { "com.example.scope": "rootless" } }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "sha256:rootless", "RepoTags": ["example.invalid/rootless:1"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "ID": "rootless-secret",
+        "Spec": { "Name": "rootless-secret", "Driver": { "Name": "file", "Options": {} } }
+      }
+    }
+  ]
+}

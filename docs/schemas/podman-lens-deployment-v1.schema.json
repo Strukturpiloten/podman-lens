@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boxferry.dev/schemas/podman-lens-deployment-v1.schema.json",
+  "title": "PodmanLens deployment artifact v1",
+  "description": "Serialization-only deployment artifact. It may contain explicitly caller-authorized public declared values, but never sensitive values or sensitive-input references.",
+  "type": "object",
+  "required": ["schema_version", "status", "connection", "external_preconditions", "operations"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "status": {
+      "enum": ["exact", "deferred_sensitive_input", "manual", "approximate", "unsupported"]
+    },
+    "connection": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "external_preconditions": { "type": "array", "items": { "$ref": "#/$defs/resource" } },
+    "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": { "enum": ["container", "pod", "network", "volume", "image", "secret"] },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "operation": {
+      "type": "object",
+      "required": ["status", "action", "resource", "cli", "libpod"],
+      "properties": {
+        "status": {
+          "enum": ["exact", "deferred_sensitive_input", "manual", "approximate", "unsupported"]
+        },
+        "action": { "enum": ["ensure_image", "create", "start_pod", "start_container"] },
+        "resource": { "$ref": "#/$defs/resource" },
+        "cli": { "$ref": "#/$defs/cli" },
+        "libpod": { "$ref": "#/$defs/libpod" }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        { "$ref": "#/$defs/network_create" },
+        { "$ref": "#/$defs/volume_create" },
+        { "$ref": "#/$defs/secret_create" },
+        { "$ref": "#/$defs/image_pull" },
+        { "$ref": "#/$defs/pod_create" },
+        { "$ref": "#/$defs/container_create" },
+        { "$ref": "#/$defs/pod_start" },
+        { "$ref": "#/$defs/container_start" }
+      ]
+    },
+    "cli": {
+      "type": "object",
+      "required": ["program", "argv", "external_sensitive_input_required"],
+      "properties": {
+        "program": { "const": "podman" },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "external_sensitive_input_required": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "libpod": {
+      "type": "object",
+      "required": ["method", "path_and_query", "body"],
+      "properties": {
+        "method": { "enum": ["GET", "POST"] },
+        "path_and_query": { "type": "string", "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/" },
+        "body": { "$ref": "#/$defs/body" }
+      },
+      "additionalProperties": false
+    },
+    "body": {
+      "oneOf": [
+        { "$ref": "#/$defs/empty_body" },
+        { "$ref": "#/$defs/json_body" },
+        { "$ref": "#/$defs/external_sensitive_input_body" }
+      ]
+    },
+    "empty_body": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": { "kind": { "const": "empty" } },
+      "additionalProperties": false
+    },
+    "json_body": {
+      "type": "object",
+      "required": ["kind", "json"],
+      "properties": {
+        "kind": { "const": "json" },
+        "json": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "external_sensitive_input_body": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": { "kind": { "const": "external_sensitive_input" } },
+      "additionalProperties": false
+    },
+    "network_create": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_create_base" },
+        {
+          "properties": {
+            "resource": { "properties": { "kind": { "const": "network" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": {
+                  "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/networks/create$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "volume_create": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_create_base" },
+        {
+          "properties": {
+            "resource": { "properties": { "kind": { "const": "volume" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": {
+                  "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/volumes/create$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pod_create": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_create_base" },
+        {
+          "properties": {
+            "resource": { "properties": { "kind": { "const": "pod" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": { "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/pods/create$" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "container_create": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_create_base" },
+        {
+          "properties": {
+            "resource": { "properties": { "kind": { "const": "container" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": {
+                  "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/containers/create\\?name=.+$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "exact_create_base": {
+      "properties": {
+        "status": { "const": "exact" },
+        "action": { "const": "create" },
+        "cli": { "properties": { "external_sensitive_input_required": { "const": false } } },
+        "libpod": {
+          "properties": {
+            "method": { "const": "POST" },
+            "body": { "$ref": "#/$defs/json_body" }
+          }
+        }
+      }
+    },
+    "secret_create": {
+      "properties": {
+        "status": { "const": "deferred_sensitive_input" },
+        "action": { "const": "create" },
+        "resource": { "properties": { "kind": { "const": "secret" } } },
+        "cli": { "properties": { "external_sensitive_input_required": { "const": true } } },
+        "libpod": {
+          "properties": {
+            "method": { "const": "POST" },
+            "path_and_query": {
+              "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/secrets/create\\?name=.+$"
+            },
+            "body": { "$ref": "#/$defs/external_sensitive_input_body" }
+          }
+        }
+      }
+    },
+    "image_pull": {
+      "properties": {
+        "status": { "const": "exact" },
+        "action": { "const": "ensure_image" },
+        "resource": { "properties": { "kind": { "const": "image" } } },
+        "cli": { "properties": { "external_sensitive_input_required": { "const": false } } },
+        "libpod": {
+          "properties": {
+            "method": { "const": "POST" },
+            "path_and_query": {
+              "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/images/pull\\?reference=.+&policy=missing$"
+            },
+            "body": { "$ref": "#/$defs/empty_body" }
+          }
+        }
+      }
+    },
+    "pod_start": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_start_base" },
+        {
+          "properties": {
+            "action": { "const": "start_pod" },
+            "resource": { "properties": { "kind": { "const": "pod" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": {
+                  "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/pods/[^/]+/start$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "container_start": {
+      "allOf": [
+        { "$ref": "#/$defs/exact_start_base" },
+        {
+          "properties": {
+            "action": { "const": "start_container" },
+            "resource": { "properties": { "kind": { "const": "container" } } },
+            "libpod": {
+              "properties": {
+                "path_and_query": {
+                  "pattern": "^/v[0-9]+\\.[0-9]+\\.[0-9]+/libpod/containers/[^/]+/start$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "exact_start_base": {
+      "properties": {
+        "status": { "const": "exact" },
+        "cli": { "properties": { "external_sensitive_input_required": { "const": false } } },
+        "libpod": {
+          "properties": {
+            "method": { "const": "POST" },
+            "body": { "$ref": "#/$defs/empty_body" }
+          }
+        }
+      }
+    }
+  }
+}

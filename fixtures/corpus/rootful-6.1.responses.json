@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "sanitized-rootful-inventory",
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "6.1.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "6.1.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "rootful-api", "Names": ["api"] },
+        { "Id": "rootful-infra", "Names": ["infra"] }
+      ]
+    },
+    { "status": 200, "headers": [], "body": [{ "Id": "rootful-pod", "Name": "application" }] },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "id": "rootful-bridge", "name": "podman" },
+        { "id": "rootful-user", "name": "application" }
+      ]
+    },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "rootful-data" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "Id": "sha256:rootful", "Names": ["example.invalid/rootful:1"] }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "rootful-secret", "Spec": { "Name": "rootful-secret" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "rootful-api",
+        "Name": "api",
+        "Pod": "rootful-pod",
+        "Image": "sha256:rootful",
+        "NetworkSettings": { "Networks": { "application": {}, "podman": {} } },
+        "Mounts": [{ "Type": "volume", "Name": "rootful-data" }],
+        "Config": {
+          "Labels": { "com.example.scope": "rootful" },
+          "Secrets": [{ "ID": "rootful-secret" }]
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "rootful-infra", "Name": "infra", "Pod": "rootful-pod", "IsInfra": true }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "rootful-pod",
+        "Name": "application",
+        "CreateInfra": true,
+        "Containers": [{ "Id": "rootful-api" }, { "Id": "rootful-infra" }],
+        "InfraConfig": { "Networks": ["application", "podman"] }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "id": "rootful-bridge", "name": "podman", "internal": false }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "id": "rootful-user", "name": "application", "internal": true }
+    },
+    { "status": 200, "headers": [], "body": { "Name": "rootful-data" } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "sha256:rootful", "RepoTags": ["example.invalid/rootful:1"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "ID": "rootful-secret",
+        "Spec": { "Name": "rootful-secret", "Driver": { "Name": "file", "Options": {} } }
+      }
+    }
+  ]
+}

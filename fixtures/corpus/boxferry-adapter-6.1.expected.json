@@ -1,0 +1,148 @@
+{
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "inventory_counts": {
+    "container": 2,
+    "image": 1,
+    "network": 1,
+    "pod": 1,
+    "secret": 1,
+    "volume": 1
+  },
+  "discovery": {
+    "resolved_roots": ["container:bf61-worker", "pod:bf61-pod"],
+    "groups": [
+      {
+        "id": "container:bf61-api",
+        "members": ["container:bf61-api", "container:bf61-worker", "pod:bf61-pod"],
+        "prerequisites": [
+          "network:bf61-network",
+          "volume:application-data",
+          "image:sha256:bf61",
+          "secret:bf61-secret"
+        ]
+      }
+    ],
+    "shared_prerequisites": [],
+    "dependency_count": 9,
+    "finding_count": 0
+  },
+  "neutral_application": {
+    "services": [
+      {
+        "name": "api",
+        "native_id": "bf61-api",
+        "image": "registry.example.invalid/boxferry/application:6.1",
+        "group": "application",
+        "networks": [],
+        "mounts": [
+          { "source": "application-data", "destination": "/var/lib/application", "writable": true }
+        ],
+        "secrets": ["database-password"],
+        "command": ["serve", "--http"],
+        "entrypoint": ["/usr/bin/application"],
+        "user": "1000:1000",
+        "workdir": "/srv/application",
+        "dependencies": ["worker"]
+      },
+      {
+        "name": "worker",
+        "native_id": "bf61-worker",
+        "image": "registry.example.invalid/boxferry/application:6.1",
+        "group": null,
+        "networks": [],
+        "mounts": [
+          { "source": "application-data", "destination": "/var/lib/application", "writable": true }
+        ],
+        "secrets": [],
+        "command": ["work"],
+        "entrypoint": null,
+        "user": null,
+        "workdir": null,
+        "dependencies": []
+      }
+    ],
+    "groups": [
+      {
+        "name": "application",
+        "native_id": "bf61-pod",
+        "members": ["api"],
+        "networks": ["application-net"]
+      }
+    ],
+    "networks": [{ "name": "application-net", "ownership": "uncertain" }],
+    "volumes": [{ "name": "application-data", "ownership": "uncertain" }],
+    "images": [
+      {
+        "name": "application-image",
+        "source": "registry.example.invalid/boxferry/application:6.1",
+        "acquisition": "pull-if-missing"
+      }
+    ],
+    "secrets": [{ "name": "database-password", "ownership": "external" }]
+  },
+  "decisions": [
+    {
+      "source": "Container.Config.ImageName",
+      "target": "Service.image",
+      "outcome": "promoted",
+      "reason": "configured evidence has exact neutral semantics"
+    },
+    {
+      "source": "Container.Image",
+      "target": "Service.image",
+      "outcome": "observation-only",
+      "reason": "local-resolution IDs are not desired state"
+    },
+    {
+      "source": "Container.Config.Env",
+      "target": "Service.environment",
+      "outcome": "manual",
+      "reason": "values remain protected and require explicit authorization"
+    },
+    {
+      "source": "Container.Mounts.volume",
+      "target": "Service.mounts",
+      "outcome": "promoted",
+      "reason": "named source and container destination are portable"
+    },
+    {
+      "source": "Container.Mounts.bind",
+      "target": "Service.mounts",
+      "outcome": "manual",
+      "reason": "host source is local-resolution evidence"
+    },
+    {
+      "source": "Network.subnets",
+      "target": "Network.ipam",
+      "outcome": "observation-only",
+      "reason": "effective inspect state needs explicit authoring policy"
+    },
+    {
+      "source": "Image.RepoTags",
+      "target": "ImageAcquisition.reference",
+      "outcome": "observation-only",
+      "reason": "repository tags are local-resolution evidence"
+    },
+    {
+      "source": "Secret.Spec.Driver.Options",
+      "target": "Secret.material",
+      "outcome": "unavailable",
+      "reason": "only option count is retained and payload is never acquired"
+    }
+  ],
+  "plan_operations": [
+    "create:network:application-net",
+    "create:volume:application-data",
+    "ensure-image:image:application-image",
+    "create:pod:application",
+    "create:container:api",
+    "create:container:worker",
+    "start-pod:pod:application",
+    "start-container:container:worker"
+  ],
+  "render_status": "exact",
+  "rendered_operation_count": 8,
+  "rendered_cli_sha256": "63cdd178bff3d56dc758860a1a7da53687e4a1db2ff33ecfd87f45a3af22cce0",
+  "rendered_libpod_sha256": "9528bc07f0906aaf1417e54ac497c13510987eba85b5664910b113f3e02ab4f6"
+}

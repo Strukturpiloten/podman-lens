@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "boxferry-all-resources-large",
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "6.1.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "6.1.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "bf61-api", "Names": ["api"] },
+        { "Id": "bf61-worker", "Names": ["worker"] }
+      ]
+    },
+    { "status": 200, "headers": [], "body": [{ "Id": "bf61-pod", "Name": "application" }] },
+    { "status": 200, "headers": [], "body": [{ "id": "bf61-network", "name": "application-net" }] },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "application-data" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "sha256:bf61", "Names": ["registry.example.invalid/boxferry/application:6.1"] }
+      ]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "bf61-secret", "Spec": { "Name": "database-password" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "bf61-api",
+        "Name": "api",
+        "Image": "sha256:bf61",
+        "ImageName": "registry.example.invalid/boxferry/application:6.1",
+        "Pod": "bf61-pod",
+        "Dependencies": ["bf61-worker"],
+        "Config": {
+          "Image": "registry.example.invalid/boxferry/application:6.1",
+          "Cmd": ["serve", "--http"],
+          "Entrypoint": ["/usr/bin/application"],
+          "User": "1000:1000",
+          "WorkingDir": "/srv/application",
+          "Labels": { "org.example.role": "api" },
+          "Env": ["MODE=production", "TOKEN=protected"],
+          "Secrets": [
+            {
+              "ID": "bf61-secret",
+              "Name": "database-password",
+              "UID": 1000,
+              "GID": 1000,
+              "Mode": 288
+            }
+          ]
+        },
+        "NetworkSettings": { "Networks": { "application-net": {} } },
+        "Mounts": [
+          {
+            "Type": "volume",
+            "Name": "application-data",
+            "Destination": "/var/lib/application",
+            "RW": true
+          },
+          {
+            "Type": "bind",
+            "Source": "/srv/local-only",
+            "Destination": "/mnt/local-only",
+            "RW": false
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "bf61-worker",
+        "Name": "worker",
+        "Image": "sha256:bf61",
+        "ImageName": "registry.example.invalid/boxferry/application:6.1",
+        "Config": {
+          "Image": "registry.example.invalid/boxferry/application:6.1",
+          "Cmd": ["work"],
+          "Labels": { "org.example.role": "worker" }
+        },
+        "HostConfig": { "NetworkMode": "application-net" },
+        "NetworkSettings": { "Networks": { "application-net": {} } },
+        "Mounts": [
+          {
+            "Type": "volume",
+            "Name": "application-data",
+            "Destination": "/var/lib/application",
+            "RW": true
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "bf61-pod",
+        "Name": "application",
+        "CreateInfra": true,
+        "Labels": { "org.example.group": "application" },
+        "Containers": [{ "Id": "bf61-api" }],
+        "InfraConfig": {
+          "Networks": ["application-net"],
+          "PortBindings": { "8080/tcp": [{ "HostIp": "127.0.0.1", "HostPort": "8080" }] }
+        }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "id": "bf61-network",
+        "name": "application-net",
+        "internal": false,
+        "labels": { "org.example.network": "application" },
+        "subnets": [
+          {
+            "subnet": "10.61.0.0/24",
+            "gateway": "10.61.0.1",
+            "lease_range": { "start_ip": "10.61.0.10", "end_ip": "10.61.0.200" }
+          }
+        ],
+        "routes": [
+          {
+            "destination": "198.51.100.0/24",
+            "gateway": "10.61.0.1",
+            "metric": 61,
+            "type": "unicast"
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Name": "application-data",
+        "Driver": "local",
+        "CreatedAt": "2026-08-20T06:01:00Z",
+        "Anonymous": false,
+        "UID": 1000,
+        "GID": 1000,
+        "Labels": { "org.example.volume": "application" }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "sha256:bf61",
+        "RepoTags": ["registry.example.invalid/boxferry/application:6.1"],
+        "RepoDigests": ["registry.example.invalid/boxferry/application@sha256:bf61"],
+        "Digest": "sha256:bf61",
+        "Created": "2026-08-19T06:01:00Z",
+        "Author": "fixture author",
+        "Architecture": "amd64",
+        "Os": "linux",
+        "ManifestType": "application/vnd.oci.image.manifest.v1+json",
+        "Labels": { "org.example.image": "application" },
+        "Config": { "Env": ["IMAGE_DEFAULT=protected"] }
+      }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "ID": "bf61-secret",
+        "CreatedAt": "2026-08-18T06:01:00Z",
+        "UpdatedAt": "2026-08-19T06:01:00Z",
+        "Spec": {
+          "Name": "database-password",
+          "Labels": { "org.example.secret": "application" },
+          "Driver": { "Name": "file", "Options": { "discarded-name": "discarded-value" } }
+        },
+        "SecretData": "discarded-payload"
+      }
+    }
+  ]
+}

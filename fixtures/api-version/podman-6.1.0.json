@@ -1,0 +1,9 @@
+{
+  "Components": [
+    {
+      "Name": "Podman Engine",
+      "Version": "6.1.0",
+      "Details": { "APIVersion": "6.1.0", "MinAPIVersion": "4.0.0" }
+    }
+  ]
+}

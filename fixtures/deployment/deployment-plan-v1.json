@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "status": "exact",
+  "connection": "remote-one",
+  "external_preconditions": [],
+  "operations": [
+    {
+      "status": "exact",
+      "action": "create",
+      "resource": {
+        "kind": "network",
+        "name": "network one"
+      },
+      "cli": {
+        "program": "podman",
+        "argv": [
+          "--connection",
+          "remote-one",
+          "network",
+          "create",
+          "network one"
+        ],
+        "external_sensitive_input_required": false
+      },
+      "libpod": {
+        "method": "POST",
+        "path_and_query": "/v6.1.0/libpod/networks/create",
+        "body": {
+          "kind": "json",
+          "json": {
+            "name": "network one"
+          }
+        }
+      }
+    },
+    {
+      "status": "exact",
+      "action": "ensure_image",
+      "resource": {
+        "kind": "image",
+        "name": "registry.example.invalid/app:1"
+      },
+      "cli": {
+        "program": "podman",
+        "argv": [
+          "--connection",
+          "remote-one",
+          "image",
+          "pull",
+          "--policy=missing",
+          "registry.example.invalid/team/app:1"
+        ],
+        "external_sensitive_input_required": false
+      },
+      "libpod": {
+        "method": "POST",
+        "path_and_query": "/v6.1.0/libpod/images/pull?reference=registry.example.invalid%2Fteam%2Fapp%3A1&policy=missing",
+        "body": {
+          "kind": "empty"
+        }
+      }
+    },
+    {
+      "status": "exact",
+      "action": "create",
+      "resource": {
+        "kind": "pod",
+        "name": "pod-one"
+      },
+      "cli": {
+        "program": "podman",
+        "argv": [
+          "--connection",
+          "remote-one",
+          "pod",
+          "create",
+          "--name",
+          "pod-one",
+          "--network",
+          "network one"
+        ],
+        "external_sensitive_input_required": false
+      },
+      "libpod": {
+        "method": "POST",
+        "path_and_query": "/v6.1.0/libpod/pods/create",
+        "body": {
+          "kind": "json",
+          "json": {
+            "Networks": {
+              "network one": {}
+            },
+            "name": "pod-one"
+          }
+        }
+      }
+    },
+    {
+      "status": "exact",
+      "action": "create",
+      "resource": {
+        "kind": "container",
+        "name": "container-one"
+      },
+      "cli": {
+        "program": "podman",
+        "argv": [
+          "--connection",
+          "remote-one",
+          "container",
+          "create",
+          "--name",
+          "container-one",
+          "--pull=never",
+          "--pod",
+          "pod-one",
+          "registry.example.invalid/team/app:1"
+        ],
+        "external_sensitive_input_required": false
+      },
+      "libpod": {
+        "method": "POST",
+        "path_and_query": "/v6.1.0/libpod/containers/create?name=container-one",
+        "body": {
+          "kind": "json",
+          "json": {
+            "image": "registry.example.invalid/team/app:1",
+            "pod": "pod-one"
+          }
+        }
+      }
+    },
+    {
+      "status": "exact",
+      "action": "start_pod",
+      "resource": {
+        "kind": "pod",
+        "name": "pod-one"
+      },
+      "cli": {
+        "program": "podman",
+        "argv": [
+          "--connection",
+          "remote-one",
+          "pod",
+          "start",
+          "pod-one"
+        ],
+        "external_sensitive_input_required": false
+      },
+      "libpod": {
+        "method": "POST",
+        "path_and_query": "/v6.1.0/libpod/pods/pod-one/start",
+        "body": {
+          "kind": "empty"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,357 @@
+{
+  "schema_version": 1,
+  "requested_roots": [
+    {
+      "kind": "container",
+      "reference": "a"
+    }
+  ],
+  "requested_label_roots": [
+    {
+      "name": "project",
+      "exact_value_requested": true
+    }
+  ],
+  "all_requested": false,
+  "resolved_roots": [
+    {
+      "kind": "container",
+      "id": "container-a",
+      "name": "a"
+    }
+  ],
+  "groups": [
+    {
+      "id": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "members": [
+        {
+          "kind": "container",
+          "id": "container-a",
+          "name": "a"
+        },
+        {
+          "kind": "container",
+          "id": "container-z",
+          "name": "z"
+        },
+        {
+          "kind": "pod",
+          "id": "pod-1",
+          "name": "pod-one"
+        }
+      ],
+      "prerequisites": [
+        {
+          "kind": "volume",
+          "id": "database-data",
+          "name": "database-data"
+        },
+        {
+          "kind": "image",
+          "id": "sha256:abc",
+          "name": "registry.example.invalid/team/image:1@sha256:abc"
+        },
+        {
+          "kind": "secret",
+          "id": "secret-1",
+          "name": "db-password"
+        }
+      ]
+    }
+  ],
+  "shared_prerequisites": [],
+  "dependencies": [
+    {
+      "dependent": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "prerequisite": {
+        "kind": "container",
+        "id": "container-z",
+        "name": "z"
+      },
+      "evidence": {
+        "kind": "native_relationship",
+        "field_paths": [
+          "$.Dependencies[0]"
+        ]
+      }
+    },
+    {
+      "dependent": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "prerequisite": {
+        "kind": "pod",
+        "id": "pod-1",
+        "name": "pod-one"
+      },
+      "evidence": {
+        "kind": "native_relationship",
+        "field_paths": [
+          "$.Pod"
+        ]
+      }
+    },
+    {
+      "dependent": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "prerequisite": {
+        "kind": "volume",
+        "id": "database-data",
+        "name": "database-data"
+      },
+      "evidence": {
+        "kind": "native_relationship",
+        "field_paths": [
+          "$.Mounts[0].Name"
+        ]
+      }
+    },
+    {
+      "dependent": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "prerequisite": {
+        "kind": "image",
+        "id": "sha256:abc",
+        "name": "registry.example.invalid/team/image:1@sha256:abc"
+      },
+      "evidence": {
+        "kind": "native_relationship",
+        "field_paths": [
+          "$.ImageName"
+        ]
+      }
+    },
+    {
+      "dependent": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "prerequisite": {
+        "kind": "secret",
+        "id": "secret-1",
+        "name": "db-password"
+      },
+      "evidence": {
+        "kind": "native_relationship",
+        "field_paths": [
+          "$.Config.Secrets[0].ID",
+          "$.Config.Secrets[0].Name"
+        ]
+      }
+    }
+  ],
+  "grouping_edges": [
+    {
+      "left": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "right": {
+        "kind": "container",
+        "id": "container-z",
+        "name": "z"
+      },
+      "evidence": "container_dependency",
+      "field_paths": [
+        "$.Dependencies[0]"
+      ]
+    },
+    {
+      "left": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "right": {
+        "kind": "pod",
+        "id": "pod-1",
+        "name": "pod-one"
+      },
+      "evidence": "pod_membership",
+      "field_paths": [
+        "$.Containers[0].Id",
+        "$.Pod"
+      ]
+    }
+  ],
+  "findings": [],
+  "explanations": [
+    {
+      "kind": "root",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": null,
+      "position": null,
+      "root_origin": {
+        "kind": "resource_selector",
+        "position": 0
+      }
+    },
+    {
+      "kind": "root",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": null,
+      "position": null,
+      "root_origin": {
+        "kind": "label_selector",
+        "position": 0
+      }
+    },
+    {
+      "kind": "group_ordering",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": null,
+      "position": 0,
+      "root_origin": null
+    },
+    {
+      "kind": "included_member",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "included_member",
+      "resource": {
+        "kind": "container",
+        "id": "container-z",
+        "name": "z"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "included_member",
+      "resource": {
+        "kind": "pod",
+        "id": "pod-1",
+        "name": "pod-one"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "prerequisite",
+      "resource": {
+        "kind": "volume",
+        "id": "database-data",
+        "name": "database-data"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "prerequisite",
+      "resource": {
+        "kind": "image",
+        "id": "sha256:abc",
+        "name": "registry.example.invalid/team/image:1@sha256:abc"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "prerequisite",
+      "resource": {
+        "kind": "secret",
+        "id": "secret-1",
+        "name": "db-password"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "strong_evidence_merge",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": {
+        "kind": "container",
+        "id": "container-z",
+        "name": "z"
+      },
+      "position": null,
+      "root_origin": null
+    },
+    {
+      "kind": "strong_evidence_merge",
+      "resource": {
+        "kind": "container",
+        "id": "container-a",
+        "name": "a"
+      },
+      "related": {
+        "kind": "pod",
+        "id": "pod-1",
+        "name": "pod-one"
+      },
+      "position": null,
+      "root_origin": null
+    }
+  ]
+}

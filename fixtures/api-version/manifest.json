@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "source-derived-minimal",
+  "sanitization": "Synthetic minimal data derived from immutable Podman source; no endpoint, host, user, environment, secret, container, image, or runtime data is present.",
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/libpod/_ping",
+      "status": 200,
+      "content_type": null
+    },
+    {
+      "method": "GET",
+      "path": "/v4.0.0/libpod/version",
+      "status": 200,
+      "content_type": "application/json"
+    }
+  ],
+  "fixtures": [
+    {
+      "engine_version": "5.4.0",
+      "release_tag": "v5.4.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "5.4.0",
+      "ping_artifact": "podman-5.4.0.ping.txt",
+      "ping_sha256": "5c6d7a1042dd6a9fa78241e51de4a53d220e60fb487cd0b975b7719012c96e3e",
+      "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2/version/version.go"
+      ],
+      "artifact": "podman-5.4.0.json",
+      "sha256": "c60011d8e32bb0d8ff518403ecff3fbb645254e52b753418236ef14257cd1183"
+    },
+    {
+      "engine_version": "5.5.0",
+      "release_tag": "v5.5.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "5.5.0",
+      "ping_artifact": "podman-5.5.0.ping.txt",
+      "ping_sha256": "a04ebeae8e31a0cdd0fa05ec887500f4d4ee12d3795499e8ff87cdf7ce7ce095",
+      "commit": "0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/0dbcb51477ee7ab8d3b47d30facf71fc38bb0c98/version/version.go"
+      ],
+      "artifact": "podman-5.5.0.json",
+      "sha256": "b75d54f6f422c6403c4f516370134be1a233624eda32ab12eba7327b26f9dfc7"
+    },
+    {
+      "engine_version": "5.6.0",
+      "release_tag": "v5.6.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "5.6.0",
+      "ping_artifact": "podman-5.6.0.ping.txt",
+      "ping_sha256": "c8168e95bf5447272dfb4d340e5785e6317ccf801d2805a18553ed93477a6992",
+      "commit": "da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/da671ef6cfa3fc9ac6225c18f1dd0a70a951e43f/version/version.go"
+      ],
+      "artifact": "podman-5.6.0.json",
+      "sha256": "5a66ecfc7f793308944353bcfc9312ff93524ed197c279aff10a71d8491ba416"
+    },
+    {
+      "engine_version": "5.7.0",
+      "release_tag": "v5.7.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "5.7.0",
+      "ping_artifact": "podman-5.7.0.ping.txt",
+      "ping_sha256": "dee13e6d7d98d55d774255135af1740c7a1d23cfe5c0f09280fea74f783850eb",
+      "commit": "0370128fc8dcae93533334324ef838db8f8da8cb",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/0370128fc8dcae93533334324ef838db8f8da8cb/version/version.go"
+      ],
+      "artifact": "podman-5.7.0.json",
+      "sha256": "012d16611708dcfabcb716e997a25f9709d73d3b6c7e4c6e4f0f130f75ada841"
+    },
+    {
+      "engine_version": "5.8.6",
+      "release_tag": "v5.8.6",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "5.8.6",
+      "ping_artifact": "podman-5.8.6.ping.txt",
+      "ping_sha256": "130a1672d5f5c5b4aa026ecbdfb54bba749bbfc5250947e3b30ca2b69acf4223",
+      "commit": "a859fc66702c23e869c282c63e92d9b6cd264229",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/a859fc66702c23e869c282c63e92d9b6cd264229/version/version.go"
+      ],
+      "artifact": "podman-5.8.6.json",
+      "sha256": "88a26510c09923119d77b375883f9028094351385dfeff83a9912f77928df42d"
+    },
+    {
+      "engine_version": "6.0.0",
+      "release_tag": "v6.0.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "6.0.0",
+      "ping_artifact": "podman-6.0.0.ping.txt",
+      "ping_sha256": "2a08a22feacc524b860eefde8649ebf3562b65dd22aff694e612ddd0cf65a129",
+      "commit": "a8ed4b6dd12992decf659cadfdfb3d0cb1937748",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/a8ed4b6dd12992decf659cadfdfb3d0cb1937748/version/version.go"
+      ],
+      "artifact": "podman-6.0.0.json",
+      "sha256": "4391e8f6795b7b8ae1fc22770c612c48c7d148ce8d863c37df2464d726478afb"
+    },
+    {
+      "engine_version": "6.1.0",
+      "release_tag": "v6.1.0",
+      "minimum_api_version": "4.0.0",
+      "current_api_version": "6.1.0",
+      "ping_artifact": "podman-6.1.0.ping.txt",
+      "ping_sha256": "4a869d2cd475fc7d9bb46d112d513167ec2f3c795dd9db121e08ef08abac66c6",
+      "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+      "source_urls": [
+        "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/register_ping.go",
+        "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/server/handler_api.go",
+        "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/compat/version.go",
+        "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/domain/entities/types/types.go",
+        "https://github.com/containers/podman/blob/cade97a52ebdf9dbf9e81de8009015776837a074/version/version.go"
+      ],
+      "artifact": "podman-6.1.0.json",
+      "sha256": "3fed237a67822dd22de955be7713b5ed50f88d2bf7985adc6e162a0f7240c555"
+    }
+  ]
+}

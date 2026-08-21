@@ -1,0 +1,108 @@
+[package]
+name = "podman-lens"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Version-aware native Podman inspection and deployment planning"
+documentation = "https://docs.rs/podman-lens"
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["containers", "libpod", "podman", "rest-api"]
+categories = ["api-bindings", "config"]
+include = [
+  "/.cargo/**",
+  "/.codex/**",
+  "/.devcontainer/**",
+  "/.editorconfig",
+  "/.github/**",
+  "/.markdownlint.json",
+  "/.prettierignore",
+  "/.prettierrc.json",
+  "/.vscode/**",
+  "/AGENTS.md",
+  "/catalogue/**",
+  "/catalogue/v1/native-field-coverage.json",
+  "/catalogue/v1/podman-deployment-rendering.json",
+  "/fixtures/corpus/**",
+  "/fixtures/deployment/**",
+  "/fixtures/**",
+  "/fixtures/snapshots/**",
+  "/CHANGELOG.md",
+  "/Cargo.lock",
+  "/Cargo.toml",
+  "/CONTRIBUTING.md",
+  "/LICENSE",
+  "/README.md",
+  "/SECURITY.md",
+  "/clippy.toml",
+  "/deny.toml",
+  "/docs/**",
+  "/docs/schemas/podman-lens-snapshot-v1.schema.json",
+  "/docs/schemas/podman-lens-deployment-v1.schema.json",
+  "/lychee.toml",
+  "/package-lock.json",
+  "/package.json",
+  "/release-plz.toml",
+  "/rust-toolchain.toml",
+  "/rustfmt.toml",
+  "/scripts/**",
+  "/src/**",
+  "/tests/**",
+  "/tombi.toml",
+]
+publish = ["crates-io"]
+
+[package.metadata.strukturpiloten]
+company = "Strukturpiloten OHG"
+github = "https://github.com/TheRealBecks"
+maintainer = 'Martin "Becks" Beckert'
+website = "https://www.strukturpiloten.de/"
+
+[workspace]
+resolver = "3"
+members = ["."]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+homepage = "https://boxferry.dev/"
+repository = "https://github.com/Strukturpiloten/podman-lens"
+license = "MPL-2.0"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+expect_used = "warn"
+panic = "warn"
+pedantic = { level = "warn", priority = -1 }
+todo = "warn"
+unimplemented = "warn"
+unwrap_used = "warn"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "forbid"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+
+[lints]
+workspace = true
+
+[dependencies]
+semver = { version = "1.0.28", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+url = "2.5.8"
+bytes = "1.12.1"
+http-body-util = "0.1.5"
+hyper = { version = "1.11.0", features = ["client", "http1"] }
+hyper-util = { version = "0.1.20", features = ["tokio"] }
+tokio = { version = "1.53.1", features = ["macros", "net", "rt", "time"] }
+
+[dev-dependencies]
+jsonschema = { version = "0.49.9", default-features = false }
+sha2 = "0.11.0"

@@ -1,0 +1,136 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust quality
+    runs-on: ubuntu-24.04
+    steps:
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cargo fmt --all -- --check
+      - run: cargo ci-check
+      - run: cargo ci-policy
+      - run: cargo ci-clippy
+      - run: cargo ci-test
+      - run: cargo ci-doctest
+      - env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo ci-doc
+      - run: cargo ci-package
+  coverage:
+    name: Coverage measurement
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - run: rustup component add llvm-tools-preview
+      - name: Install pinned cargo-llvm-cov
+        # renovate: datasource=crate depName=cargo-llvm-cov
+        run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - run: cargo llvm-cov clean --locked
+      - run: cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
+  portability:
+    name: Portability (macOS)
+    runs-on: macos-14
+    steps:
+      - *checkout
+      - run: cargo ci-check
+      - run: cargo ci-test
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          msrv="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '[.packages[].rust_version] | unique | if length == 1 and .[0] != null then .[0] else error("workspace packages must declare one common rust-version") end')"
+          printf 'msrv=%s\n' "${msrv}" >> "${GITHUB_OUTPUT}"
+      - env:
+          RUST_MSRV: ${{ steps.metadata.outputs.msrv }}
+        run: rustup toolchain install "${RUST_MSRV}" --profile minimal
+      - env:
+          RUST_MSRV: ${{ steps.metadata.outputs.msrv }}
+        run: cargo "+${RUST_MSRV}" ci-check
+      - env:
+          RUST_MSRV: ${{ steps.metadata.outputs.msrv }}
+        run: cargo "+${RUST_MSRV}" ci-policy
+  dependencies:
+    name: Dependency and license policy
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features
+  api:
+    name: Public API compatibility
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - name: Compare published API or check initial public contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --user-agent 'PodmanLens CI (+https://github.com/Strukturpiloten/podman-lens)' --output /dev/null --write-out '%{http_code}' https://crates.io/api/v1/crates/podman-lens)"
+          case "${status}" in
+            200)
+              cargo install --locked --version 0.50.0 cargo-semver-checks
+              cargo semver-checks check-release --package podman-lens
+              ;;
+            404)
+              cargo test --locked --test public_api
+              ;;
+            *)
+              printf 'Unexpected crates.io response for podman-lens: HTTP %s\n' "${status}" >&2
+              exit 1
+              ;;
+          esac
+  documentation:
+    name: Repository files and documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # renovate: datasource=node-version depName=node
+          node-version: 24.18.1
+          cache: npm
+      - name: Install locked Node file-quality tools
+        run: |
+          npm ci --ignore-scripts
+          printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
+      - run: sudo bash scripts/install-file-tools.sh /usr/local/bin
+      - run: bash scripts/check-files.sh --check
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --root-dir '${{ github.workspace }}' --offline './**/*.md'
+          fail: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+  pr-gate:
+    name: PR gate
+    if: always()
+    needs: [rust, coverage, portability, msrv, dependencies, api, documentation]
+    runs-on: ubuntu-24.04
+    steps:
+      - shell: bash
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "${RESULTS}" = "success success success success success success success"

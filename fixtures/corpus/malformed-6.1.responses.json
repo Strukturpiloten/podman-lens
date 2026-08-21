@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "sanitized-malformed-inventory",
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "responses": [
+    { "status": 200, "headers": [["libpod-api-version", "6.1.0"]], "body": null },
+    {
+      "status": 200,
+      "headers": [["content-type", "application/json"]],
+      "body": { "Components": [{ "Name": "Podman Engine", "Version": "6.1.0" }] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "malformed-good", "Names": ["good"] },
+        { "Id": "malformed-good", "Names": ["duplicate"] },
+        { "missing": "id" },
+        { "Id": "malformed-race", "Names": ["race"] }
+      ]
+    },
+    { "status": 200, "headers": [], "body": [] },
+    { "status": 200, "headers": [], "body": [{ "id": "malformed-net", "name": "net" }] },
+    { "status": 200, "headers": [], "body": { "Volumes": [{ "Name": "malformed-data" }] } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [
+        { "Id": "sha256:malformed-a", "Names": ["example.invalid/ambiguous:1"] },
+        { "Id": "sha256:malformed-b", "Names": ["example.invalid/ambiguous:1"] }
+      ]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": [{ "ID": "malformed-secret", "Spec": { "Name": "malformed-secret" } }]
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "Id": "malformed-good",
+        "Name": "good",
+        "Image": "example.invalid/ambiguous:1",
+        "NetworkSettings": { "Networks": { "net": {} } },
+        "Config": {
+          "Env": ["VALID=one", "NO_EQUALS", "=NO_NAME"],
+          "Labels": { "com.example.scope": "malformed" }
+        },
+        "FutureOne": true,
+        "FutureTwo": { "nested": true }
+      }
+    },
+    { "status": 404, "headers": [], "body": null },
+    { "status": 200, "headers": [], "body": { "id": "malformed-net", "name": "net" } },
+    { "status": 200, "headers": [], "body": { "Name": "malformed-data" } },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "sha256:malformed-a", "RepoTags": ["example.invalid/ambiguous:1"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": { "Id": "sha256:malformed-b", "RepoTags": ["example.invalid/ambiguous:1"] }
+    },
+    {
+      "status": 200,
+      "headers": [],
+      "body": {
+        "ID": "malformed-secret",
+        "Spec": { "Name": "malformed-secret" },
+        "SecretData": "synthetic-payload-never-retained"
+      }
+    }
+  ]
+}

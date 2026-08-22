@@ -17,9 +17,12 @@ have a demonstrated public-contract boundary.
 | `fixtures/corpus/`          | Sanitized fixed corpora and 14 request-aware complex offline cassettes |
 | `fixtures/snapshots/`       | Exact versioned snapshot goldens                                       |
 | `fixtures/deployment/`      | Byte-exact deployment JSON and POSIX-script goldens                    |
+| `examples/`                 | Explicit-socket acquisition and deterministic offline output examples  |
+| `docs/public/`              | Website-ready task guides imported from an exact repository revision   |
 | `docs/schemas/`             | Public export schemas and strict test-only cassette schema             |
 | `tests/support/cassette.rs` | Test-only cassette parsing, request matching, and deterministic replay |
 | `tests/complex_corpus.rs`   | Per-version and simulated-context complex conformance cases            |
+| `tests/public_guides.rs`    | Public guide, example, fixture, version-gate, and redaction contracts  |
 | `tests/`                    | Public-contract, fixture, and repository-policy integration tests      |
 | `docs/`                     | Architecture, decisions, policy, and evidence documentation            |
 | `scripts/`                  | Deterministic local validation helpers                                 |
@@ -30,6 +33,10 @@ Future protocol, resource-model, discovery, and plan modules must follow the lay
 
 The downstream mapping and release acceptance documents live beside the architecture because they
 govern public consumption without introducing a BoxFerry crate dependency.
+
+The `docs/public/` tree is the only website-ready PodmanLens document source. The BoxFerry website
+imports that tree and Rustdoc from one exact merged revision; it does not publish the maintainer
+roadmap or internal acceptance documents as task guides.
 
 The cassette support module is not part of the crate's production API. Its strict v1 schema binds
 each synthetic response to an expected Libpod method and path, and its 14 stable fixtures cover the

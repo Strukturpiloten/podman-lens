@@ -1,8 +1,8 @@
 # PodmanLens
 
-PodmanLens will provide typed, version-aware Podman inspection and deployment planning for Rust
+PodmanLens provides typed, version-aware Podman inspection and deployment planning for Rust
 applications. It is the native Podman boundary used by
-[BoxFerry](https://github.com/Strukturpiloten/boxferry), but it will not depend on BoxFerry.
+[BoxFerry](https://github.com/Strukturpiloten/boxferry), but it does not depend on BoxFerry.
 
 > [!NOTE]
 > The stable native input contract, transport-neutral deployment semantics, bounded M6-B1–B4
@@ -10,20 +10,21 @@ applications. It is the native Podman boundary used by
 > complex-cassette layer are complete. Broader native output coverage and live Podman conformance
 > remain explicitly deferred.
 
-PodmanLens will:
+PodmanLens:
 
-- inspect containers, pods, networks, volumes, images, and secret metadata through the native
+- inspects containers, pods, networks, volumes, images, and secret metadata through the native
   Libpod REST API;
-- build an evidence-backed resource graph from explicit selectors;
-- preserve Podman-specific data and the Podman version that gives it meaning;
-- produce ordered transport-neutral deployment semantics before M6 CLI and Libpod API rendering; and
-- keep environment and secret material protected by default.
+- builds an evidence-backed resource graph from explicit selectors;
+- preserves Podman-specific data and the Podman version that gives it meaning;
+- produces ordered transport-neutral deployment semantics before CLI and Libpod API rendering; and
+- keeps environment and secret material protected by default.
 
-PodmanLens will not choose cross-format mappings, parse Compose or Quadlet, execute deployment
+PodmanLens does not choose cross-format mappings, parse Compose or Quadlet, execute deployment
 plans, or depend on BoxFerry.
 
 ## Project documents
 
+- [Task-oriented public guides](docs/public/index.md)
 - [Architecture](docs/architecture.md)
 - [Library API](docs/library-api.md)
 - [BoxFerry integration contract](docs/boxferry-integration.md)
@@ -79,3 +80,7 @@ not exports of live Podman environments. Together with seven retained focused re
 golden artifacts, the corpus manifest hash-verifies 21 artifacts. The complete live matrix remains deferred to
 [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3), with no nightly or
 pull-request workflow claimed here.
+
+The website-ready public guides cover explicit read-only acquisition, discovery, grouping and
+network boundaries, non-executing planning and rendering, diagnostics and privacy, and exact
+version selection. Their examples compile or run through the ordinary repository test gate.

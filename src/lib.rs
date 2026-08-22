@@ -1,10 +1,79 @@
-//! Version-aware native Podman inspection and deployment planning.
+//! Version-aware native Podman inspection and non-executing deployment planning.
 //!
-//! This first milestone establishes explicit, redacted connection configuration; validated
-//! Libpod request and response contracts; evidence-backed Podman target profiles; and a fixed
-//! read-only service probe. On Unix, `ReadOnlyUnixTransport` can acquire from one explicit socket
-//! and rejects every method except `GET` before opening it. Applications provide any SSH or TLS
-//! [`LibpodTransport`] implementation themselves.
+//! `PodmanLens` acquires one explicitly selected Libpod service through a replaceable transport,
+//! preserves typed native observation state and provenance, discovers an evidence-backed resource
+//! graph, plans caller-authored target intent, and renders deterministic CLI and Libpod
+//! descriptions. It never discovers an ambient endpoint, shells out to `podman` for input, sends a
+//! mutating acquisition request, or executes a rendered plan.
+//!
+//! # Explicit read-only acquisition
+//!
+//! The built-in Unix transport accepts one caller-supplied socket and rejects every method except
+//! `GET` before opening it. Environment values are redacted by default and secret payload endpoints
+//! are never requested.
+//!
+//! ```no_run
+//! # #[cfg(unix)]
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use podman_lens::{
+//!     AcquisitionOptions, DiscoveryRequest, ReadOnlyUnixTransport,
+//!     ReadOnlyUnixTransportTimeouts, TransportLimits, UnixConnection, acquire_inventory,
+//!     discover,
+//! };
+//!
+//! let transport = ReadOnlyUnixTransport::new(
+//!     UnixConnection::new("/run/user/1000/podman/podman.sock")?,
+//!     TransportLimits::default(),
+//!     ReadOnlyUnixTransportTimeouts::default(),
+//! )?;
+//! let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+//! let graph = runtime.block_on(async {
+//!     let inventory = acquire_inventory(&transport, AcquisitionOptions::redacted()).await?;
+//!     let mut request = DiscoveryRequest::new();
+//!     request.select_all();
+//!     discover(&inventory, &request)
+//! })?;
+//! assert!(graph.requested_roots().is_empty());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! `select_all` is retained separately on the graph; exact and label selectors are available when
+//! the caller needs a narrower application boundary. See the task-oriented public guides for
+//! selector, grouping, network-crossing, and privacy contracts.
+//!
+//! # Deterministic offline planning and rendering
+//!
+//! Planning uses explicit target-side intent and opens no connection. Rendering produces data and
+//! review text only.
+//!
+//! ```
+//! use podman_lens::{
+//!     DeploymentIntent, DeploymentResource, DeploymentResourceId, ImageIntent, ImagePullPolicy,
+//!     ImageSource, ObservedApiVersion, ObservedPodmanVersion, ResourceKind, TargetProfile,
+//!     artifact::deployment_v1, plan_deployment, render_deployment,
+//! };
+//!
+//! let target = TargetProfile::new(
+//!     ObservedPodmanVersion::parse("6.1.0")?,
+//!     ObservedApiVersion::parse("6.1.0")?,
+//! )?;
+//! let image = DeploymentResourceId::new(ResourceKind::Image, "application-image")?;
+//! let mut intent = DeploymentIntent::new(target);
+//! intent.add_resource(DeploymentResource::Image(ImageIntent::new(
+//!     image,
+//!     ImageSource::new("registry.example.invalid/team/application:1")?,
+//!     ImagePullPolicy::Missing,
+//! )?));
+//! let planned = plan_deployment(&intent);
+//! let plan = planned.plan().expect("reviewed intent produces a complete plan");
+//! let rendered = render_deployment(plan);
+//! let rendering = rendered.rendering().expect("reviewed target renders exactly");
+//! assert_eq!(plan.operations().len(), 1);
+//! assert_eq!(rendering.operations()[0].cli().program(), "podman");
+//! assert_eq!(deployment_v1::deployment(rendering).schema_version(), 1);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 #![forbid(unsafe_code)]
 

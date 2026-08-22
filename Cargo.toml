@@ -41,6 +41,7 @@ include = [
   "/docs/**",
   "/docs/schemas/podman-lens-snapshot-v1.schema.json",
   "/docs/schemas/podman-lens-deployment-v1.schema.json",
+  "/examples/**",
   "/lychee.toml",
   "/package-lock.json",
   "/package.json",

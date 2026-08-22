@@ -16,6 +16,7 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/docs/**",
         "/docs/schemas/podman-lens-snapshot-v1.schema.json",
         "/docs/schemas/podman-lens-deployment-v1.schema.json",
+        "/examples/**",
         "/catalogue/v1/podman-deployment-rendering.json",
         "/catalogue/v1/native-field-coverage.json",
         "/fixtures/deployment/**",
@@ -66,6 +67,24 @@ fn required_governance_documents_exist() {
         "docs/release-readiness.md",
         "docs/releasing.md",
         "docs/testing.md",
+    ] {
+        assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+#[test]
+fn public_documentation_and_examples_exist() {
+    for file in [
+        "docs/public/index.md",
+        "docs/public/acquisition/index.md",
+        "docs/public/discovery/index.md",
+        "docs/public/grouping/index.md",
+        "docs/public/planning-rendering/index.md",
+        "docs/public/diagnostics-privacy/index.md",
+        "docs/public/compatibility/index.md",
+        "examples/read_only_discovery.rs",
+        "examples/offline_plan_and_render.rs",
+        "tests/public_guides.rs",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }

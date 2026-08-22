@@ -292,6 +292,24 @@ The 14 contexts are simulated evidence dimensions, not live exports. The deferre
 `workflow_dispatch` only and must cover every version in rootless and rootful mode without skips;
 no nightly schedule or pull-request workflow is claimed or added here.
 
+## M9: Public task documentation
+
+- [x] Add a website-ready public index and guides for explicit read-only acquisition, discovery,
+      grouping and network boundaries, planning and rendering, diagnostics and privacy, and exact
+      compatibility selection.
+- [x] Add an explicit-socket acquisition example that uses the built-in GET-only transport without
+      ambient endpoint discovery or process execution.
+- [x] Add a deterministic offline planning and rendering example covering semantic operations,
+      external preconditions, CLI and Libpod descriptions, deployment-v1 JSON, and review script.
+- [x] Compile packaged examples, compile or run corresponding crate-level Rustdoc snippets, and bind
+      public guide claims to fixtures, target gates, diagnostics, and redaction in focused
+      repository tests.
+- [x] Keep the complete live version/context matrix deferred to manual-only
+      [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3).
+
+Exit: boxferry-website can import `docs/public/` and first-party Rustdoc from one exact merged
+PodmanLens revision without publishing internal maintainer documents or implying live conformance.
+
 ## Deferred
 
 - Executing or applying deployment plans.

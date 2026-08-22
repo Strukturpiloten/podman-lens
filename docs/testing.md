@@ -12,6 +12,21 @@ Run the complete local gate with `./scripts/check-all.sh`. It formats tracked fi
 repository-policy tests, measures coverage without inventing an initial threshold, validates the
 MSRV, checks dependencies, and checks local documentation links offline.
 
+`tests/public_guides.rs` protects the website-ready guide inventory and navigation, the explicit
+Unix-socket/no-mutation example boundary, the deterministic offline plan and both rendering planes,
+the exact version catalogue and Podman 5.6 renderer gate, graph-boundary fixture claims, diagnostic
+codes, and protected-reference redaction. `cargo ci-check` compiles every packaged example target;
+`cargo ci-doctest` compiles and runs the corresponding crate-level Rustdoc snippets, while
+`tests/public_guides.rs` executes the packaged offline planning example directly.
+
+Run the focused public-documentation checks with:
+
+```shell
+cargo test --test public_guides
+cargo test --doc
+cargo check --examples
+```
+
 The opt-in current-patch probe test is deliberately not part of that gate. It only permits the
 fixed read-only acquisition probe. Run it explicitly against a selected local socket with:
 

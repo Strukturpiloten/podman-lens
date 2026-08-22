@@ -1,5 +1,6 @@
 # PodmanLens documentation
 
+- [Task-oriented public guides](public/index.md)
 - [Architecture](architecture.md)
 - [Library API](library-api.md)
 - [BoxFerry integration contract](boxferry-integration.md)

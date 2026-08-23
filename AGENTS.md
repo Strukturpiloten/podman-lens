@@ -2,68 +2,67 @@
 
 This file applies to the whole PodmanLens repository.
 
-## Read before changing code
+## Start with the document that owns the task
 
-1. `README.md`
-2. `docs/architecture.md`
-3. `docs/roadmap.md`
-4. `docs/project-structure.md`
-5. `docs/api-stability.md`
-6. `docs/testing.md`
-7. `docs/development-environment.md`
-8. `docs/dependency-policy.md`
-9. `docs/decisions/README.md` and every accepted decision
+| Task                                   | Read first                                                          |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| Any behavior or boundary change        | `README.md`, `docs/architecture.md`, and `docs/decisions/README.md` |
+| Public Rust API or serialized artifact | `docs/api-stability.md` and the relevant Rustdoc or schema          |
+| Podman version or native-field support | `docs/public/compatibility/index.md` and `catalogue/v1/`            |
+| Tests or fixtures                      | `docs/testing.md`                                                   |
+| File ownership                         | `docs/project-structure.md`                                         |
+| Dependency change                      | `docs/dependency-policy.md`                                         |
+| Release work                           | `docs/releasing.md` and `CHANGELOG.md`                              |
+| Public guide                           | `docs/public/index.md` and `tests/public_guides.rs`                 |
 
-Architectural changes require documentation and an ADR update in the same change.
+Read the accepted decision records that affect the task. An architectural change must update or
+supersede the relevant decision in the same change.
 
 ## Scope
 
 PodmanLens owns native Libpod API handling, version evidence, typed native observations, resource
-discovery, and ordered deployment plans. It does not depend on BoxFerry, parse Compose or Quadlet,
-choose cross-format mappings, shell out to `podman` for input, or execute a plan.
+discovery, ordered deployment semantics, and deterministic non-executing renderings. It does not
+depend on BoxFerry, choose cross-format mappings, parse Compose or Quadlet, shell out to `podman`
+for input, or execute a plan.
 
 ## Non-negotiable behavior
 
-- Treat runtime input as fallible; malformed data must produce structured failures, never panics.
+- Treat runtime input as fallible; malformed data produces structured failures, never panics.
 - Preserve native evidence and unknown data long enough for callers to explain outcomes.
-- Do not infer target behavior from the development machine.
+- Keep target versions explicit and evidence-backed.
 - Keep transport replaceable and free from ambient connection discovery.
-- Redact secrets and runtime environment values by default in diagnostics, logs, snapshots, and
-  serialized plans.
+- Never request secret payloads.
+- Redact protected and runtime-sensitive values from diagnostics, logs, snapshots, and artifacts.
+- Keep observation, caller-authored intent, planning, and rendering as separate stages.
 - Start every repository-owned complete YAML document with `---`.
 
 ## Development rules
 
-- Keep versioned protocol decoding, native models, discovery, and deployment planning separate.
-- Add positive and negative tests for every supported field and capability boundary.
-- Record Podman version, source, and fixture provenance for behavior claims.
+- Add positive and negative tests for each supported field and capability boundary.
+- Record Podman version, source, and fixture provenance for native behavior claims.
 - Keep public APIs independent from private protocol response types.
 - Update capability data and documentation with every version-boundary change.
-- Pin every GitHub Action to a full commit SHA and an exact release-tag comment.
+- Keep current-state prose concise; history belongs in the changelog and decision records.
+- Pin every GitHub Action to a full commit SHA with its exact release tag in a comment.
 
-## Canonical development commands
+## Validation
+
+Run the complete gate after the final edit:
 
 ```shell
 ./scripts/check-all.sh
-./scripts/check-files.sh --check
-cargo fmt --all -- --check
-cargo ci-check
-cargo ci-policy
-cargo ci-clippy
-cargo ci-test
-cargo ci-doctest
-RUSTDOCFLAGS="-D warnings" cargo ci-doc
-cargo +1.85.0 ci-check
-cargo +1.85.0 ci-policy
-cargo deny check
 ```
+
+Focused commands are listed in `docs/testing.md`. The complete gate is required before a commit
+or pull request.
 
 ## Git and GitHub workflow
 
-The primary Sol agent owns issue creation, branches, full validation, staging, commit, push, pull
-request creation, and GitHub readback. Terra workers may research, implement bounded changes, or
-verify, but never commit, push, publish, tag, or create GitHub objects. Run `./scripts/check-all.sh`
-after the final edit; its success is a hard gate for a normal pull request.
+The primary Sol agent owns issue creation, branches, final integration, the complete validation
+gate, staging, commit, push, pull request creation, and GitHub readback. Workers may research,
+implement bounded changes, or verify, but never commit, push, publish, tag, or create GitHub
+objects.
 
-Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code. Use `docs`, `test`,
-`ci`, `build`, `style`, or `chore` for maintenance so release-plz ignores it.
+Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code. Use
+`docs`, `test`, `ci`, `build`, `style`, or `chore` for maintenance so release-plz does
+not propose an unnecessary crate release.

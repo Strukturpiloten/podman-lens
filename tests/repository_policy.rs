@@ -59,16 +59,82 @@ fn required_governance_documents_exist() {
         "AGENTS.md",
         "CONTRIBUTING.md",
         "SECURITY.md",
+        "docs/README.md",
         "docs/api-stability.md",
-        "docs/boxferry-integration.md",
-        "docs/compatibility.md",
+        "docs/architecture.md",
         "docs/dependency-policy.md",
-        "docs/development-environment.md",
-        "docs/release-readiness.md",
+        "docs/project-structure.md",
         "docs/releasing.md",
+        "docs/roadmap.md",
         "docs/testing.md",
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
+    }
+}
+
+fn documentation_word_count(text: &str) -> usize {
+    text.split(|character: char| {
+        !(character.is_alphanumeric() || character == '_' || character == '\'' || character == '-')
+    })
+    .filter(|word| !word.is_empty())
+    .count()
+}
+
+fn contains_milestone_token(text: &str) -> bool {
+    text.split(|character: char| !(character.is_ascii_alphanumeric() || character == '-'))
+        .any(|word| {
+            let bytes = word.as_bytes();
+            bytes.len() >= 2 && bytes[0] == b'M' && bytes[1].is_ascii_digit() && (bytes.len() == 2 || bytes[2] == b'-')
+        })
+}
+
+#[test]
+fn current_documentation_stays_bounded_and_does_not_become_a_stale_ledger() -> Result<(), std::io::Error> {
+    let documents = [
+        ("README.md", 800),
+        ("CONTRIBUTING.md", 500),
+        ("SECURITY.md", 300),
+        ("docs/README.md", 350),
+        ("docs/api-stability.md", 900),
+        ("docs/architecture.md", 1_300),
+        ("docs/dependency-policy.md", 500),
+        ("docs/project-structure.md", 700),
+        ("docs/releasing.md", 600),
+        ("docs/roadmap.md", 600),
+        ("docs/testing.md", 1_300),
+    ];
+
+    for (path, word_limit) in documents {
+        let text = fs::read_to_string(path)?;
+        assert!(
+            documentation_word_count(&text) <= word_limit,
+            "{path} exceeds its {word_limit}-word current-document limit"
+        );
+        assert!(
+            !contains_milestone_token(&text),
+            "{path} contains historical implementation-batch notation"
+        );
+        for stale_ledger_phrase in ["input-observation rows", "output-intent rows", "total ledger rows"] {
+            assert!(
+                !text.contains(stale_ledger_phrase),
+                "{path} contains mutable catalogue count prose: {stale_ledger_phrase}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn obsolete_or_misowned_documents_do_not_return() {
+    for file in [
+        "docs/boxferry-integration.md",
+        "docs/compatibility.md",
+        "docs/development-environment.md",
+        "docs/library-api.md",
+        "docs/release-readiness.md",
+    ] {
+        assert!(!Path::new(file).exists(), "obsolete documentation returned: {file}");
     }
 }
 

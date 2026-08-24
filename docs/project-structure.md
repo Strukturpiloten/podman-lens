@@ -1,46 +1,38 @@
 # Project structure
 
-The repository is a single Rust library crate. This remains intentional until independent modules
-have a demonstrated public-contract boundary.
+PodmanLens is one Rust library crate. Files are organized by contract boundary rather than by
+historical implementation batch.
 
-| Path                        | Responsibility                                                         |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `src/`                      | Public library and private implementation modules                      |
-| `src/observation.rs`        | Typed resource headers, field states, provenance, and protected values |
-| `src/snapshot/`             | Versioned serialization-only always-redacted observation snapshots     |
-| `src/artifact/`             | Versioned serialization-only deployment artifact contracts             |
-| `src/deployment.rs`         | Typed deployment intent and ordered transport-neutral semantics        |
-| `src/runtime.rs`            | Bounded redaction-safe container runtime and unpodded namespace intent |
-| `src/networking.rs`         | Typed declared networking, IPAM, DNS, ports, and host aliases          |
-| `src/render.rs`             | Review-only CLI and Libpod deployment representations                  |
-| `catalogue/v1/`             | Versioned compatibility, rendering evidence, and native-field ledger   |
-| `fixtures/corpus/`          | Sanitized fixed corpora and 14 request-aware complex offline cassettes |
-| `fixtures/snapshots/`       | Exact versioned snapshot goldens                                       |
-| `fixtures/deployment/`      | Byte-exact deployment JSON and POSIX-script goldens                    |
-| `examples/`                 | Explicit-socket acquisition and deterministic offline output examples  |
-| `docs/public/`              | Website-ready task guides imported from an exact repository revision   |
-| `docs/schemas/`             | Public export schemas and strict test-only cassette schema             |
-| `tests/support/cassette.rs` | Test-only cassette parsing, request matching, and deterministic replay |
-| `tests/complex_corpus.rs`   | Per-version and simulated-context complex conformance cases            |
-| `tests/public_guides.rs`    | Public guide, example, fixture, version-gate, and redaction contracts  |
-| `tests/`                    | Public-contract, fixture, and repository-policy integration tests      |
-| `docs/`                     | Architecture, decisions, policy, and evidence documentation            |
-| `scripts/`                  | Deterministic local validation helpers                                 |
-| `.github/workflows/`        | CI, release preparation, and protected publication                     |
+| Path                                                     | Responsibility                                                              |
+| -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `src/connection.rs`, `src/transport.rs`                  | Explicit connections and replaceable bounded transport messages             |
+| `src/read_only_unix_transport.rs`                        | Built-in GET-only Unix HTTP transport                                       |
+| `src/probe.rs`, `src/version.rs`, `src/evidence.rs`      | Service probe, target profiles, and capability evidence                     |
+| `src/inventory.rs`, `src/observation.rs`                 | Native acquisition and typed observation contracts                          |
+| `src/discovery.rs`                                       | Roots, dependency closure, grouping, boundaries, and explanations           |
+| `src/deployment.rs`                                      | Caller-authored intent and ordered semantic planning                        |
+| `src/settings.rs`, `src/networking.rs`, `src/runtime.rs` | Typed output settings                                                       |
+| `src/render.rs`                                          | Non-executing CLI and Libpod representations                                |
+| `src/snapshot/`                                          | Versioned always-redacted observational exports                             |
+| `src/artifact/`                                          | Versioned desired-output artifacts                                          |
+| `catalogue/v1/`                                          | Machine-readable capabilities, native-field coverage, and renderer evidence |
+| `docs/public/`                                           | Website-ready task guides imported at an exact repository revision          |
+| `docs/schemas/`                                          | Public export schemas and test-only cassette schema                         |
+| `examples/`                                              | Explicit acquisition and deterministic offline planning examples            |
+| `fixtures/api-version/`                                  | Service-probe evidence                                                      |
+| `fixtures/inventory/`                                    | Focused inventory and snapshot inputs                                       |
+| `fixtures/corpus/`                                       | Complex and regression acquisition corpora                                  |
+| `fixtures/deployment/`, `fixtures/snapshots/`            | Exact serialized goldens                                                    |
+| `tests/support/cassette.rs`                              | Test-only strict request-aware replay                                       |
+| `tests/`                                                 | Public, boundary, fixture, schema, rendering, and policy tests              |
+| `scripts/`                                               | Deterministic validation and release helpers                                |
 
-Future protocol, resource-model, discovery, and plan modules must follow the layers in the
-[architecture](architecture.md), not a root-level convenience API.
+Protocol response shapes remain private to the acquisition implementation. Public native
+observations belong in `observation.rs`; caller-authored target settings belong in the output
+modules. Do not reuse one type across that boundary for convenience.
 
-The downstream mapping and release acceptance documents live beside the architecture because they
-govern public consumption without introducing a BoxFerry crate dependency.
+The BoxFerry website imports only `docs/public/` and generated Rustdoc. Internal maintainer
+documents and fixture schemas are not website task pages.
 
-The `docs/public/` tree is the only website-ready PodmanLens document source. The BoxFerry website
-imports that tree and Rustdoc from one exact merged revision; it does not publish the maintainer
-roadmap or internal acceptance documents as task guides.
-
-The cassette support module is not part of the crate's production API. Its strict v1 schema binds
-each synthetic response to an expected Libpod method and path, and its 14 stable fixtures cover the
-seven reviewed versions in simulated rootless and rootful contexts. They are source-derived,
-sanitized offline inputs rather than exports of running Podman environments. Future live
-conformance remains separate in
-[GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3).
+Cross-format mapping documentation belongs with the downstream adapter and neutral model that own
+the policy. PodmanLens documents the native contracts that such adapters consume.

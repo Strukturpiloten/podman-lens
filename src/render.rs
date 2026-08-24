@@ -1169,7 +1169,11 @@ fn parse_renderer_catalogue(source: &str) -> Result<Vec<String>, ()> {
     reject_duplicate_json_keys(source)?;
     let catalogue: RenderingCatalogue = serde_json::from_str(source).map_err(|_| ())?;
     let expected_operations = RENDERED_OPERATION_CATEGORIES.into_iter().collect::<BTreeSet<_>>();
-    let capabilities = crate::capability_catalogue().map_err(|_| ())?;
+    let capabilities = crate::capability_catalogue()
+        .map_err(|_| ())?
+        .into_iter()
+        .filter(crate::CapabilityCatalogueEntry::output_supported)
+        .collect::<Vec<_>>();
     if catalogue.schema_version != 8
         || catalogue.provenance.trim().is_empty()
         || catalogue.reviewed_lines.len() != capabilities.len()

@@ -74,3 +74,9 @@ To compare explicitly with the published crate through `cargo-semver-checks`, ru
 ```console
 PODMAN_LENS_SEMVER_CHECK=1 ./scripts/check-all.sh
 ```
+
+The check compares against the published baseline. A Conventional Commit breaking marker (`!` or
+`BREAKING CHANGE:`) authorizes a break in the next pre-1.0 minor release. The repository wrapper
+passes cargo-semver-checks its `major` category because that is the tool's name for an API break,
+even when the crate publishes the break as `0.x` minor. Otherwise the tool derives its release type
+from the manifest versions.

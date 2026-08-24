@@ -34,9 +34,10 @@ and starts no process.
 
 ## Compatibility
 
-PodmanLens has reviewed evidence for Podman 5.4 through 6.1. Input records the observed engine and
-Libpod API versions. Output requires an explicit `TargetProfile`; support for individual fields
-is version-specific.
+PodmanLens has reviewed output evidence for Podman 5.4 through 6.1 and finite legacy input-only
+anchors for Podman 3.0.1, 3.4.4, 4.3.1, 4.9.3, and 4.9.4. Input records the observed engine and
+Libpod API versions. Output requires an explicit modern `TargetProfile`; support for individual
+fields is version-specific.
 
 See the [compatibility guide](docs/public/compatibility/index.md) for the human-readable summary
 and `catalogue/v1/` for the machine-readable capability and rendering evidence.

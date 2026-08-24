@@ -1,8 +1,9 @@
 //! Read-only Libpod service probing and fixed version observation.
 
+use crate::version::observed_input_is_supported;
 use crate::{
-    Diagnostic, DiagnosticCode, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest, LibpodTransport,
-    ObservedApiVersion, ObservedPodmanVersion, PodmanLensResult, TargetProfile,
+    CapabilityCatalogueEntry, Diagnostic, DiagnosticCode, LibpodHeaders, LibpodMethod, LibpodPath, LibpodRequest,
+    LibpodTransport, ObservedApiVersion, ObservedPodmanVersion, PodmanLensResult, TargetProfile,
 };
 
 /// Maximum accepted byte length of the small Libpod version JSON response.
@@ -11,13 +12,14 @@ pub const MAX_PROBE_JSON_BYTES: usize = 65_536;
 /// Independently observed Podman engine and Libpod API versions.
 ///
 /// The values are intentionally retained separately: a compatible API version need not have the
-/// same spelling as the engine version. [`Self::target_profile`] records their reviewed
-/// compatibility after the probe has validated both observations.
+/// same spelling as the engine version. [`Self::input_capability`] records reviewed input
+/// compatibility after the probe validates both observations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServiceObservation {
     engine_version: ObservedPodmanVersion,
     api_version: ObservedApiVersion,
-    target_profile: TargetProfile,
+    input_capability: CapabilityCatalogueEntry,
+    output_target_profile: Option<TargetProfile>,
 }
 
 impl ServiceObservation {
@@ -33,10 +35,20 @@ impl ServiceObservation {
         &self.api_version
     }
 
-    /// Returns the reviewed compatibility profile validated from both observations.
+    /// Returns immutable evidence for the reviewed input runtime.
     #[must_use]
-    pub fn target_profile(&self) -> &TargetProfile {
-        &self.target_profile
+    pub fn input_capability(&self) -> &CapabilityCatalogueEntry {
+        &self.input_capability
+    }
+
+    /// Returns a reviewed output profile only when the observed runtime is also a supported
+    /// deployment target.
+    ///
+    /// Older input-only anchors intentionally return `None`: they can be acquired for migration,
+    /// but callers must choose a newer explicit [`TargetProfile`] before rendering.
+    #[must_use]
+    pub fn output_target_profile(&self) -> Option<&TargetProfile> {
+        self.output_target_profile.as_ref()
     }
 }
 
@@ -45,7 +57,8 @@ impl ServiceObservation {
 /// The probe sends exactly these requests, in this order, and never retries:
 ///
 /// 1. `GET /libpod/_ping`
-/// 2. `GET /v4.0.0/libpod/version`
+/// 2. `GET /v4.0.0/libpod/version` for API 4+ or a versioned Podman 3 Libpod endpoint matching
+///    the service's advertised API version.
 ///
 /// # Errors
 ///
@@ -60,7 +73,7 @@ pub async fn probe_libpod_service(transport: &dyn LibpodTransport) -> PodmanLens
     require_ok_status(ping_response.status())?;
     let api_version = ping_api_version(ping_response.headers())?;
 
-    let version = request(LibpodPath::parse("/v4.0.0/libpod/version")?)?;
+    let version = request(version_probe_path(&api_version)?)?;
     let version_response = transport
         .send(&version)
         .await
@@ -68,14 +81,24 @@ pub async fn probe_libpod_service(transport: &dyn LibpodTransport) -> PodmanLens
     require_ok_status(version_response.status())?;
     require_json_content_type(version_response.headers())?;
     let engine_version = engine_version(version_response.body())?;
-    let target_profile = TargetProfile::new(engine_version.clone(), api_version.clone())
-        .map_err(|_| Diagnostic::new(DiagnosticCode::ObservedCompatibility))?;
+    let input_capability = observed_input_is_supported(&engine_version, &api_version)?;
+    let output_target_profile = TargetProfile::new(engine_version.clone(), api_version.clone()).ok();
 
     Ok(ServiceObservation {
         engine_version,
         api_version,
-        target_profile,
+        input_capability,
+        output_target_profile,
     })
+}
+
+fn version_probe_path(api_version: &ObservedApiVersion) -> PodmanLensResult<LibpodPath> {
+    let version = if api_version.as_semver().major == 3 {
+        api_version.original()
+    } else {
+        "4.0.0"
+    };
+    LibpodPath::parse(format!("/v{version}/libpod/version"))
 }
 
 fn request(path: LibpodPath) -> PodmanLensResult<LibpodRequest> {
@@ -152,8 +175,8 @@ fn engine_version(body: &[u8]) -> PodmanLensResult<ObservedPodmanVersion> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_PROBE_JSON_BYTES, engine_version, require_json_content_type};
-    use crate::{DiagnosticCode, LibpodHeader, LibpodHeaders};
+    use super::{MAX_PROBE_JSON_BYTES, engine_version, require_json_content_type, version_probe_path};
+    use crate::{DiagnosticCode, LibpodHeader, LibpodHeaders, ObservedApiVersion};
 
     #[test]
     fn probe_json_is_bounded_before_decode() -> Result<(), Box<dyn std::error::Error>> {
@@ -172,6 +195,23 @@ mod tests {
             "Application/Json; charset=utf-8",
         )?]);
         assert!(require_json_content_type(&headers).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_probe_uses_the_advertised_podman_three_api_path() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            version_probe_path(&ObservedApiVersion::parse("3.0.0")?)?.as_str(),
+            "/v3.0.0/libpod/version"
+        );
+        assert_eq!(
+            version_probe_path(&ObservedApiVersion::parse("3.4.4")?)?.as_str(),
+            "/v3.4.4/libpod/version"
+        );
+        assert_eq!(
+            version_probe_path(&ObservedApiVersion::parse("4.9.4")?)?.as_str(),
+            "/v4.0.0/libpod/version"
+        );
         Ok(())
     }
 }

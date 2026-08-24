@@ -4,7 +4,7 @@ PodmanLens never infers a target from the development machine. Input retains the
 engine and Libpod API versions; output requires a caller-selected `TargetProfile` and explicit
 rootful, rootless, or unknown execution context.
 
-The current immutable evidence catalogue has these exact reviewed anchors:
+The current immutable output catalogue has these reviewed anchors:
 
 | Podman line | Reviewed engine/API evidence |
 | ----------- | ---------------------------- |
@@ -20,6 +20,26 @@ Deterministic rendering requires semantically identical engine and API versions 
 renderer evidence. A new Podman release does not become supported merely because its version
 parses; it needs source evidence plus positive and negative boundary tests.
 
+## Input-only migration anchors
+
+The following exact source runtimes can be acquired and discovered, but cannot be selected as a
+PodmanLens deployment target. They exist to migrate an older host through a neutral model to a
+separately chosen modern target.
+
+| Runtime | Distribution package families |
+| ------- | ----------------------------- |
+| 3.0.1   | Debian 11                     |
+| 3.4.4   | Ubuntu 22.04                  |
+| 4.3.1   | Debian 12                     |
+| 4.9.3   | Ubuntu 24.04                  |
+| 4.9.4   | Red Hat UBI 8                 |
+
+These are finite source-backed upstream API anchors, not a claim for every Podman 3.x or 4.x patch
+or for distribution runtime behavior. Input acquisition records the exact engine and Libpod API
+evidence. In Podman 3.0.1, secret metadata endpoints do not exist; its secret section is reported
+as version-inapplicable without requesting it. Rootful and rootless distribution-image validation
+will be recorded only after the live matrix succeeds.
+
 Target availability is field-specific. Examples include explicit image pull policies and volume
 UID/GID ownership beginning at reviewed Podman 5.6, and non-unicast network route types, network
 ordering, and journald label selection beginning at reviewed Podman 6.0. Root-dependent networking
@@ -27,7 +47,7 @@ and cgroup intent also requires explicit execution-context evidence.
 
 ## What the offline matrix proves
 
-Fourteen committed request-aware cassettes cover every reviewed anchor in simulated rootful and
+Fourteen committed request-aware cassettes cover every output anchor in simulated rootful and
 rootless contexts. They exercise all six resource kinds, complex pods and standalone containers,
 isolated and intentionally shared networks, volumes, dependencies, version-bound fields, request
 matching, diagnostics, and redaction. Separate focused response fixtures exercise unavailable,

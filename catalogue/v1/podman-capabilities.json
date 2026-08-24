@@ -2,6 +2,76 @@
   "schema_version": 1,
   "reviewed_lines": [
     {
+      "podman_minor_line": "3.0",
+      "minimum_podman_version": "3.0.1",
+      "maximum_exclusive_podman_version": "3.0.2",
+      "minimum_libpod_api_version": "3.0.0",
+      "observed_podman_version": "3.0.1",
+      "observed_libpod_api_version": "3.0.0",
+      "output_supported": false,
+      "evidence": {
+        "source": "https://github.com/containers/podman/blob/c640670e85c4aaaff92741691d6a854a90229d8d/version/version.go",
+        "revision": "c640670e85c4aaaff92741691d6a854a90229d8d",
+        "release_tag": "v3.0.1"
+      }
+    },
+    {
+      "podman_minor_line": "3.4",
+      "minimum_podman_version": "3.4.4",
+      "maximum_exclusive_podman_version": "3.4.5",
+      "minimum_libpod_api_version": "3.1.0",
+      "observed_podman_version": "3.4.4",
+      "observed_libpod_api_version": "3.4.4",
+      "output_supported": false,
+      "evidence": {
+        "source": "https://github.com/containers/podman/blob/f6526ada1025c2e3f88745ba83b8b461ca659933/version/version.go",
+        "revision": "f6526ada1025c2e3f88745ba83b8b461ca659933",
+        "release_tag": "v3.4.4"
+      }
+    },
+    {
+      "podman_minor_line": "4.3",
+      "minimum_podman_version": "4.3.1",
+      "maximum_exclusive_podman_version": "4.3.2",
+      "minimum_libpod_api_version": "4.0.0",
+      "observed_podman_version": "4.3.1",
+      "observed_libpod_api_version": "4.3.1",
+      "output_supported": false,
+      "evidence": {
+        "source": "https://github.com/containers/podman/blob/814b7b003cc630bf6ab188274706c383f9fb9915/version/version.go",
+        "revision": "814b7b003cc630bf6ab188274706c383f9fb9915",
+        "release_tag": "v4.3.1"
+      }
+    },
+    {
+      "podman_minor_line": "4.9",
+      "minimum_podman_version": "4.9.3",
+      "maximum_exclusive_podman_version": "4.9.4",
+      "minimum_libpod_api_version": "4.0.0",
+      "observed_podman_version": "4.9.3",
+      "observed_libpod_api_version": "4.9.3",
+      "output_supported": false,
+      "evidence": {
+        "source": "https://github.com/containers/podman/blob/8d2b55ddde1bc81f43d018dfc1ac027c06b26a7f/version/rawversion/rawversion.go",
+        "revision": "8d2b55ddde1bc81f43d018dfc1ac027c06b26a7f",
+        "release_tag": "v4.9.3"
+      }
+    },
+    {
+      "podman_minor_line": "4.9",
+      "minimum_podman_version": "4.9.4",
+      "maximum_exclusive_podman_version": "4.9.5",
+      "minimum_libpod_api_version": "4.0.0",
+      "observed_podman_version": "4.9.4",
+      "observed_libpod_api_version": "4.9.4",
+      "output_supported": false,
+      "evidence": {
+        "source": "https://github.com/containers/podman/blob/3aceae8ace3c7e3c5591900db32d188cf60be535/version/rawversion/rawversion.go",
+        "revision": "3aceae8ace3c7e3c5591900db32d188cf60be535",
+        "release_tag": "v4.9.4"
+      }
+    },
+    {
       "podman_minor_line": "5.4",
       "minimum_podman_version": "5.4.0",
       "maximum_exclusive_podman_version": "5.5.0",

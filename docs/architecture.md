@@ -78,11 +78,13 @@ bounded semantic metadata without retaining arbitrary raw JSON.
 ## Discovery
 
 `discover` is pure after acquisition. A `DiscoveryRequest` selects exact resource identities,
-exact label predicates, or all eligible application roots. Wildcards are not accepted.
+literal name prefixes, exact label predicates, or all eligible application roots. Prefixes match
+names only and resolve in sorted identity order; IDs and image aliases remain exact-only. Glob,
+regular-expression, and wildcard syntax are not accepted.
 
 The resulting graph keeps directed dependency edges separate from grouping evidence. Pod
-membership, native container dependencies, and complete consistent Compose ownership evidence may
-join resource groups. Merely sharing a network, volume, image, or secret does not. Reverse
+membership, native container dependencies, and one complete internally consistent Compose
+ownership-label namespace may join resource groups. Merely sharing a network, volume, image, or secret does not. Reverse
 traversal across a shared network requires that network to be an explicit root or an exact boundary
 authorization.
 

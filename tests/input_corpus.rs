@@ -570,7 +570,7 @@ async fn graph_boundary_corpus_is_deterministic_and_respects_crossing_rules() ->
         all_graph
             .findings()
             .iter()
-            .any(|finding| finding.code() == DiagnosticCode::AdvisoryLabelIncomplete)
+            .all(|finding| finding.code() != DiagnosticCode::AdvisoryLabelIncomplete)
     );
     assert!(
         all_graph

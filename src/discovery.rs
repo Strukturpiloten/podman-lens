@@ -14,17 +14,29 @@ const PODMAN_SERVICE: &str = "io.podman.compose.service";
 const DOCKER_CONFIG_HASH: &str = "com.docker.compose.config-hash";
 const PODMAN_CONFIG_HASH: &str = "io.podman.compose.config-hash";
 
-/// One exact resource selector for discovery.
+/// One exact or name-prefix resource selector for discovery.
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResourceSelector {
     kind: ResourceKind,
     reference: String,
+    match_kind: ResourceSelectorMatch,
+}
+
+/// The matching semantics of a [`ResourceSelector`].
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum ResourceSelectorMatch {
+    /// Match one exact native ID, name, or image alias.
+    Exact,
+    /// Match every native resource whose name starts with the supplied prefix.
+    Prefix,
 }
 impl std::fmt::Debug for ResourceSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ResourceSelector")
             .field("kind", &self.kind)
             .field("reference", &self.reference)
+            .field("match_kind", &self.match_kind)
             .finish()
     }
 }
@@ -42,7 +54,31 @@ impl ResourceSelector {
         if !is_exact_reference(&reference) {
             return Err(Diagnostic::new(DiagnosticCode::InvalidDiscoveryRequest));
         }
-        Ok(Self { kind, reference })
+        Ok(Self {
+            kind,
+            reference,
+            match_kind: ResourceSelectorMatch::Exact,
+        })
+    }
+
+    /// Creates a name-only prefix selector.
+    ///
+    /// Prefixes are deliberately not globs: IDs, image aliases, `*`, `?`, character classes,
+    /// and regular expressions are never interpreted.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PLN0027` when the prefix is empty, contains whitespace, or has wildcard syntax.
+    pub fn prefix(kind: ResourceKind, prefix: impl Into<String>) -> Result<Self, Diagnostic> {
+        let reference = prefix.into();
+        if !is_exact_reference(&reference) {
+            return Err(Diagnostic::new(DiagnosticCode::InvalidDiscoveryRequest));
+        }
+        Ok(Self {
+            kind,
+            reference,
+            match_kind: ResourceSelectorMatch::Prefix,
+        })
     }
 
     /// Returns the selected resource kind.
@@ -55,6 +91,12 @@ impl ResourceSelector {
     #[must_use]
     pub fn reference(&self) -> &str {
         &self.reference
+    }
+
+    /// Returns whether this selector matches exactly or by native resource name prefix.
+    #[must_use]
+    pub const fn match_kind(&self) -> ResourceSelectorMatch {
+        self.match_kind
     }
 }
 
@@ -258,7 +300,7 @@ pub enum GroupingEvidence {
     PodMembership,
     /// A container's native dependency keeps the dependent and prerequisite together.
     ContainerDependency,
-    /// Matching complete Docker and Podman Compose labels are advisory evidence.
+    /// One complete, internally consistent Compose ownership-label namespace is advisory evidence.
     ComposeOwnership {
         /// Agreed non-empty Compose project name.
         project: String,
@@ -605,6 +647,25 @@ pub fn discover(inventory: &ResourceInventory, request: &DiscoveryRequest) -> Re
     let mut resolved_roots = BTreeSet::new();
     let mut root_origins = BTreeSet::new();
     for (position, selector) in request.roots.iter().enumerate() {
+        if selector.match_kind == ResourceSelectorMatch::Prefix {
+            let matched = resolve_prefix_selector(&records, selector);
+            if matched.is_empty() {
+                findings.push(DiscoveryFinding::for_selector(
+                    DiagnosticCode::SelectorUnresolved,
+                    selector.clone(),
+                ));
+            }
+            for identity in matched {
+                root_origins.insert((identity.clone(), DiscoveryRootOrigin::ResourceSelector { position }));
+                resolved_roots.insert(identity.clone());
+                if is_shared_kind(identity.kind()) {
+                    explicitly_selected_shared.insert(identity);
+                } else {
+                    members.insert(identity);
+                }
+            }
+            continue;
+        }
         match resolve_selector(&records, selector) {
             SelectorResolution::One(identity) if is_shared_kind(identity.kind()) => {
                 root_origins.insert((identity.clone(), DiscoveryRootOrigin::ResourceSelector { position }));
@@ -826,6 +887,7 @@ pub fn discover(inventory: &ResourceInventory, request: &DiscoveryRequest) -> Re
                 ResourceSelector {
                     kind: ResourceKind::Network,
                     reference: identifier.clone(),
+                    match_kind: ResourceSelectorMatch::Exact,
                 },
             ));
         }
@@ -928,6 +990,22 @@ fn resolve_selector(
         [identity] => SelectorResolution::One(identity.clone()),
         _ => SelectorResolution::Many,
     }
+}
+
+fn resolve_prefix_selector(
+    records: &BTreeMap<ResourceIdentity, &ResourceObservation>,
+    selector: &ResourceSelector,
+) -> Vec<ResourceIdentity> {
+    records
+        .keys()
+        .filter(|identity| {
+            identity.kind() == selector.kind
+                && identity
+                    .name()
+                    .is_some_and(|name| name.starts_with(selector.reference.as_str()))
+        })
+        .cloned()
+        .collect()
 }
 
 fn collect_dependencies(
@@ -1101,6 +1179,7 @@ fn resolve_network_boundaries(
         let selector = ResourceSelector {
             kind: ResourceKind::Network,
             reference: identifier.clone(),
+            match_kind: ResourceSelectorMatch::Exact,
         };
         match resolve_selector(records, &selector) {
             SelectorResolution::One(identity) => {
@@ -1332,36 +1411,35 @@ fn compose_ownership_index(
 fn compose_label_status(record: &ResourceObservation) -> Result<Option<String>, DiagnosticCode> {
     let docker = label_pair(record, DOCKER_PROJECT, DOCKER_SERVICE)?;
     let podman = label_pair(record, PODMAN_PROJECT, PODMAN_SERVICE)?;
-    let docker_hash = optional_label(record, DOCKER_CONFIG_HASH)?;
-    let podman_hash = optional_label(record, PODMAN_CONFIG_HASH)?;
+    let docker_hash = namespace_hash(record, DOCKER_CONFIG_HASH, docker.is_some())?;
+    let podman_hash = namespace_hash(record, PODMAN_CONFIG_HASH, podman.is_some())?;
     if docker.is_none() && podman.is_none() {
-        return if docker_hash.is_none() && podman_hash.is_none() {
-            Ok(None)
-        } else {
-            Err(DiagnosticCode::AdvisoryLabelIncomplete)
-        };
-    }
-    if docker_hash.is_some() != podman_hash.is_some() {
-        return Err(DiagnosticCode::AdvisoryLabelIncomplete);
-    }
-    if docker_hash.is_some() && docker_hash != podman_hash {
-        return Err(DiagnosticCode::AdvisoryLabelConflict);
+        return Ok(None);
     }
     match (docker, podman) {
         (None, None) => Ok(None),
         (Some((docker_project, docker_service)), Some((podman_project, podman_service)))
             if docker_project == podman_project && docker_service == podman_service =>
         {
+            if docker_hash.is_some() && podman_hash.is_some() && docker_hash != podman_hash {
+                return Err(DiagnosticCode::AdvisoryLabelConflict);
+            }
             Ok(Some(docker_project))
         }
         (Some(_), Some(_)) => Err(DiagnosticCode::AdvisoryLabelConflict),
-        (Some(_), None) | (None, Some(_)) => Err(DiagnosticCode::AdvisoryLabelIncomplete),
+        (Some((project, _)), None) | (None, Some((project, _))) => Ok(Some(project)),
     }
 }
 
-fn optional_label(record: &ResourceObservation, key: &str) -> Result<Option<String>, DiagnosticCode> {
+fn namespace_hash(
+    record: &ResourceObservation,
+    key: &str,
+    namespace_present: bool,
+) -> Result<Option<String>, DiagnosticCode> {
     match observed_labels(record).and_then(|labels| labels.get(key)) {
+        None if namespace_present => Ok(None),
         None => Ok(None),
+        Some(_) if !namespace_present => Err(DiagnosticCode::AdvisoryLabelIncomplete),
         Some(value) if value.is_empty() => Err(DiagnosticCode::AdvisoryLabelIncomplete),
         Some(value) => Ok(Some(value.clone())),
     }

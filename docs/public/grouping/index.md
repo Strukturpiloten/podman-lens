@@ -15,10 +15,11 @@ explicit caller decision.
 
 ## Evidence that can merge groups
 
-Groups may merge through observed pod membership, native container dependencies, or complete and
-consistent Docker/Podman Compose ownership labels. Compose labels are advisory only when project
-and service pairs agree and any present configuration hashes agree. Empty, incomplete, orphaned,
-or conflicting labels produce findings and no merge.
+Groups may merge through observed pod membership, native container dependencies, or one complete
+and consistent Docker or Podman Compose ownership-label namespace. If both namespaces are present,
+their project and service pairs must agree; hashes must belong to a complete namespace and agree
+when both are present. Empty, incomplete, orphaned, or conflicting labels produce findings and no
+merge.
 
 Merely sharing a network, volume, image, or secret never merges groups. `network.internal`
 describes connectivity, not ownership.

@@ -257,8 +257,45 @@ impl TargetProfile {
 fn matching_catalogue_entry(version: &ObservedPodmanVersion) -> PodmanLensResult<CapabilityCatalogueEntry> {
     capability_catalogue()?
         .into_iter()
-        .find(|entry| version_in_entry(version.as_semver(), entry))
+        .find(|entry| entry.output_supported() && version_in_entry(version.as_semver(), entry))
         .ok_or_else(|| Diagnostic::new(DiagnosticCode::IncompatibleTargetProfile))
+}
+
+/// Returns immutable input evidence for one exact reviewed source runtime.
+///
+/// This is deliberately distinct from [`TargetProfile`]: input-only anchors can be observed and
+/// migrated, but have no rendering evidence and cannot be selected as a deployment target.
+pub(crate) fn matching_input_catalogue_entry(
+    version: &ObservedPodmanVersion,
+) -> PodmanLensResult<CapabilityCatalogueEntry> {
+    capability_catalogue()?
+        .into_iter()
+        .find(|entry| version_in_entry(version.as_semver(), entry))
+        .ok_or_else(|| Diagnostic::new(DiagnosticCode::ObservedCompatibility))
+}
+
+/// Checks that one observed engine/API pair is in reviewed input evidence.
+pub(crate) fn observed_input_is_supported(
+    podman_version: &ObservedPodmanVersion,
+    api_version: &ObservedApiVersion,
+) -> PodmanLensResult<CapabilityCatalogueEntry> {
+    let entry = matching_input_catalogue_entry(podman_version)?;
+    if observed_api_version_is_supported(&entry, podman_version, api_version) {
+        Ok(entry)
+    } else {
+        Err(Diagnostic::new(DiagnosticCode::ObservedCompatibility))
+    }
+}
+
+fn observed_api_version_is_supported(
+    entry: &CapabilityCatalogueEntry,
+    podman_version: &ObservedPodmanVersion,
+    api_version: &ObservedApiVersion,
+) -> bool {
+    if !entry.output_supported() {
+        return api_version.original() == entry.observed_libpod_api_version();
+    }
+    api_version_is_supported(entry, podman_version, api_version)
 }
 
 fn version_in_entry(version: &Version, entry: &CapabilityCatalogueEntry) -> bool {
@@ -284,4 +321,45 @@ fn api_version_is_supported(
 
 fn semantic_core_inclusive(version: &Version, minimum: &Version, maximum: &Version) -> bool {
     version >= minimum && version <= maximum
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ObservedApiVersion, ObservedPodmanVersion, TargetProfile, observed_input_is_supported};
+
+    #[test]
+    fn legacy_distro_anchors_are_input_only_and_not_implicit_targets() -> Result<(), Box<dyn std::error::Error>> {
+        for (engine, api) in [
+            ("3.0.1", "3.0.0"),
+            ("3.4.4", "3.4.4"),
+            ("4.3.1", "4.3.1"),
+            ("4.9.3", "4.9.3"),
+            ("4.9.4", "4.9.4"),
+        ] {
+            let engine = ObservedPodmanVersion::parse(engine)?;
+            let api = ObservedApiVersion::parse(api)?;
+            let evidence = observed_input_is_supported(&engine, &api)?;
+            assert!(!evidence.output_supported());
+            assert!(TargetProfile::new(engine, api).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unreviewed_legacy_patches_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+        let engine = ObservedPodmanVersion::parse("3.4.5")?;
+        let api = ObservedApiVersion::parse("3.4.5")?;
+        assert!(observed_input_is_supported(&engine, &api).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_anchors_require_the_exact_observed_api_version() -> Result<(), Box<dyn std::error::Error>> {
+        for (engine, wrong_api) in [("3.0.1", "3.0.1"), ("3.4.4", "3.1.0"), ("4.9.4", "4.0.0")] {
+            let engine = ObservedPodmanVersion::parse(engine)?;
+            let wrong_api = ObservedApiVersion::parse(wrong_api)?;
+            assert!(observed_input_is_supported(&engine, &wrong_api).is_err());
+        }
+        Ok(())
+    }
 }

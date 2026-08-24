@@ -28,10 +28,9 @@ underscores, or hyphens. It can never represent a URI, endpoint, socket path, cr
 whitespace, colon, slash, backslash, or `@` detail.
 
 After the first PodmanLens release, an incompatible shape change requires a new versioned module
-and schema. Before that release, the unreleased `snapshot::v1` contract may be reset directly with
-its schema and goldens. M7-A uses that allowance to replace generic records with typed observation
-headers and redacted detail summaries; no compatibility projection is retained. Once published, a
-schema version never silently changes meaning.
+and schema. A published schema version never silently changes meaning. In particular, the
+historical v1 service `target_*` fields mirror the engine/API profile observed during acquisition;
+they never describe a caller-selected deployment or migration target.
 
 ## Consequences
 

@@ -275,7 +275,7 @@ async fn selector_and_compose_label_failures_are_structured_and_do_not_create_gr
         graph
             .findings()
             .iter()
-            .any(|finding| finding.code() == DiagnosticCode::AdvisoryLabelIncomplete)
+            .all(|finding| finding.code() != DiagnosticCode::AdvisoryLabelIncomplete)
     );
     assert!(
         graph
@@ -323,6 +323,51 @@ async fn matching_complete_compose_alias_pairs_are_advisory_grouping_evidence() 
             .iter()
             .any(|edge| matches!(edge.evidence(), GroupingEvidence::ComposeOwnership { project } if project == "demo"))
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn one_complete_compose_namespace_groups_without_a_second_alias_namespace()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = responses()?;
+    let labels = r#""Labels":{"com.docker.compose.project":"demo","com.docker.compose.service":"web"}"#;
+    fixture[8] = json(&format!(r#"{{"Id":"container-a","Name":"a","Config":{{{labels}}}}}"#))?;
+    fixture[10] = json(&format!(r#"{{"Id":"container-c","Name":"c","Config":{{{labels}}}}}"#))?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let mut request = root(ResourceKind::Container, "a")?;
+    request.add_root(ResourceSelector::exact(ResourceKind::Container, "c")?);
+    let graph = discover(&inventory, &request)?;
+    assert_eq!(graph.groups().len(), 1);
+    assert!(graph.findings().iter().all(|finding| {
+        !matches!(
+            finding.code(),
+            DiagnosticCode::AdvisoryLabelIncomplete | DiagnosticCode::AdvisoryLabelConflict
+        )
+    }));
+    Ok(())
+}
+
+#[tokio::test]
+async fn resource_name_prefixes_select_all_matching_names_deterministically_without_glob_semantics()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = responses()?;
+    fixture[8] = json(r#"{"Id":"container-a","Name":"demo-api"}"#)?;
+    fixture[9] = json(r#"{"Id":"container-b","Name":"demo-worker"}"#)?;
+    fixture[10] = json(r#"{"Id":"container-c","Name":"other"}"#)?;
+    let inventory = acquire_inventory(&Transport::new(fixture), AcquisitionOptions::redacted()).await?;
+    let mut request = DiscoveryRequest::new();
+    request.add_root(ResourceSelector::prefix(ResourceKind::Container, "demo-")?);
+    let graph = discover(&inventory, &request)?;
+    assert_eq!(
+        graph
+            .resolved_roots()
+            .iter()
+            .map(podman_lens::ResourceIdentity::name)
+            .collect::<Vec<_>>(),
+        [Some("demo-api"), Some("demo-worker")]
+    );
+    assert!(ResourceSelector::prefix(ResourceKind::Container, "demo-*").is_err());
+    assert!(ResourceSelector::prefix(ResourceKind::Container, "").is_err());
     Ok(())
 }
 
@@ -385,7 +430,7 @@ async fn compose_config_hash_aliases_cover_absent_equal_incomplete_empty_conflic
     let cases = [
         (None, None, true, None),
         (Some("same"), Some("same"), true, None),
-        (Some("same"), None, true, Some(DiagnosticCode::AdvisoryLabelIncomplete)),
+        (Some("same"), None, true, None),
         (Some(""), Some(""), true, Some(DiagnosticCode::AdvisoryLabelIncomplete)),
         (
             Some("left"),

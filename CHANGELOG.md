@@ -9,23 +9,16 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ### Fixed
 
-- accept valid runtime network and swappiness evidence ([#15](https://github.com/Strukturpiloten/podman-lens/pull/15))
-
-### Fixed
-
 - Accept the reviewed `4.9.4-rhel` service version reported by UBI 8, retain its exact evidence,
   and use normalized protocol paths while rejecting unreviewed vendor spellings. Decode the raw
-  object-shaped CNI network response returned by reviewed Ubuntu 22.04 Podman 3.4 services.
-
-## [0.2.1](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.0...v0.2.1) - 2026-08-25
-
-### Fixed
+  object-shaped CNI network response returned by reviewed Ubuntu 22.04 Podman 3.4 services
+  ([#20](https://github.com/Strukturpiloten/podman-lens/pull/20)).
 
 - Normalize the valid `HostConfig.MemorySwappiness=-1` Podman inspect sentinel as absent
   system-default intent instead of reporting malformed input.
 - Preserve named effective attachments from a standalone container's
   `NetworkSettings.Networks` map while continuing to leave pod-member runtime networking
-  inapplicable.
+  inapplicable ([#15](https://github.com/Strukturpiloten/podman-lens/pull/15)).
 
 ## [0.2.0](https://github.com/Strukturpiloten/podman-lens/compare/v0.1.1...v0.2.0) - 2026-08-25
 

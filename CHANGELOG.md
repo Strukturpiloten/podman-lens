@@ -5,6 +5,12 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/Strukturpiloten/podman-lens/compare/v0.1.1...v0.2.0) - 2026-08-25
+
+### Added
+
+- [**breaking**] support finite legacy Podman input anchors ([#12](https://github.com/Strukturpiloten/podman-lens/pull/12))
+
 ### Changed
 
 - Separate current architecture, API, testing, security, release, and roadmap guidance from

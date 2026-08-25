@@ -32,13 +32,21 @@ separately chosen modern target.
 | 3.4.4   | Ubuntu 22.04                  |
 | 4.3.1   | Debian 12                     |
 | 4.9.3   | Ubuntu 24.04                  |
-| 4.9.4   | Red Hat UBI 8                 |
+| 4.9.4   | Red Hat UBI 8 (`4.9.4-rhel`)  |
 
 These are finite source-backed upstream API anchors, not a claim for every Podman 3.x or 4.x patch
 or for distribution runtime behavior. Input acquisition records the exact engine and Libpod API
 evidence. In Podman 3.0.1, secret metadata endpoints do not exist; its secret section is reported
 as version-inapplicable without requesting it. Rootful and rootless distribution-image validation
 will be recorded only after the live matrix succeeds.
+
+The UBI 8 package reports `4.9.4-rhel` on the wire. PodmanLens retains that exact observation while
+matching only its reviewed `4.9.4` semantic core; other prerelease-style vendor spellings remain
+invalid.
+
+Ubuntu 22.04 Podman 3.4 returns its raw CNI network document as an object even though the remote
+CLI displays an array. PodmanLens accepts that proven endpoint shape without widening later
+object-shaped network contracts or ambiguous multi-configuration arrays.
 
 Target availability is field-specific. Examples include explicit image pull policies and volume
 UID/GID ownership beginning at reviewed Podman 5.6, and non-unicast network route types, network

@@ -157,3 +157,84 @@ async fn api_three_acquisition_uses_legacy_shapes_without_a_secret_request() -> 
     assert_eq!(prerequisites, ["legacy-net", "legacy-data", "sha256:legacy"]);
     Ok(())
 }
+
+#[tokio::test]
+async fn ubuntu_22_04_cni_network_inspect_decodes_as_reviewed_podman_3_4_input()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut captured = responses()?;
+    captured[0] = LibpodResponse::new(
+        200,
+        LibpodHeaders::new(vec![LibpodHeader::new("Libpod-API-Version", "3.4.4")?]),
+        [],
+    )?;
+    captured[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"3.4.4"}]}"#)?;
+    // Podman 3.4.4 exposes secret metadata, unlike the 3.0.1 baseline fixture.
+    captured.insert(7, json("[]")?);
+    captured[4] = json(r#"[{"Name":"ubuntu-22-cni"}]"#)?;
+    // Sanitized from the pinned Ubuntu 22.04 rootful image: Libpod API 3.4 returns the raw CNI
+    // document as an object. `podman network inspect` wraps it into a presentation array, so
+    // the importer must test the endpoint body rather than the CLI rendering.
+    captured[9] = json(
+        r#"{"cniVersion":"1.0.0","name":"ubuntu-22-cni","plugins":[{"bridge":"cni-podman1","hairpinMode":true,"ipMasq":true,"ipam":{"ranges":[[{"gateway":"10.89.0.1","subnet":"10.89.0.0/24"}]],"routes":[{"dst":"0.0.0.0/0"}],"type":"host-local"},"isGateway":true,"type":"bridge"},{"capabilities":{"portMappings":true},"type":"portmap"},{"backend":"","type":"firewall"},{"type":"tuning"}]}"#,
+    )?;
+
+    let inventory = acquire_inventory(&Transport::new(captured), AcquisitionOptions::redacted()).await?;
+    let network = inventory
+        .observations()
+        .find(|observation| observation.header().identity().kind() == ResourceKind::Network)
+        .ok_or("Ubuntu 22.04 CNI network observation is missing")?;
+    assert!(
+        network
+            .header()
+            .findings()
+            .iter()
+            .all(|finding| finding.code() != DiagnosticCode::InventoryShape)
+    );
+    let ResourceDetails::Network(network) = network.details() else {
+        panic!("Ubuntu 22.04 CNI response must decode as a network");
+    };
+    let subnet = network
+        .subnets()
+        .observed()
+        .and_then(|subnets| subnets.value().first())
+        .ok_or("CNI bridge subnet must be observed")?;
+    assert_eq!(
+        subnet.cidr().observed().map(|cidr| cidr.value().as_str()),
+        Some("10.89.0.0/24")
+    );
+    assert_eq!(
+        subnet.gateway().observed().map(|gateway| gateway.value().to_string()),
+        Some("10.89.0.1".to_owned())
+    );
+    assert!(matches!(network.routes(), ObservationField::Absent));
+    Ok(())
+}
+
+#[tokio::test]
+async fn podman_3_cni_inspect_rejects_multiple_configurations() -> Result<(), Box<dyn std::error::Error>> {
+    let mut captured = responses()?;
+    captured[0] = LibpodResponse::new(
+        200,
+        LibpodHeaders::new(vec![LibpodHeader::new("Libpod-API-Version", "3.4.4")?]),
+        [],
+    )?;
+    captured[1] = json(r#"{"Components":[{"Name":"Podman Engine","Version":"3.4.4"}]}"#)?;
+    captured.insert(7, json("[]")?);
+    captured[9] = json(
+        r#"[{"cniVersion":"1.0.0","name":"legacy-net","plugins":[]},{"cniVersion":"1.0.0","name":"other-net","plugins":[]}]"#,
+    )?;
+
+    let inventory = acquire_inventory(&Transport::new(captured), AcquisitionOptions::redacted()).await?;
+    let network = inventory
+        .observations()
+        .find(|observation| observation.header().identity().kind() == ResourceKind::Network)
+        .ok_or("malformed CNI network observation is missing")?;
+    assert!(
+        network
+            .header()
+            .findings()
+            .iter()
+            .any(|finding| finding.code() == DiagnosticCode::InventoryShape)
+    );
+    Ok(())
+}

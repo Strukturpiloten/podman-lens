@@ -65,6 +65,20 @@
       "observed_podman_version": "4.9.4",
       "observed_libpod_api_version": "4.9.4",
       "output_supported": false,
+      "reported_version_aliases": [
+        {
+          "podman_version": "4.9.4-rhel",
+          "libpod_api_version": "4.9.4-rhel",
+          "image": "ghcr.io/strukturpiloten/podman-ubi-8-rootful:v1.0.0@sha256:51dc92fd2165112131a3f070021f7fe382f3fcd541a4f39f7e01fdb8326483fc",
+          "package_revision": "4.9.4-34.module+el8.10.0+24510+6ea3880e.x86_64",
+          "root_mode": "rootful",
+          "evidence": {
+            "source": "https://github.com/Strukturpiloten/containers/tree/f0259a080e8a49be43358fc00c4cac89528d4954/images/podman/podman-ubi-8-rootful",
+            "revision": "f0259a080e8a49be43358fc00c4cac89528d4954",
+            "release_tag": "v1.0.0"
+          }
+        }
+      ],
       "evidence": {
         "source": "https://github.com/containers/podman/blob/3aceae8ace3c7e3c5591900db32d188cf60be535/version/rawversion/rawversion.go",
         "revision": "3aceae8ace3c7e3c5591900db32d188cf60be535",

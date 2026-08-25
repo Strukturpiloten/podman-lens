@@ -118,7 +118,7 @@ fn ping_api_version(headers: &LibpodHeaders) -> PodmanLensResult<ObservedApiVers
     let [value] = values.as_slice() else {
         return Err(Diagnostic::new(DiagnosticCode::ProbeHeader));
     };
-    ObservedApiVersion::parse(value).map_err(|_| Diagnostic::new(DiagnosticCode::ProbeHeader))
+    ObservedApiVersion::parse_reported(value).map_err(|_| Diagnostic::new(DiagnosticCode::ProbeHeader))
 }
 
 fn require_json_content_type(headers: &LibpodHeaders) -> PodmanLensResult<()> {
@@ -170,7 +170,7 @@ fn engine_version(body: &[u8]) -> PodmanLensResult<ObservedPodmanVersion> {
     let Some(engine) = engine else {
         return Err(Diagnostic::new(DiagnosticCode::ProbeComponent));
     };
-    ObservedPodmanVersion::parse(engine).map_err(|_| Diagnostic::new(DiagnosticCode::ProbeComponent))
+    ObservedPodmanVersion::parse_reported(engine).map_err(|_| Diagnostic::new(DiagnosticCode::ProbeComponent))
 }
 
 #[cfg(test)]

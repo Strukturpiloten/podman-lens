@@ -9,6 +9,19 @@ use crate::{
     evidence::{CapabilityCatalogueEntry, capability_catalogue},
 };
 
+fn parse_semantic_version(value: &str) -> PodmanLensResult<Version> {
+    let normalized = Version::parse(value).map_err(|_| Diagnostic::new(DiagnosticCode::InvalidVersion))?;
+    if !normalized.pre.is_empty() {
+        return Err(Diagnostic::new(DiagnosticCode::InvalidVersion));
+    }
+    Ok(normalized)
+}
+
+fn parse_reported_version(value: &str) -> PodmanLensResult<Version> {
+    let normalized = crate::evidence::normalized_reported_version(value)?;
+    parse_semantic_version(normalized.as_deref().unwrap_or(value))
+}
+
 /// A validated Podman version reported by a Libpod service.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ObservedPodmanVersion {
@@ -23,13 +36,17 @@ impl ObservedPodmanVersion {
     ///
     /// Returns `PLN0004` when the version is malformed or a prerelease.
     pub fn parse(value: &str) -> PodmanLensResult<Self> {
-        let normalized = Version::parse(value).map_err(|_| Diagnostic::new(DiagnosticCode::InvalidVersion))?;
-        if !normalized.pre.is_empty() {
-            return Err(Diagnostic::new(DiagnosticCode::InvalidVersion));
-        }
+        let normalized = parse_semantic_version(value)?;
         Ok(Self {
             original: value.to_owned(),
             normalized,
+        })
+    }
+
+    pub(crate) fn parse_reported(value: &str) -> PodmanLensResult<Self> {
+        Ok(Self {
+            original: value.to_owned(),
+            normalized: parse_reported_version(value)?,
         })
     }
 
@@ -66,13 +83,17 @@ impl ObservedApiVersion {
     ///
     /// Returns `PLN0004` when the version is malformed or a prerelease.
     pub fn parse(value: &str) -> PodmanLensResult<Self> {
-        let normalized = Version::parse(value).map_err(|_| Diagnostic::new(DiagnosticCode::InvalidVersion))?;
-        if !normalized.pre.is_empty() {
-            return Err(Diagnostic::new(DiagnosticCode::InvalidVersion));
-        }
+        let normalized = parse_semantic_version(value)?;
         Ok(Self {
             original: value.to_owned(),
             normalized,
+        })
+    }
+
+    pub(crate) fn parse_reported(value: &str) -> PodmanLensResult<Self> {
+        Ok(Self {
+            original: value.to_owned(),
+            normalized: parse_reported_version(value)?,
         })
     }
 
@@ -270,7 +291,13 @@ pub(crate) fn matching_input_catalogue_entry(
 ) -> PodmanLensResult<CapabilityCatalogueEntry> {
     capability_catalogue()?
         .into_iter()
-        .find(|entry| version_in_entry(version.as_semver(), entry))
+        .find(|entry| {
+            if entry.output_supported() {
+                version_in_entry(version.as_semver(), entry)
+            } else {
+                entry.matches_reported_podman_version(version.original())
+            }
+        })
         .ok_or_else(|| Diagnostic::new(DiagnosticCode::ObservedCompatibility))
 }
 
@@ -293,7 +320,7 @@ fn observed_api_version_is_supported(
     api_version: &ObservedApiVersion,
 ) -> bool {
     if !entry.output_supported() {
-        return api_version.original() == entry.observed_libpod_api_version();
+        return entry.matches_reported_version_pair(podman_version.original(), api_version.original());
     }
     api_version_is_supported(entry, podman_version, api_version)
 }

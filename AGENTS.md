@@ -63,6 +63,18 @@ gate, staging, commit, push, pull request creation, and GitHub readback. Workers
 implement bounded changes, or verify, but never commit, push, publish, tag, or create GitHub
 objects.
 
+Opening and reading back a ready pull request is the default stopping point. Authorization to run
+the Git workflow or perform GitHub writes does not authorize a merge.
+
+Merge only when the user explicitly authorizes merging the specific pull request or the scoped set
+of pull requests in the current request. Immediately before merging, read back the exact head
+commit and verify that the pull request is ready, mergeable, and has every required check
+successful. Never bypass branch protection, use an administrator override, or infer authority for
+an out-of-scope release, publication, or deployment pull request.
+
+Use the repository's normal merge method with an exact-head safeguard, then read back and report
+the merged state and merge commit.
+
 Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code. Use
 `docs`, `test`, `ci`, `build`, `style`, or `chore` for maintenance so release-plz does
 not propose an unnecessary crate release.

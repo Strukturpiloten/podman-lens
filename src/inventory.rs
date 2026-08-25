@@ -800,7 +800,7 @@ fn list_path(api_version: &ObservedApiVersion, kind: ResourceKind) -> PodmanLens
     };
     LibpodPath::parse(format!(
         "/v{}/libpod/{}/json{query}",
-        api_version.original(),
+        api_version.as_semver(),
         kind.collection()
     ))
 }
@@ -979,15 +979,25 @@ fn decode_observation(
 /// APIs. The complete CNI document remains one unmodelled structural field: only bridge-IPAM
 /// CIDRs and routes with an exact reviewed spelling are promoted.
 fn normalize_legacy_cni_network(value: &Value) -> PodmanLensResult<Value> {
-    let Some(configurations) = value.as_array() else {
-        return Ok(value.clone());
+    let configuration = if let Some(configuration) = value.as_object() {
+        // API 3.4's Libpod endpoint returns the raw CNI document as an object.  Do not
+        // reinterpret ordinary object-shaped network responses from later API contracts.
+        if configuration.contains_key("cniVersion") {
+            configuration
+        } else {
+            return Ok(value.clone());
+        }
+    } else {
+        let Some(configurations) = value.as_array() else {
+            return Ok(value.clone());
+        };
+        let [configuration] = configurations.as_slice() else {
+            return Err(Diagnostic::new(DiagnosticCode::InventoryShape));
+        };
+        configuration
+            .as_object()
+            .ok_or_else(|| Diagnostic::new(DiagnosticCode::InventoryShape))?
     };
-    let [configuration] = configurations.as_slice() else {
-        return Err(Diagnostic::new(DiagnosticCode::InventoryShape));
-    };
-    let configuration = configuration
-        .as_object()
-        .ok_or_else(|| Diagnostic::new(DiagnosticCode::InventoryShape))?;
     let name = required_string(configuration, "name")?;
     let mut normalized = Map::new();
     normalized.insert("id".to_owned(), Value::String(name.to_owned()));
@@ -5518,6 +5528,14 @@ mod typed_observation_constructor_tests {
             Vec::new(),
             UnmodelledCompleteness::Complete,
         )
+    }
+
+    #[test]
+    fn list_paths_use_the_normalized_protocol_version() {
+        let api = ObservedApiVersion::parse_reported("4.9.4-rhel").expect("reviewed RHEL alias");
+        let path = list_path(&api, ResourceKind::Container).expect("container list path");
+        assert_eq!(path.as_str(), "/v4.9.4/libpod/containers/json?all=true&sync=true");
+        assert_eq!(api.original(), "4.9.4-rhel");
     }
 
     #[test]

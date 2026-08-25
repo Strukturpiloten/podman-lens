@@ -5,6 +5,12 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Fixed
+
+- Accept the reviewed `4.9.4-rhel` service version reported by UBI 8, retain its exact evidence,
+  and use normalized protocol paths while rejecting unreviewed vendor spellings. Decode the raw
+  object-shaped CNI network response returned by reviewed Ubuntu 22.04 Podman 3.4 services.
+
 ## [0.2.1](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.0...v0.2.1) - 2026-08-25
 
 ### Fixed

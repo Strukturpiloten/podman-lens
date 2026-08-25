@@ -252,7 +252,7 @@ impl LibpodPath {
         }
         let path = format!(
             "/v{}/libpod/{collection}/{}/{}",
-            api_version.original(),
+            api_version.as_semver(),
             percent_encode_identifier(identifier),
             suffix
         );
@@ -629,6 +629,15 @@ mod tests {
             path.as_str(),
             "/v6.1.0/libpod/images/registry.example.invalid%2Fteam%2Fimage%3A1%40sha256%3Aabcdef/json"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_resource_paths_use_the_normalized_protocol_version() -> Result<(), Box<dyn std::error::Error>> {
+        let api = ObservedApiVersion::parse_reported("4.9.4-rhel")?;
+        let path = LibpodPath::resource(&api, "containers", "service", "json")?;
+        assert_eq!(path.as_str(), "/v4.9.4/libpod/containers/service/json");
+        assert_eq!(api.original(), "4.9.4-rhel");
         Ok(())
     }
 

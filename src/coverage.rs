@@ -250,8 +250,8 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "not_applicable",
         "ContainerObservation::memory_swappiness",
         "PLN0022",
-        "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values",
-        "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values"
+        "tests::inventory::memory_swappiness_normalizes_system_default_and_rejects_invalid_values",
+        "tests::inventory::memory_swappiness_normalizes_system_default_and_rejects_invalid_values"
     ),
     expected!(
         "PLN-FLD-0013",
@@ -1859,6 +1859,19 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "inventory::decode_secret",
         "SecretObservation::updated_at"
     ),
+    expected!(
+        "PLN-FLD-0145",
+        "container",
+        "$.NetworkSettings.Networks",
+        "observation-only",
+        "inventory::decode_container_networks",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkingObservation::networks",
+        "PLN0017",
+        "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps",
+        "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps"
+    ),
 ];
 
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];
@@ -2722,7 +2735,7 @@ mod tests {
             ("finding", "PLN0046"),
             (
                 "positive_test",
-                "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values",
+                "tests::inventory::memory_swappiness_normalizes_system_default_and_rejects_invalid_values",
             ),
             (
                 "negative_test",

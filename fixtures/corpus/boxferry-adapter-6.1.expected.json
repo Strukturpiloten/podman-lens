@@ -50,7 +50,7 @@
         "native_id": "bf61-worker",
         "image": "registry.example.invalid/boxferry/application:6.1",
         "group": null,
-        "networks": [],
+        "networks": ["application-net"],
         "mounts": [
           { "source": "application-data", "destination": "/var/lib/application", "writable": true }
         ],
@@ -149,6 +149,6 @@
   ],
   "render_status": "exact",
   "rendered_operation_count": 8,
-  "rendered_cli_sha256": "e6eb77ffbe58e7c2d6d758a0bb9980e47ead04ba5da98e4de3e513ab0b08cbe0",
+  "rendered_cli_sha256": "15d87bc2930773cd0208e2843960414809ecad81f43698134ff6b939eac2f343",
   "rendered_libpod_sha256": "b4a4c63bc1c8ab74ce4bacca39bed4ab9628f580c14db1caa2802d0cd6f2f9b9"
 }

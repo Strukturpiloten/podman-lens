@@ -5,6 +5,14 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalize the valid `HostConfig.MemorySwappiness=-1` Podman inspect sentinel as absent
+  system-default intent instead of reporting malformed input.
+- Preserve named effective attachments from a standalone container's
+  `NetworkSettings.Networks` map while continuing to leave pod-member runtime networking
+  inapplicable.
+
 ## [0.2.0](https://github.com/Strukturpiloten/podman-lens/compare/v0.1.1...v0.2.0) - 2026-08-25
 
 ### Added

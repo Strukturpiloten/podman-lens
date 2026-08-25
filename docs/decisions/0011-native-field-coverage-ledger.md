@@ -57,7 +57,7 @@ mistake the retained slice for complete native configuration in either case.
   reference row to the native `RepoTags` field. Repository tags and digests remain separate
   local-resolution evidence, native timestamps retain their exact validated RFC 3339 spelling,
   and secret driver options are count-only. This avoids silently accepting nested descendants.
-  The ledger has 142 input-observation rows and 50 output-intent rows (192 total). Every reviewed
+  The ledger separately records every reviewed input-observation and output-intent field. Every reviewed
   line records
   immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.

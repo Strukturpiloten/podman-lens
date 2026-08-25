@@ -1098,6 +1098,70 @@ async fn unpodded_host_config_networking_is_configured_and_management_gates_are_
 }
 
 #[tokio::test]
+async fn unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a","HostConfig":{},
+          "NetworkSettings":{"Networks":{
+            "edge":{"IPAddress":"10.88.0.10","Aliases":["public-api"]},
+            "private":{"IPAddress":"10.89.0.10","Aliases":["api"]}
+          }}
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode as a container".into());
+    };
+    let networking = container
+        .networking()
+        .observed()
+        .ok_or("standalone networking")?
+        .value();
+    assert_eq!(
+        networking.networks().observed().map(|value| value
+            .value()
+            .iter()
+            .map(podman_lens::NativeResourceReference::reference)
+            .collect::<Vec<_>>()),
+        Some(vec!["edge", "private"])
+    );
+    assert_eq!(
+        networking.networks().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] =
+        json(r#"{"Id":"container-a","Name":"a","HostConfig":{},"NetworkSettings":{"Networks":{"edge":false}}}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must decode as a container".into());
+    };
+    assert!(matches!(container.networking(), ObservationField::Malformed));
+    assert_eq!(
+        observation
+            .findings()
+            .iter()
+            .filter(|finding| finding.field_path() == Some("$.NetworkSettings.Networks.edge"))
+            .count(),
+        1,
+        "one malformed native field must produce one finding"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn unpodded_port_bindings_are_validated_without_a_new_network_namespace_gate()
 -> Result<(), Box<dyn std::error::Error>> {
     for create_net_ns in ["", r#""CreateNetNS":false,"#] {
@@ -1970,7 +2034,7 @@ async fn environment_boundaries_preserve_valid_entries_and_report_every_bad_occu
 }
 
 #[tokio::test]
-async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values()
+async fn memory_swappiness_normalizes_system_default_and_rejects_invalid_values()
 -> Result<(), Box<dyn std::error::Error>> {
     let inventory = acquire_inventory(
         &RecordingTransport::new(fixture_responses("5.4.0")?),
@@ -1978,16 +2042,52 @@ async fn memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_valu
     )
     .await?;
     assert!(
-        inventory
-            .section(ResourceKind::Container)
-            .expect("containers")
-            .observations()[0]
-            .findings()
-            .iter()
-            .any(|finding| finding.code() == DiagnosticCode::VersionInapplicableField)
+        matches!(
+            container_memory_field(
+                &inventory
+                    .section(ResourceKind::Container)
+                    .expect("containers")
+                    .observations()[0]
+            ),
+            ObservationField::Absent
+        ),
+        "the reviewed Podman 5.4 fixture uses the valid system-default sentinel"
     );
 
-    for invalid in ["\"not-a-number\"", "true", "-1"] {
+    let mut responses = fixture_responses("5.4.0")?;
+    responses[8] = json(r#"{"Id":"container-a","Name":"a","HostConfig":{"MemorySwappiness":null}}"#)?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    assert!(matches!(
+        container_memory_field(
+            &inventory
+                .section(ResourceKind::Container)
+                .expect("containers")
+                .observations()[0]
+        ),
+        ObservationField::VersionInapplicable
+    ));
+
+    for version in ["5.4.0", "6.1.0"] {
+        let mut responses = fixture_responses(version)?;
+        responses[8] = json(r#"{"Id":"container-a","Name":"a","HostConfig":{"MemorySwappiness":-1}}"#)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .expect("containers")
+            .observations()[0];
+        assert!(matches!(container_memory_field(observation), ObservationField::Absent));
+        assert!(
+            !observation.findings().iter().any(|finding| {
+                matches!(
+                    finding.code(),
+                    DiagnosticCode::ResourceMalformed | DiagnosticCode::VersionInapplicableField
+                )
+            }),
+            "Podman {version} system-default sentinel must not become a loss finding"
+        );
+    }
+
+    for invalid in ["\"not-a-number\"", "true", "-2", "101"] {
         let mut responses = fixture_responses("6.1.0")?;
         responses[8] = json(format!(
             r#"{{"Id":"container-a","Name":"a","HostConfig":{{"MemorySwappiness":{invalid}}}}}"#
@@ -2079,11 +2179,10 @@ async fn public_typed_observations_exercise_every_field_state_without_promoting_
         ObservationField::Malformed
     ));
 
-    let version_inapplicable = acquire_inventory(
-        &RecordingTransport::new(fixture_responses("5.4.0")?),
-        AcquisitionOptions::redacted(),
-    )
-    .await?;
+    let mut responses = fixture_responses("5.4.0")?;
+    responses[8] = json(r#"{"Id":"container-a","Name":"a","HostConfig":{"MemorySwappiness":null}}"#)?;
+    let version_inapplicable =
+        acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
     assert!(matches!(
         container_memory_field(
             &version_inapplicable

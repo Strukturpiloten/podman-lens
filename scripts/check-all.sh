@@ -9,7 +9,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=20
+readonly total_steps=21
 
 fail() {
   printf 'PodmanLens local validation failed: %s\n' "$1" >&2
@@ -98,5 +98,6 @@ check_api_compatibility() {
 }
 
 run_step "Check initial public API contract" check_api_compatibility
+run_step "Test release metadata policy" bash scripts/test-release-metadata.sh
 run_step "Check release metadata" bash scripts/check-release-metadata.sh
 printf '\nPodmanLens local validation passed all %d steps.\n' "${total_steps}"

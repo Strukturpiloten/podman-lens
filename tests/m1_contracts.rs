@@ -271,24 +271,27 @@ fn versions_preserve_spelling_reject_prereleases_and_fail_closed() -> Result<(),
 #[test]
 fn catalogue_covers_every_reviewed_minor_line_with_immutable_evidence() -> Result<(), Box<dyn std::error::Error>> {
     let catalogue = capability_catalogue()?;
-    assert_eq!(catalogue.len(), 7);
-    let lines = catalogue
+    let output = catalogue
         .iter()
-        .map(podman_lens::CapabilityCatalogueEntry::podman_minor_line)
+        .filter(|entry| entry.output_supported())
         .collect::<Vec<_>>();
+    assert_eq!(output.len(), 7);
+    let lines = output.iter().map(|entry| entry.podman_minor_line()).collect::<Vec<_>>();
     assert_eq!(lines, ["5.4", "5.5", "5.6", "5.7", "5.8", "6.0", "6.1"]);
     for entry in &catalogue {
         assert!(entry.evidence().source().contains(entry.evidence().revision()));
         assert_eq!(entry.evidence().revision().len(), 40);
     }
-    assert_eq!(catalogue[4].evidence().release_tag(), "v5.8.6");
-    assert_eq!(catalogue[4].observed_podman_version(), "5.8.6");
-    assert_eq!(catalogue[4].observed_libpod_api_version(), "5.8.6");
-    assert!(
-        catalogue
-            .iter()
-            .all(|entry| entry.minimum_libpod_api_version() == "4.0.0")
-    );
-    assert_eq!(catalogue[6].evidence().release_tag(), "v6.1.0");
+    assert_eq!(output[4].evidence().release_tag(), "v5.8.6");
+    assert_eq!(output[4].observed_podman_version(), "5.8.6");
+    assert_eq!(output[4].observed_libpod_api_version(), "5.8.6");
+    assert!(output.iter().all(|entry| entry.minimum_libpod_api_version() == "4.0.0"));
+    assert_eq!(output[6].evidence().release_tag(), "v6.1.0");
+    let legacy = catalogue
+        .iter()
+        .filter(|entry| !entry.output_supported())
+        .map(podman_lens::CapabilityCatalogueEntry::observed_podman_version)
+        .collect::<Vec<_>>();
+    assert_eq!(legacy, ["3.0.1", "3.4.4", "4.3.1", "4.9.3", "4.9.4"]);
     Ok(())
 }

@@ -90,7 +90,7 @@ run_step "Check local documentation links" lychee --config lychee.toml --root-di
 check_api_compatibility() {
   if [[ "${PODMAN_LENS_SEMVER_CHECK:-0}" == "1" ]]; then
     env CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${semver_target_dir}" \
-      cargo semver-checks check-release --package podman-lens
+      bash scripts/check-public-api.sh
     return
   fi
 

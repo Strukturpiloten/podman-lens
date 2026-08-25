@@ -12,6 +12,22 @@ All notable changes to PodmanLens are documented here. The project follows the p
   public guides and machine-readable evidence
   ([#10](https://github.com/Strukturpiloten/podman-lens/pull/10)).
 
+- distinguish finite legacy input-only Podman anchors from reviewed rendering targets; acquire
+  Podman 3.0.1, 3.4.4, 4.3.1, 4.9.3, and 4.9.4 without allowing them as output targets.
+
+  `ServiceObservation::target_profile` is replaced with `input_capability` and
+  `output_target_profile`. Callers importing legacy runtime state must select their own modern
+  `TargetProfile` before creating a deployment plan.
+
+### Fixed
+
+- preserve single complete Compose-label namespaces as advisory grouping evidence and retain
+  bounded structural metadata for runtime network attachments.
+- decode Debian 11 / Podman 3.0.1 API-3 volume and CNI-network responses, including its absent
+  secret endpoint and empty default container fields.
+- apply the repository's pre-1.0 breaking-change policy consistently in pull-request and protected
+  release API checks.
+
 ## [0.1.1](https://github.com/Strukturpiloten/podman-lens/compare/v0.1.0...v0.1.1) - 2026-08-21
 
 ### Fixed

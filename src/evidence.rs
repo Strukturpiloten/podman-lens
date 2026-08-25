@@ -6,6 +6,48 @@ use serde::Deserialize;
 use crate::{Diagnostic, DiagnosticCode, PodmanLensResult};
 
 const CATALOGUE_JSON: &str = include_str!("../catalogue/v1/podman-capabilities.json");
+const LEGACY_INPUT_ANCHORS: [(&str, &str, &str, &str, &str, &str); 5] = [
+    (
+        "3.0.1",
+        "3.0.2",
+        "3.0.0",
+        "3.0.0",
+        "c640670e85c4aaaff92741691d6a854a90229d8d",
+        "version/version.go",
+    ),
+    (
+        "3.4.4",
+        "3.4.5",
+        "3.1.0",
+        "3.4.4",
+        "f6526ada1025c2e3f88745ba83b8b461ca659933",
+        "version/version.go",
+    ),
+    (
+        "4.3.1",
+        "4.3.2",
+        "4.0.0",
+        "4.3.1",
+        "814b7b003cc630bf6ab188274706c383f9fb9915",
+        "version/version.go",
+    ),
+    (
+        "4.9.3",
+        "4.9.4",
+        "4.0.0",
+        "4.9.3",
+        "8d2b55ddde1bc81f43d018dfc1ac027c06b26a7f",
+        "version/rawversion/rawversion.go",
+    ),
+    (
+        "4.9.4",
+        "4.9.5",
+        "4.0.0",
+        "4.9.4",
+        "3aceae8ace3c7e3c5591900db32d188cf60be535",
+        "version/rawversion/rawversion.go",
+    ),
+];
 
 /// Immutable upstream evidence retained for one reviewed Podman line.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -44,6 +86,8 @@ pub struct CapabilityCatalogueEntry {
     minimum_libpod_api_version: String,
     observed_podman_version: String,
     observed_libpod_api_version: String,
+    #[serde(default = "default_output_supported")]
+    output_supported: bool,
     evidence: EvidenceReference,
 }
 
@@ -84,11 +128,24 @@ impl CapabilityCatalogueEntry {
         &self.observed_libpod_api_version
     }
 
+    /// Returns whether this line has reviewed deployment-output evidence.
+    ///
+    /// Input-only anchors may be acquired and discovered so an old host can be migrated to a
+    /// newer explicit target, but they can never be selected as a rendering target.
+    #[must_use]
+    pub const fn output_supported(&self) -> bool {
+        self.output_supported
+    }
+
     /// Returns the immutable source evidence.
     #[must_use]
     pub fn evidence(&self) -> &EvidenceReference {
         &self.evidence
     }
+}
+
+const fn default_output_supported() -> bool {
+    true
 }
 
 #[derive(Deserialize)]
@@ -119,8 +176,56 @@ fn parse_catalogue(source: &str) -> PodmanLensResult<Vec<CapabilityCatalogueEntr
 }
 
 fn valid_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
+    if !valid_legacy_catalogue(entries) {
+        return false;
+    }
+    valid_output_catalogue(entries)
+}
+
+fn valid_legacy_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
+    let legacy = entries
+        .iter()
+        .filter(|entry| !entry.output_supported)
+        .collect::<Vec<_>>();
+    if legacy.len() != LEGACY_INPUT_ANCHORS.len() {
+        return false;
+    }
+    for (entry, (minimum, maximum, minimum_api, expected_api, revision, source_path)) in
+        legacy.into_iter().zip(LEGACY_INPUT_ANCHORS)
+    {
+        let Some((parsed_minimum, parsed_maximum, _parsed_minimum_api, observed_engine, observed_api)) =
+            parsed_versions(entry)
+        else {
+            return false;
+        };
+        let Ok(expected_observed_api) = Version::parse(expected_api) else {
+            return false;
+        };
+        let expected_source = format!("https://github.com/containers/podman/blob/{revision}/{source_path}");
+        if entry.minimum_podman_version != minimum
+            || entry.maximum_exclusive_podman_version != maximum
+            || entry.minimum_libpod_api_version != minimum_api
+            || entry.observed_podman_version != minimum
+            || entry.observed_libpod_api_version != expected_api
+            || entry.evidence.revision != revision
+            || entry.evidence.source != expected_source
+            || parsed_minimum != observed_engine
+            || observed_api != expected_observed_api
+            || parsed_maximum <= parsed_minimum
+            || entry.podman_minor_line != format!("{}.{}", parsed_minimum.major, parsed_minimum.minor)
+            || entry.evidence.release_tag != format!("v{observed_engine}")
+            || !is_lowercase_sha40(&entry.evidence.revision)
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn valid_output_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
     let mut expected_minimum = Version::new(5, 4, 0);
-    for entry in entries {
+    for entry in entries.iter().filter(|entry| entry.output_supported) {
         let Some((minimum, maximum_exclusive, minimum_api, observed_engine, observed_api)) = parsed_versions(entry)
         else {
             return false;
@@ -228,7 +333,15 @@ mod tests {
     #[test]
     fn individual_evidence_policy_violations_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
         let mut catalogue = decoded_catalogue()?;
-        catalogue.reviewed_lines[0].evidence.revision.replace_range(0..1, "F");
+        catalogue.reviewed_lines[5].evidence.revision.replace_range(0..1, "F");
+        assert!(!valid_catalogue(&catalogue.reviewed_lines));
+
+        let mut catalogue = decoded_catalogue()?;
+        catalogue.reviewed_lines[5].evidence.source = "https://example.invalid/mutable".to_owned();
+        assert!(!valid_catalogue(&catalogue.reviewed_lines));
+
+        let mut catalogue = decoded_catalogue()?;
+        catalogue.reviewed_lines[5].observed_podman_version = "5.4.1".to_owned();
         assert!(!valid_catalogue(&catalogue.reviewed_lines));
 
         let mut catalogue = decoded_catalogue()?;
@@ -236,7 +349,7 @@ mod tests {
         assert!(!valid_catalogue(&catalogue.reviewed_lines));
 
         let mut catalogue = decoded_catalogue()?;
-        catalogue.reviewed_lines[0].observed_podman_version = "5.4.1".to_owned();
+        catalogue.reviewed_lines[1].observed_libpod_api_version = "3.1.0".to_owned();
         assert!(!valid_catalogue(&catalogue.reviewed_lines));
         Ok(())
     }

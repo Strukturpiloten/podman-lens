@@ -85,10 +85,12 @@
           "type": "string"
         },
         "target_podman": {
-          "type": "string"
+          "type": "string",
+          "description": "Historical v1 alias for the observed engine profile; never a caller-selected output target."
         },
         "target_api": {
-          "type": "string"
+          "type": "string",
+          "description": "Historical v1 alias for the observed Libpod API profile; never a caller-selected output target."
         }
       },
       "additionalProperties": false

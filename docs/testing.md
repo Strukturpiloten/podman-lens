@@ -76,6 +76,10 @@ cargo test --test repository_policy
 
 These focused commands help during development but do not replace `./scripts/check-all.sh`.
 
+Set `PODMAN_LENS_SEMVER_CHECK=1` to run the same repository-owned published-API command used by
+the CI API job. It requires a reachable release tag and the published crate baseline; the initial
+contract path continues to use `tests/public_api.rs`.
+
 ## Live conformance
 
 The ignored current-patch test permits only the fixed read-only acquisition probe. It requires an

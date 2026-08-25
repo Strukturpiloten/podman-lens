@@ -264,7 +264,7 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
     for required in [
         "cargo llvm-cov",
         "cargo-deny-action@",
-        "cargo-semver-checks-action",
+        "bash scripts/check-public-api.sh",
         "lycheeverse/lychee-action@",
         "actions/attest@",
         "crates-io-auth-action@",
@@ -283,6 +283,31 @@ fn hosted_documentation_job_exposes_locked_node_tools() -> Result<(), std::io::E
     let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
     assert!(workflow.contains("${GITHUB_WORKSPACE}/node_modules/.bin"));
     assert!(workflow.contains("${GITHUB_PATH}"));
+    Ok(())
+}
+
+#[test]
+fn public_api_compatibility_uses_the_repository_owned_release_policy() -> Result<(), std::io::Error> {
+    let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
+    let release = fs::read_to_string(".github/workflows/release.yml")?;
+    for required in ["fetch-depth: 0", "bash scripts/check-public-api.sh"] {
+        assert!(workflow.contains(required), "CI API job is missing {required}");
+        assert!(release.contains(required), "release API job is missing {required}");
+    }
+
+    let script = fs::read_to_string("scripts/check-public-api.sh")?;
+    for required in [
+        "git tag --merged HEAD",
+        "BREAKING CHANGE:",
+        "--release-type major",
+        "semver-checks check-release",
+    ] {
+        assert!(script.contains(required), "public API script is missing {required}");
+    }
+    assert!(
+        !script.contains("mapfile"),
+        "public API script must support the macOS Bash version"
+    );
     Ok(())
 }
 

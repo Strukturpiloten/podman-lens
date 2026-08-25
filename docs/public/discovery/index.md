@@ -7,13 +7,15 @@ Choose roots in one or more ways:
 
 - `ResourceSelector::exact` selects one container, pod, network, volume, image, or secret by exact
   name, ID, or supported image alias.
+- `ResourceSelector::prefix` selects every resource of one kind whose native name begins with one
+  literal prefix, in deterministic identity order. It never matches IDs or image aliases.
 - `LabelSelector::presence` selects resources carrying one exact label key.
 - `LabelSelector::exact` additionally requires one exact value; an empty value remains distinct
   from presence-only matching.
 - `select_all` selects every eligible application root, not every cached image or shared resource.
 
-Wildcards are rejected. Unresolved and ambiguous selectors remain structured findings instead of
-guessing which resource the caller meant.
+Wildcards, glob syntax, and regular expressions are rejected. Unresolved and ambiguous selectors
+remain structured findings instead of guessing which resource the caller meant.
 
 ## Follow evidenced relationships
 

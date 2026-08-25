@@ -84,7 +84,10 @@ jobs:
     name: Public API compatibility
     runs-on: ubuntu-24.04
     steps:
-      - *checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Compare published API or check initial public contract
         shell: bash
         run: |
@@ -93,7 +96,7 @@ jobs:
           case "${status}" in
             200)
               cargo install --locked --version 0.50.0 cargo-semver-checks
-              cargo semver-checks check-release --package podman-lens
+              bash scripts/check-public-api.sh
               ;;
             404)
               cargo test --locked --test public_api

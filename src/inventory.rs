@@ -26,8 +26,7 @@ use crate::observation::{
 };
 use crate::{
     CapabilityCatalogueEntry, Diagnostic, DiagnosticCode, LibpodMethod, LibpodPath, LibpodRequest, LibpodResponse,
-    LibpodTransport, ObservedApiVersion, PodmanLensResult, ServiceObservation, capability_catalogue,
-    probe_libpod_service,
+    LibpodTransport, ObservedApiVersion, PodmanLensResult, ServiceObservation, probe_libpod_service,
 };
 
 /// Maximum JSON body accepted by the inventory decoder after transport framing limits apply.
@@ -192,21 +191,12 @@ pub struct ResourceEvidence {
 }
 
 impl ResourceEvidence {
-    fn from_service(service: &ServiceObservation) -> PodmanLensResult<Self> {
-        let engine = service.engine_version().as_semver();
-        let capability = capability_catalogue()?
-            .into_iter()
-            .find(|entry| {
-                let minimum = semver::Version::parse(entry.minimum_podman_version()).ok();
-                let maximum = semver::Version::parse(entry.maximum_exclusive_podman_version()).ok();
-                minimum.is_some_and(|minimum| engine >= &minimum) && maximum.is_some_and(|maximum| engine < &maximum)
-            })
-            .ok_or_else(|| Diagnostic::new(DiagnosticCode::InventoryEvidenceUnavailable))?;
-        Ok(Self {
+    fn from_service(service: &ServiceObservation) -> Self {
+        Self {
             engine_version: service.engine_version().original().to_owned(),
             api_version: service.api_version().original().to_owned(),
-            capability,
-        })
+            capability: service.input_capability().clone(),
+        }
     }
 
     /// Returns the engine version observed before acquisition began.
@@ -384,6 +374,17 @@ impl InventorySection {
         }
     }
 
+    fn version_inapplicable(kind: ResourceKind) -> Self {
+        Self {
+            kind,
+            // Preserve the published snapshot availability vocabulary. The attached PLN0022
+            // finding distinguishes a known version boundary from a transport failure.
+            availability: InventorySectionAvailability::Unavailable,
+            observations: Vec::new(),
+            findings: vec![InventoryFinding::section(DiagnosticCode::VersionInapplicableField)],
+        }
+    }
+
     /// Returns the resource kind represented by this section.
     #[must_use]
     pub const fn kind(&self) -> ResourceKind {
@@ -471,12 +472,16 @@ pub async fn acquire_inventory(
     options: AcquisitionOptions,
 ) -> PodmanLensResult<ResourceInventory> {
     let service = probe_libpod_service(transport).await?;
-    let evidence = ResourceEvidence::from_service(&service)?;
+    let evidence = ResourceEvidence::from_service(&service);
     // Listing is its own deterministic phase. It makes a partial list visible as a section-wide
     // race instead of letting early inspect requests influence which later kinds are listed.
     let mut listed = Vec::with_capacity(ResourceKind::ALL.len());
     for kind in ResourceKind::ALL {
-        listed.push((kind, list_section(transport, &service, kind).await));
+        if resource_kind_is_version_inapplicable(kind, &service) {
+            listed.push((kind, Err(Diagnostic::new(DiagnosticCode::VersionInapplicableField))));
+        } else {
+            listed.push((kind, list_section(transport, &service, kind).await));
+        }
     }
     let mut sections = Vec::with_capacity(ResourceKind::ALL.len());
     let mut remaining_unknown_fields = MAX_UNKNOWN_FIELDS_PER_INVENTORY;
@@ -505,11 +510,20 @@ pub async fn acquire_inventory(
                     findings: listed.findings,
                 });
             }
+            Err(error) if error.code() == DiagnosticCode::VersionInapplicableField => {
+                sections.push(InventorySection::version_inapplicable(kind));
+            }
             Err(error) => sections.push(InventorySection::unavailable(kind, error.code())),
         }
     }
     reconcile_relationships(&mut sections);
     Ok(ResourceInventory { service, sections })
+}
+
+fn resource_kind_is_version_inapplicable(kind: ResourceKind, service: &ServiceObservation) -> bool {
+    // Podman 3.0.1 has no Libpod secret handlers. Do not turn a known missing endpoint into a
+    // misleading unavailable section; later reviewed anchors expose metadata only and are read.
+    kind == ResourceKind::Secret && service.engine_version().as_semver() < &semver::Version::new(3, 1, 0)
 }
 
 #[allow(clippy::too_many_lines)] // Reconciliation keeps both directional membership checks adjacent.
@@ -795,10 +809,16 @@ fn decode_list(kind: ResourceKind, response: &LibpodResponse) -> PodmanLensResul
     require_ok_json(response)?;
     let value = decode_json(response.body())?;
     let entries = match kind {
-        ResourceKind::Volume => match value.as_object().and_then(|object| object.get("Volumes")) {
-            None | Some(Value::Null) => Vec::new(),
-            Some(Value::Array(entries)) => entries.iter().collect(),
-            Some(_) => return Err(Diagnostic::new(DiagnosticCode::InventoryShape)),
+        // Podman API 3 returns the volume list directly, while later Libpod versions wrap it in
+        // `Volumes`. Both are a complete read-only listing of the same native resource family.
+        ResourceKind::Volume => match &value {
+            Value::Array(entries) => entries.iter().collect(),
+            Value::Object(object) => match object.get("Volumes") {
+                None | Some(Value::Null) => Vec::new(),
+                Some(Value::Array(entries)) => entries.iter().collect(),
+                Some(_) => return Err(Diagnostic::new(DiagnosticCode::InventoryShape)),
+            },
+            _ => return Err(Diagnostic::new(DiagnosticCode::InventoryShape)),
         },
         _ => value
             .as_array()
@@ -834,7 +854,9 @@ fn list_identity(kind: ResourceKind, value: &Value) -> PodmanLensResult<Resource
     let id = match kind {
         ResourceKind::Volume => required_string(object, "Name")?,
         ResourceKind::Secret => required_string(object, "ID")?,
-        ResourceKind::Network => required_string(object, "id")?,
+        // CNI-backed API-3 networks have no opaque ID. Their exact non-empty name is the stable
+        // identity that the same server accepts for subsequent inspection.
+        ResourceKind::Network => required_string_any(object, &["id", "Name", "name"])?,
         _ => required_string(object, "Id")?,
     };
     let name = match kind {
@@ -843,7 +865,7 @@ fn list_identity(kind: ResourceKind, value: &Value) -> PodmanLensResult<Resource
             .get("Spec")
             .and_then(Value::as_object)
             .and_then(|spec| optional_string(spec, "Name")),
-        ResourceKind::Network => optional_string(object, "name"),
+        ResourceKind::Network => optional_string_any(object, &["name", "Name"]),
         _ => optional_string(object, "Name"),
     };
     Ok(ResourceIdentity::new(kind, id.to_owned(), name.map(ToOwned::to_owned)))
@@ -858,6 +880,12 @@ fn decode_observation(
 ) -> PodmanLensResult<ResourceObservation> {
     require_ok_json(response)?;
     let value = decode_json(response.body())?;
+    let legacy_cni_network = listed_identity.kind == ResourceKind::Network
+        && semver::Version::parse(evidence.engine_version()).is_ok_and(|version| version.major == 3);
+    let normalized_network = legacy_cni_network
+        .then(|| normalize_legacy_cni_network(&value))
+        .transpose()?;
+    let value = normalized_network.as_ref().unwrap_or(&value);
     let object = value
         .as_object()
         .ok_or_else(|| Diagnostic::new(DiagnosticCode::InventoryShape))?;
@@ -945,6 +973,85 @@ fn decode_observation(
             },
         ),
     )
+}
+
+/// Converts the API-3 CNI inspect array into the bounded network shape used by later Libpod
+/// APIs. The complete CNI document remains one unmodelled structural field: only bridge-IPAM
+/// CIDRs and routes with an exact reviewed spelling are promoted.
+fn normalize_legacy_cni_network(value: &Value) -> PodmanLensResult<Value> {
+    let Some(configurations) = value.as_array() else {
+        return Ok(value.clone());
+    };
+    let [configuration] = configurations.as_slice() else {
+        return Err(Diagnostic::new(DiagnosticCode::InventoryShape));
+    };
+    let configuration = configuration
+        .as_object()
+        .ok_or_else(|| Diagnostic::new(DiagnosticCode::InventoryShape))?;
+    let name = required_string(configuration, "name")?;
+    let mut normalized = Map::new();
+    normalized.insert("id".to_owned(), Value::String(name.to_owned()));
+    normalized.insert("name".to_owned(), Value::String(name.to_owned()));
+    // This marker is retained only as type/path evidence by the unknown-field collector. It
+    // never reaches a public observation, snapshot, diagnostic, or debug representation.
+    normalized.insert("CniConfig".to_owned(), Value::Object(configuration.clone()));
+
+    let mut subnets = Vec::new();
+    let mut routes = Vec::new();
+    for plugin in configuration
+        .get("plugins")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(plugin) = plugin.as_object() else {
+            continue;
+        };
+        if plugin.get("type").and_then(Value::as_str) != Some("bridge") {
+            continue;
+        }
+        let Some(ipam) = plugin.get("ipam").and_then(Value::as_object) else {
+            continue;
+        };
+        for range in ipam.get("ranges").and_then(Value::as_array).into_iter().flatten() {
+            for subnet in range.as_array().into_iter().flatten() {
+                let Some(subnet) = subnet.as_object() else {
+                    continue;
+                };
+                let Some(cidr) = subnet.get("subnet").and_then(Value::as_str) else {
+                    continue;
+                };
+                let mut mapped = Map::new();
+                mapped.insert("subnet".to_owned(), Value::String(cidr.to_owned()));
+                if let Some(gateway) = subnet.get("gateway").and_then(Value::as_str) {
+                    mapped.insert("gateway".to_owned(), Value::String(gateway.to_owned()));
+                }
+                subnets.push(Value::Object(mapped));
+            }
+        }
+        for route in ipam.get("routes").and_then(Value::as_array).into_iter().flatten() {
+            let Some(route) = route.as_object() else {
+                continue;
+            };
+            let (Some(destination), Some(gateway)) = (
+                route.get("dst").and_then(Value::as_str),
+                route.get("gw").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            routes.push(Value::Object(Map::from_iter([
+                ("destination".to_owned(), Value::String(destination.to_owned())),
+                ("gateway".to_owned(), Value::String(gateway.to_owned())),
+            ])));
+        }
+    }
+    if !subnets.is_empty() {
+        normalized.insert("subnets".to_owned(), Value::Array(subnets));
+    }
+    if !routes.is_empty() {
+        normalized.insert("routes".to_owned(), Value::Array(routes));
+    }
+    Ok(Value::Object(normalized))
 }
 
 fn append_container_unmodelled(
@@ -1518,7 +1625,7 @@ fn decode_native_restart_policy(
     let name = match value.get("Name") {
         None | Some(Value::Null) => ObservationField::Absent,
         Some(json_value @ Value::String(name)) => match name.as_str() {
-            "no" => ObservationField::Observed(ObservedValue::new(
+            "" | "no" => ObservationField::Observed(ObservedValue::new(
                 NativeRestartPolicyName::No,
                 ObservationOrigin::Effective,
             )),
@@ -2268,13 +2375,7 @@ fn decode_container_configuration(
             findings,
             ConfiguredContainerCommand::new,
         ),
-        entrypoint: decode_configured_arguments(
-            config.get("Entrypoint"),
-            "$.Config.Entrypoint",
-            identity,
-            findings,
-            ConfiguredContainerEntrypoint::new,
-        ),
+        entrypoint: decode_configured_entrypoint(config.get("Entrypoint"), "$.Config.Entrypoint", identity, findings),
         user: decode_configured_text(
             config.get("User"),
             "$.Config.User",
@@ -2299,6 +2400,18 @@ fn decode_container_configuration(
     }
 }
 
+fn decode_configured_entrypoint(
+    value: Option<&Value>,
+    path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<ConfiguredContainerEntrypoint> {
+    if matches!(value, Some(Value::String(entrypoint)) if entrypoint.is_empty()) {
+        return ObservationField::Absent;
+    }
+    decode_configured_arguments(value, path, identity, findings, ConfiguredContainerEntrypoint::new)
+}
+
 #[allow(clippy::single_match_else)] // keeps malformed-array handling adjacent to the reviewed wire shape.
 fn decode_configured_arguments<T>(
     value: Option<&Value>,
@@ -2309,6 +2422,7 @@ fn decode_configured_arguments<T>(
 ) -> ObservationField<T> {
     match value {
         None | Some(Value::Null) => ObservationField::Absent,
+        Some(Value::Array(values)) if values.is_empty() => ObservationField::Absent,
         Some(Value::Array(values)) => {
             let arguments = values.iter().map(Value::as_str).collect::<Option<Vec<_>>>();
             match arguments {
@@ -3649,6 +3763,7 @@ fn optional_native_reference(
         Some(Value::String(value)) if !value.is_empty() => {
             Ok(Some(NativeResourceReference::new(value.clone(), path.to_owned())))
         }
+        Some(Value::String(value)) if value.is_empty() => Ok(None),
         Some(_) => {
             findings.push(InventoryFinding::field(
                 DiagnosticCode::ResourceMalformed,
@@ -5028,12 +5143,14 @@ fn unknown_nested_fields(
                 .and_then(Value::as_object)
             {
                 for (name, details) in networks {
-                    unknown_object_members(
-                        Some(details),
-                        &format!("$.NetworkSettings.Networks.{name}"),
-                        &[],
-                        fields,
-                    );
+                    // Network attachment details are an open, runtime-specific map. Retain one
+                    // redacted structural marker per attachment instead of consuming the entire
+                    // unknown-field budget on every effective address and gateway member.
+                    if details.as_object().is_some_and(|members| !members.is_empty())
+                        && !fields.push(|| format!("$.NetworkSettings.Networks.{name}"), details)
+                    {
+                        break;
+                    }
                     if fields.overflowed {
                         break;
                     }
@@ -5330,6 +5447,7 @@ fn optional_string_any<'a>(object: &'a Map<String, Value>, keys: &[&str]) -> Opt
 #[allow(clippy::expect_used, clippy::items_after_test_module)]
 mod typed_observation_constructor_tests {
     use super::*;
+    use crate::capability_catalogue;
 
     fn header(kind: ResourceKind) -> ObservationHeader {
         let capability = capability_catalogue().expect("embedded capability catalogue").remove(0);

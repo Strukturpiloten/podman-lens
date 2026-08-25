@@ -31,6 +31,11 @@ pub fn graph(source: &ResourceGraph) -> GraphSnapshot {
 }
 
 /// A versioned, always-redacted inventory export.
+///
+/// `service.target_podman` and `service.target_api` are historical v1 field names. They mirror
+/// the engine/API profile observed during acquisition and never name a caller-selected migration
+/// or rendering target. They therefore equal `service.engine` and `service.api`, including for
+/// input-only legacy anchors.
 #[derive(Debug, Serialize)]
 pub struct InventorySnapshot {
     schema_version: u8,
@@ -47,8 +52,8 @@ impl InventorySnapshot {
             service: ServiceSnapshot {
                 engine: source.service().engine_version().original().to_owned(),
                 api: source.service().api_version().original().to_owned(),
-                target_podman: source.service().target_profile().podman_version().original().to_owned(),
-                target_api: source.service().target_profile().api_version().original().to_owned(),
+                target_podman: source.service().engine_version().original().to_owned(),
+                target_api: source.service().api_version().original().to_owned(),
             },
             sections: source
                 .sections()

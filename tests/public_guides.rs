@@ -234,6 +234,7 @@ fn compatibility_guide_tracks_catalogue_and_renderer_gates() -> Result<(), Box<d
         .as_array()
         .ok_or("reviewed_lines must be an array")?
         .iter()
+        .filter(|line| line["output_supported"].as_bool().unwrap_or(true))
         .map(|line| {
             line["observed_podman_version"]
                 .as_str()

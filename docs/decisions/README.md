@@ -18,3 +18,4 @@ do not let code silently change it.
 | [0011: Native field coverage is an explicit, strict ledger](0011-native-field-coverage-ledger.md)                          | Accepted |
 | [0012: Bounded runtime intent before rendering](0012-bounded-runtime-intent-before-rendering.md)                           | Accepted |
 | [0013: Typed native observations preserve state and provenance](0013-typed-native-observations.md)                         | Accepted |
+| [0014: Finite input-only Podman anchors remain separate from output targets](0014-finite-input-only-podman-anchors.md)     | Accepted |

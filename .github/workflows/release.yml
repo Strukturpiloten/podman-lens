@@ -158,10 +158,10 @@ jobs:
           esac
       - name: Check public API compatibility
         if: steps.baseline.outputs.published == 'true'
-        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
-        with:
-          package: podman-lens
-          feature-group: all-features
+        shell: bash
+        run: |
+          cargo install --locked --version 0.50.0 cargo-semver-checks
+          bash scripts/check-public-api.sh
 
   publish:
     name: Publish PodmanLens

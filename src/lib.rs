@@ -116,7 +116,7 @@ pub use diagnostic::{Diagnostic, DiagnosticCode, PodmanLensResult};
 pub use discovery::{
     DependencyEvidence, DiscoveryExplanation, DiscoveryExplanationKind, DiscoveryFinding, DiscoveryRequest,
     DiscoveryRootOrigin, GroupingEdge, GroupingEvidence, LabelSelector, ResourceDependency, ResourceGraph,
-    ResourceGroup, ResourceSelector, discover,
+    ResourceGroup, ResourceSelector, ResourceSelectorMatch, discover,
 };
 pub use evidence::{CapabilityCatalogueEntry, EvidenceReference, capability_catalogue};
 pub use inventory::{

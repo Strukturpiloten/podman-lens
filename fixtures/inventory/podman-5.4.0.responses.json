@@ -63,7 +63,7 @@
           "Secrets": [{ "ID": "secret-1", "Name": "db-password" }],
           "FutureConfig": true
         },
-        "HostConfig": { "MemorySwappiness": null },
+        "HostConfig": { "MemorySwappiness": -1 },
         "FutureField": 42
       }
     },

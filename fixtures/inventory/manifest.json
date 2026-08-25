@@ -10,7 +10,7 @@
       "commit": "f9f7d48b24b1ca4403f189caaeab1cb8ff4a9aa2",
       "source_url": "https://docs.podman.io/en/v5.4.0/_static/api.html",
       "artifact": "podman-5.4.0.responses.json",
-      "sha256": "096bc72f41b327a97cbf44bb9a7b805ec7e87a1be9baccd51d0d1cb4ed7ced79"
+      "sha256": "61d6b77b0f3b9e7783deb5a87e5b1ac79724bc13f080f0c6c4631fb02fea5647"
     },
     {
       "engine_version": "6.1.0",

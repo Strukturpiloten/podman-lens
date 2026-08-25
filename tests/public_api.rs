@@ -403,7 +403,7 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
-    assert_eq!(entries.len(), 192);
+    assert_eq!(entries.len(), 193);
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0142"
             && entry.plane() == NativeFieldCoveragePlane::InputObservation

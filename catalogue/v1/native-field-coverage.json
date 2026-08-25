@@ -191,8 +191,8 @@
       "target_versions": [],
       "public_contract": "ContainerObservation::memory_swappiness",
       "finding": "PLN0022",
-      "positive_test": "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values",
-      "negative_test": "tests::inventory::memory_swappiness_distinguishes_reviewed_null_boundary_and_invalid_values"
+      "positive_test": "tests::inventory::memory_swappiness_normalizes_system_default_and_rejects_invalid_values",
+      "negative_test": "tests::inventory::memory_swappiness_normalizes_system_default_and_rejects_invalid_values"
     },
     {
       "id": "PLN-FLD-0013",
@@ -2273,6 +2273,22 @@
       "finding": "PLN0017",
       "positive_test": "tests::inventory::native_image_volume_and_secret_metadata_are_typed_and_redacted",
       "negative_test": "tests::inventory::native_image_volume_and_secret_metadata_malformed_fields_fail_closed"
+    },
+    {
+      "id": "PLN-FLD-0145",
+      "plane": "input-observation",
+      "resource_kind": "container",
+      "field_path": "$.NetworkSettings.Networks",
+      "classification": "observation-only",
+      "observation": "inventory::decode_container_networks",
+      "planner": "not_applicable",
+      "cli_renderer": "not_applicable",
+      "libpod_renderer": "not_applicable",
+      "target_versions": [],
+      "public_contract": "NativeNetworkingObservation::networks",
+      "finding": "PLN0017",
+      "positive_test": "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps",
+      "negative_test": "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps"
     },
     {
       "id": "PLN-OUT-0001",

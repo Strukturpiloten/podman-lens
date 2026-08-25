@@ -124,7 +124,7 @@
       "commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
       "source_url": "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
       "artifact": "boxferry-adapter-6.1.expected.json",
-      "sha256": "0ff6701b1721c569011b510bed4fdc27253c81cb480e1e82910f5d1da2771c89",
+      "sha256": "3fe121798e19c41cc7c287fd2d3e582522dd56f22bd0a4db5704f9917837e076",
       "synthetic": true,
       "coverage": [
         "public-only downstream adapter",

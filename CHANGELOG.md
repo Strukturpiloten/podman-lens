@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.0...v0.2.1) - 2026-08-25
+
 ### Fixed
 
 - Normalize the valid `HostConfig.MemorySwappiness=-1` Podman inspect sentinel as absent

@@ -110,7 +110,10 @@ jobs:
     name: Repository files and documentation
     runs-on: ubuntu-24.04
     steps:
-      - *checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # renovate: datasource=node-version depName=node
@@ -122,6 +125,7 @@ jobs:
           printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
       - run: sudo bash scripts/install-file-tools.sh /usr/local/bin
       - run: bash scripts/check-files.sh --check
+      - run: bash scripts/check-release-metadata.sh
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: --config lychee.toml --root-dir '${{ github.workspace }}' --offline './**/*.md'

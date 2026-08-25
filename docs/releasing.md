@@ -12,6 +12,11 @@ proposal. Documentation, tests, CI, build tooling, formatting, and other mainten
 Use a breaking `!` only for an intentional public break that follows
 [the API stability policy](api-stability.md).
 
+Record user-visible changes in the single `Unreleased` section. Ordinary product pull requests
+must not create a future numbered section, set its date, or bump the crate version. release-plz
+owns those three operations so generated commit notes and reviewed notes become one release
+section instead of duplicate `Added`, `Changed`, or `Fixed` headings.
+
 The API check reads all Conventional Commits since the latest release tag. A `!` subject marker or
 `BREAKING CHANGE:` footer authorizes a break in the next pre-1.0 minor release. The wrapper passes
 cargo-semver-checks its `major` category because that is the tool's name for an API break; this does
@@ -22,6 +27,8 @@ not change PodmanLens's pre-1.0 versioning policy.
 Before merging the generated `release-plz-*` pull request, verify that:
 
 - the proposed version matches the change type;
+- the newest numbered changelog section matches the crate version;
+- `Unreleased` is empty when the proposed crate version is newer than the latest release tag;
 - `CHANGELOG.md` contains a usable release section for that exact version;
 - breaking changes include migration guidance;
 - the package and compatibility checks pass; and

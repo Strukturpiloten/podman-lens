@@ -203,6 +203,90 @@ async fn every_pinned_fixture_decodes_with_the_fixed_two_get_requests() -> Resul
 }
 
 #[tokio::test]
+async fn reviewed_rhel_vendor_spelling_reaches_the_ubi_8_input_anchor() -> Result<(), Box<dyn std::error::Error>> {
+    let transport = RecordingTransport::new(vec![
+        ping("4.9.4-rhel")?,
+        version(br#"{"Components":[{"Name":"Podman Engine","Version":"4.9.4-rhel"}]}"#)?,
+    ]);
+
+    let observation = probe_libpod_service(&transport).await?;
+
+    assert_eq!(observation.engine_version().original(), "4.9.4-rhel");
+    assert_eq!(observation.engine_version().as_semver().to_string(), "4.9.4");
+    assert_eq!(observation.api_version().original(), "4.9.4-rhel");
+    assert_eq!(observation.api_version().as_semver().to_string(), "4.9.4");
+    assert!(!observation.input_capability().output_supported());
+    assert!(observation.output_target_profile().is_none());
+    assert_fixed_request_sequence(&transport)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn unreviewed_vendor_prerelease_spelling_remains_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    let transport = RecordingTransport::new(vec![ping("4.9.4-vendor")?]);
+
+    let error = probe_libpod_service(&transport)
+        .await
+        .err()
+        .ok_or_else(|| std::io::Error::other("unreviewed vendor spelling unexpectedly passed"))?;
+
+    assert_eq!(error.code(), DiagnosticCode::ProbeHeader);
+    assert_eq!(transport.requests()?.len(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn unreviewed_build_metadata_cannot_select_a_legacy_anchor() -> Result<(), Box<dyn std::error::Error>> {
+    let transport = RecordingTransport::new(vec![
+        ping("4.9.4")?,
+        version(br#"{"Components":[{"Name":"Podman Engine","Version":"4.9.4+vendor"}]}"#)?,
+    ]);
+
+    let error = probe_libpod_service(&transport)
+        .await
+        .err()
+        .ok_or_else(|| std::io::Error::other("unreviewed build metadata unexpectedly passed"))?;
+
+    assert_eq!(error.code(), DiagnosticCode::ObservedCompatibility);
+    assert_fixed_request_sequence(&transport)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn reviewed_rhel_spelling_requires_the_matching_rhel_api_version() -> Result<(), Box<dyn std::error::Error>> {
+    let transport = RecordingTransport::new(vec![
+        ping("4.9.4")?,
+        version(br#"{"Components":[{"Name":"Podman Engine","Version":"4.9.4-rhel"}]}"#)?,
+    ]);
+
+    let error = probe_libpod_service(&transport)
+        .await
+        .err()
+        .ok_or_else(|| std::io::Error::other("mixed RHEL/canonical version pair unexpectedly passed"))?;
+
+    assert_eq!(error.code(), DiagnosticCode::ObservedCompatibility);
+    assert_fixed_request_sequence(&transport)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn reviewed_rhel_spelling_requires_the_matching_rhel_engine_version() -> Result<(), Box<dyn std::error::Error>> {
+    let transport = RecordingTransport::new(vec![
+        ping("4.9.4-rhel")?,
+        version(br#"{"Components":[{"Name":"Podman Engine","Version":"4.9.4"}]}"#)?,
+    ]);
+
+    let error = probe_libpod_service(&transport)
+        .await
+        .err()
+        .ok_or_else(|| std::io::Error::other("mixed canonical/RHEL version pair unexpectedly passed"))?;
+
+    assert_eq!(error.code(), DiagnosticCode::ObservedCompatibility);
+    assert_fixed_request_sequence(&transport)?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn probe_rejects_invalid_ping_responses_without_requesting_version() -> Result<(), Box<dyn std::error::Error>> {
     let cases = vec![
         (

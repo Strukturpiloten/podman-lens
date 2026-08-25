@@ -6,6 +6,15 @@ use serde::Deserialize;
 use crate::{Diagnostic, DiagnosticCode, PodmanLensResult};
 
 const CATALOGUE_JSON: &str = include_str!("../catalogue/v1/podman-capabilities.json");
+const REVIEWED_RHEL_ALIAS: (&str, &str, &str, &str, &str, &str, &str) = (
+    "4.9.4-rhel",
+    "4.9.4-rhel",
+    "ghcr.io/strukturpiloten/podman-ubi-8-rootful:v1.0.0@sha256:51dc92fd2165112131a3f070021f7fe382f3fcd541a4f39f7e01fdb8326483fc",
+    "4.9.4-34.module+el8.10.0+24510+6ea3880e.x86_64",
+    "https://github.com/Strukturpiloten/containers/tree/f0259a080e8a49be43358fc00c4cac89528d4954/images/podman/podman-ubi-8-rootful",
+    "f0259a080e8a49be43358fc00c4cac89528d4954",
+    "v1.0.0",
+);
 const LEGACY_INPUT_ANCHORS: [(&str, &str, &str, &str, &str, &str); 5] = [
     (
         "3.0.1",
@@ -88,6 +97,18 @@ pub struct CapabilityCatalogueEntry {
     observed_libpod_api_version: String,
     #[serde(default = "default_output_supported")]
     output_supported: bool,
+    #[serde(default)]
+    reported_version_aliases: Vec<ReportedVersionAlias>,
+    evidence: EvidenceReference,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+struct ReportedVersionAlias {
+    podman_version: String,
+    libpod_api_version: String,
+    image: String,
+    package_revision: String,
+    root_mode: String,
     evidence: EvidenceReference,
 }
 
@@ -137,6 +158,22 @@ impl CapabilityCatalogueEntry {
         self.output_supported
     }
 
+    pub(crate) fn matches_reported_podman_version(&self, value: &str) -> bool {
+        value == self.observed_podman_version
+            || self
+                .reported_version_aliases
+                .iter()
+                .any(|alias| alias.podman_version == value)
+    }
+
+    pub(crate) fn matches_reported_version_pair(&self, podman: &str, api: &str) -> bool {
+        (podman == self.observed_podman_version && api == self.observed_libpod_api_version)
+            || self
+                .reported_version_aliases
+                .iter()
+                .any(|alias| alias.podman_version == podman && alias.libpod_api_version == api)
+    }
+
     /// Returns the immutable source evidence.
     #[must_use]
     pub fn evidence(&self) -> &EvidenceReference {
@@ -164,6 +201,20 @@ struct Catalogue {
 /// Returns `PLN0006` when the published catalogue fails its schema validation.
 pub fn capability_catalogue() -> PodmanLensResult<Vec<CapabilityCatalogueEntry>> {
     parse_catalogue(CATALOGUE_JSON)
+}
+
+pub(crate) fn normalized_reported_version(value: &str) -> PodmanLensResult<Option<String>> {
+    for entry in capability_catalogue()? {
+        for alias in entry.reported_version_aliases {
+            if alias.podman_version == value {
+                return Ok(Some(entry.observed_podman_version));
+            }
+            if alias.libpod_api_version == value {
+                return Ok(Some(entry.observed_libpod_api_version));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn parse_catalogue(source: &str) -> PodmanLensResult<Vec<CapabilityCatalogueEntry>> {
@@ -202,6 +253,11 @@ fn valid_legacy_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
             return false;
         };
         let expected_source = format!("https://github.com/containers/podman/blob/{revision}/{source_path}");
+        let aliases_are_valid = if entry.observed_podman_version == "4.9.4" {
+            valid_rhel_aliases(&entry.reported_version_aliases)
+        } else {
+            entry.reported_version_aliases.is_empty()
+        };
         if entry.minimum_podman_version != minimum
             || entry.maximum_exclusive_podman_version != maximum
             || entry.minimum_libpod_api_version != minimum_api
@@ -215,6 +271,7 @@ fn valid_legacy_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
             || entry.podman_minor_line != format!("{}.{}", parsed_minimum.major, parsed_minimum.minor)
             || entry.evidence.release_tag != format!("v{observed_engine}")
             || !is_lowercase_sha40(&entry.evidence.revision)
+            || !aliases_are_valid
         {
             return false;
         }
@@ -223,9 +280,28 @@ fn valid_legacy_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
     true
 }
 
+fn valid_rhel_aliases(aliases: &[ReportedVersionAlias]) -> bool {
+    let [alias] = aliases else {
+        return false;
+    };
+    let (podman, api, image, package, source, revision, release_tag) = REVIEWED_RHEL_ALIAS;
+    alias.podman_version == podman
+        && alias.libpod_api_version == api
+        && alias.image == image
+        && alias.package_revision == package
+        && alias.root_mode == "rootful"
+        && alias.evidence.source == source
+        && alias.evidence.revision == revision
+        && alias.evidence.release_tag == release_tag
+        && is_lowercase_sha40(&alias.evidence.revision)
+}
+
 fn valid_output_catalogue(entries: &[CapabilityCatalogueEntry]) -> bool {
     let mut expected_minimum = Version::new(5, 4, 0);
     for entry in entries.iter().filter(|entry| entry.output_supported) {
+        if !entry.reported_version_aliases.is_empty() {
+            return false;
+        }
         let Some((minimum, maximum_exclusive, minimum_api, observed_engine, observed_api)) = parsed_versions(entry)
         else {
             return false;
@@ -350,6 +426,15 @@ mod tests {
 
         let mut catalogue = decoded_catalogue()?;
         catalogue.reviewed_lines[1].observed_libpod_api_version = "3.1.0".to_owned();
+        assert!(!valid_catalogue(&catalogue.reviewed_lines));
+
+        let mut catalogue = decoded_catalogue()?;
+        catalogue.reviewed_lines[4].reported_version_aliases[0].image =
+            "ghcr.io/strukturpiloten/podman-ubi-8-rootful:mutable".to_owned();
+        assert!(!valid_catalogue(&catalogue.reviewed_lines));
+
+        let mut catalogue = decoded_catalogue()?;
+        catalogue.reviewed_lines[4].reported_version_aliases[0].podman_version = "4.9.4-vendor".to_owned();
         assert!(!valid_catalogue(&catalogue.reviewed_lines));
         Ok(())
     }

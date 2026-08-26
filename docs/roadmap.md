@@ -15,6 +15,9 @@ non-executing CLI and Libpod renderings for the reviewed Podman 5.4 through 6.1 
 - [x] Complex offline coverage for every reviewed version in simulated rootless and rootful contexts
 - [x] Public task guides and external-consumer examples
 - [x] Finite legacy input-only anchors separate from reviewed output targets
+- [x] Digest-pinned live conformance delegated to BoxFerry, covering 48 rootful and rootless
+      container cells, every reviewed Podman 5.4 through 6.1 line, and the published distribution
+      anchors through PodmanLens's production read-only transport
 
 Completed implementation detail lives in the changelog, accepted decisions, catalogues, tests, and
 Git history.
@@ -23,12 +26,10 @@ Git history.
 
 - [ ] Add one bounded native output field family at a time, with planner, CLI, Libpod, diagnostics,
       catalogue evidence, and positive and negative target tests in the same change.
-- [ ] Add a manually dispatched live rootless/rootful version matrix when every reviewed Podman
-      environment can be reproduced without skipped cells. This remains tracked by
-      [GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3).
 - [ ] Review new Podman releases explicitly before extending the supported target range.
-- [ ] Record rootful and rootless live conformance for every published input-only distribution
-      anchor before expanding the finite source catalogue.
+
+BoxFerry is the primary downstream live-conformance owner. Any future source-catalogue expansion
+must add its digest-pinned rootful and rootless cells there before PodmanLens claims compatibility.
 
 ## Deferred
 

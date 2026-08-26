@@ -2428,6 +2428,7 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
 
     let mut responses = fixture_responses("6.1.0")?;
     let ids = (0..17).map(|index| format!("container-{index:02}")).collect::<Vec<_>>();
+    responses[13] = json(r#"{"Id":"sha256:abc","RepoTags":["image:latest"],"LaterKindEvidence":true}"#)?;
     responses[2] = json(serde_json::to_vec(
         &ids.iter().map(|id| serde_json::json!({"Id": id})).collect::<Vec<_>>(),
     )?)?;
@@ -2446,12 +2447,29 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
         .section(ResourceKind::Container)
         .expect("containers")
         .observations();
-    assert_eq!(
-        records
+    let retained_container_fields = records
+        .iter()
+        .map(|record| record.unknown_fields().len())
+        .sum::<usize>();
+    assert!(retained_container_fields < podman_lens::MAX_UNKNOWN_FIELDS_PER_INVENTORY);
+    assert!(!records[0].unknown_fields().is_empty());
+    assert!(records.iter().any(|record| record.unknown_fields().is_empty()));
+    let image = &inventory
+        .section(ResourceKind::Image)
+        .ok_or("image section")?
+        .observations()[0];
+    assert!(
+        image
+            .unknown_fields()
             .iter()
+            .any(|field| field.path() == "$.LaterKindEvidence")
+    );
+    assert!(
+        inventory
+            .observations()
             .map(|record| record.unknown_fields().len())
-            .sum::<usize>(),
-        podman_lens::MAX_UNKNOWN_FIELDS_PER_INVENTORY
+            .sum::<usize>()
+            <= podman_lens::MAX_UNKNOWN_FIELDS_PER_INVENTORY
     );
     assert!(records.iter().any(|record| {
         record
@@ -2460,6 +2478,123 @@ async fn unknown_fields_are_bounded_per_record_and_across_the_inventory() -> Res
             .any(|finding| finding.code() == DiagnosticCode::UnknownFieldOverflow)
     }));
     assert!(records.iter().any(|record| !record.unknown_fields_complete()));
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One synthetic response proves every closed runtime-only family together.
+async fn known_runtime_projection_fields_do_not_consume_unmodelled_retention() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "AppArmorProfile":"runtime-default","Args":["serve"],"BoundingCaps":["CAP_CHOWN"],
+          "ConmonPidFile":"/runtime/conmon.pid","Created":"synthetic-time","Driver":"overlay",
+          "EffectiveCaps":["CAP_CHOWN"],"ExecIDs":["runtime-exec"],"ExitCommand":["cleanup"],
+          "GraphDriver":{"Name":"overlay"},"HostnamePath":"/runtime/hostname","HostsPath":"/runtime/hosts",
+          "LockNumber":7,"MountLabel":"runtime-label","Namespace":"runtime-namespace",
+          "OCIConfigPath":"/runtime/config.json","OCIRuntime":"crun","Path":"/usr/bin/serve",
+          "PidFile":"/runtime/pid","ProcessLabel":"runtime-process-label","ResolvConfPath":"/runtime/resolv.conf",
+          "RestartCount":2,"Rootfs":"/runtime/rootfs","SizeRootFs":10,"SizeRw":2,
+          "State":{"Status":"running"},"StaticDir":"/runtime/static",
+          "Config":{"Annotations":{"example.invalid/intent":"retained-as-unmodelled"}}
+        }"#,
+    )?;
+    responses[11] = json(
+        r#"{"id":"network-1","name":"app","containers":{"runtime":{}},"created":"synthetic-time","driver":"bridge"}"#,
+    )?;
+    responses[12] = json(
+        r#"{"Name":"database-data","LockNumber":3,"MountCount":2,"Mountpoint":"/runtime/volume","NeedsChown":false,"NeedsCopyUp":false,"Scope":"local","Options":{"device":"synthetic"}}"#,
+    )?;
+    responses[13] = json(
+        r#"{"Id":"sha256:abc","GraphDriver":{"Name":"overlay"},"History":[],"NamesHistory":[],"Parent":"sha256:parent","RootFS":{"Type":"layers"},"Size":10,"VirtualSize":10,"Version":"synthetic-builder","Comment":"retained-as-unmodelled"}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section")?
+        .observations()[0];
+    assert!(observation.unknown_fields().iter().all(|field| !matches!(
+        field.path(),
+        "$.AppArmorProfile"
+            | "$.Args"
+            | "$.BoundingCaps"
+            | "$.ConmonPidFile"
+            | "$.Created"
+            | "$.Driver"
+            | "$.EffectiveCaps"
+            | "$.ExecIDs"
+            | "$.ExitCommand"
+            | "$.GraphDriver"
+            | "$.HostnamePath"
+            | "$.HostsPath"
+            | "$.LockNumber"
+            | "$.MountLabel"
+            | "$.Namespace"
+            | "$.OCIConfigPath"
+            | "$.OCIRuntime"
+            | "$.Path"
+            | "$.PidFile"
+            | "$.ProcessLabel"
+            | "$.ResolvConfPath"
+            | "$.RestartCount"
+            | "$.Rootfs"
+            | "$.SizeRootFs"
+            | "$.SizeRw"
+            | "$.State"
+            | "$.StaticDir"
+    )));
+    assert!(
+        observation
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path() == "$.Config.Annotations")
+    );
+    let debug = format!("{observation:?}");
+    for runtime_value in ["/runtime/conmon.pid", "runtime-exec", "/runtime/rootfs"] {
+        assert!(!debug.contains(runtime_value));
+    }
+    let network = &inventory
+        .section(ResourceKind::Network)
+        .ok_or("network section")?
+        .observations()[0];
+    assert!(
+        network
+            .unknown_fields()
+            .iter()
+            .all(|field| { !matches!(field.path(), "$.containers" | "$.created") })
+    );
+    assert!(network.unknown_fields().iter().any(|field| field.path() == "$.driver"));
+    let volume = &inventory
+        .section(ResourceKind::Volume)
+        .ok_or("volume section")?
+        .observations()[0];
+    assert!(volume.unknown_fields().iter().all(|field| {
+        !matches!(
+            field.path(),
+            "$.LockNumber" | "$.MountCount" | "$.Mountpoint" | "$.NeedsChown" | "$.NeedsCopyUp" | "$.Scope"
+        )
+    }));
+    assert!(volume.unknown_fields().iter().any(|field| field.path() == "$.Options"));
+    let image = &inventory
+        .section(ResourceKind::Image)
+        .ok_or("image section")?
+        .observations()[0];
+    assert!(image.unknown_fields().iter().all(|field| {
+        !matches!(
+            field.path(),
+            "$.GraphDriver"
+                | "$.History"
+                | "$.NamesHistory"
+                | "$.Parent"
+                | "$.RootFS"
+                | "$.Size"
+                | "$.VirtualSize"
+                | "$.Version"
+        )
+    }));
+    assert!(image.unknown_fields().iter().any(|field| field.path() == "$.Comment"));
     Ok(())
 }
 
@@ -2898,6 +3033,105 @@ async fn container_core_mount_and_secret_observations_are_typed_and_redacted() -
     );
     assert!(!format!("{container:?}").contains("db-password"));
     assert!(!format!("{container:?}").contains("/srv/application"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn mount_selinux_relabel_is_typed_without_retaining_native_bind_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "HostConfig":{"Binds":["/synthetic/fallback:/fallback:ro,z"]},
+          "Mounts":[
+            {"Type":"volume","Name":"data","Source":"/synthetic/volume-data","Destination":"/data","RW":false,"Mode":"ro,z,rprivate","Propagation":"rprivate"},
+            {"Type":"bind","Source":"/synthetic/private","Destination":"/private","RW":true,"Mode":"rw,Z"},
+            {"Type":"bind","Source":"/synthetic/fallback","Destination":"/fallback","RW":false}
+          ]
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("container section")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("container observation expected".into());
+    };
+    let mounts = container.mounts().observed().ok_or("mounts")?.value();
+    assert_eq!(
+        mounts[0].selinux_relabel().observed().map(|value| *value.value()),
+        Some(podman_lens::ContainerMountSelinuxRelabel::Shared)
+    );
+    assert_eq!(
+        mounts[1].selinux_relabel().observed().map(|value| *value.value()),
+        Some(podman_lens::ContainerMountSelinuxRelabel::Private)
+    );
+    assert_eq!(
+        mounts[2].selinux_relabel().observed().map(|value| *value.value()),
+        Some(podman_lens::ContainerMountSelinuxRelabel::Shared)
+    );
+    assert!(mounts.iter().all(|mount| {
+        mount
+            .selinux_relabel()
+            .observed()
+            .map(podman_lens::ObservedValue::origin)
+            == Some(ObservationOrigin::Configured)
+    }));
+    assert!(
+        !observation
+            .unknown_fields()
+            .iter()
+            .any(|field| field.path().ends_with(".Mode"))
+    );
+    let debug = format!("{observation:?}");
+    for private_value in [
+        "/synthetic/volume-data",
+        "/synthetic/private",
+        "/synthetic/fallback",
+        "/data",
+        "/private",
+        "/fallback",
+    ] {
+        assert!(!debug.contains(private_value));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn conflicting_or_malformed_selinux_relabel_evidence_fails_the_mount_family_closed()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            r#"{"Id":"container-a","Name":"a","Mounts":[{"Type":"bind","Source":"/source","Destination":"/target","Mode":false}]}"#,
+            "$.Mounts[0].Mode",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","Mounts":[{"Type":"bind","Source":"/source","Destination":"/target","Mode":"z,Z"}]}"#,
+            "$.Mounts[0].Mode",
+        ),
+        (
+            r#"{"Id":"container-a","Name":"a","HostConfig":{"Binds":["/source:/target:Z"]},"Mounts":[{"Type":"bind","Source":"/source","Destination":"/target","Mode":"z"}]}"#,
+            "$.Mounts[0].Mode",
+        ),
+    ];
+    for (body, expected_path) in cases {
+        let mut responses = fixture_responses("6.1.0")?;
+        responses[8] = json(body)?;
+        let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+        let observation = &inventory
+            .section(ResourceKind::Container)
+            .ok_or("container section")?
+            .observations()[0];
+        let ResourceDetails::Container(container) = observation.details() else {
+            return Err("container observation expected".into());
+        };
+        assert!(matches!(container.mounts(), ObservationField::Malformed));
+        assert!(observation.findings().iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some(expected_path)
+        }));
+    }
     Ok(())
 }
 

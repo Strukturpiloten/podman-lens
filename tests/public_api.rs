@@ -122,7 +122,18 @@ fn consume_typed_observation(source: &ResourceObservation) {
             .native_dependencies()
             .observed()
             .map(|value| value.value().len());
-        let _ = container.mounts().observed().map(|value| value.value().len());
+        let _ = container.mounts().observed().map(|value| {
+            value
+                .value()
+                .iter()
+                .map(|mount| {
+                    mount
+                        .selinux_relabel()
+                        .observed()
+                        .map(podman_lens::ObservedValue::value)
+                })
+                .collect::<Vec<_>>()
+        });
         let _ = container.secret_grants().observed().map(|value| {
             value
                 .value()
@@ -403,7 +414,7 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
-    assert_eq!(entries.len(), 193);
+    assert_eq!(entries.len(), 238);
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0142"
             && entry.plane() == NativeFieldCoveragePlane::InputObservation

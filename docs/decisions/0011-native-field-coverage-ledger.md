@@ -30,9 +30,18 @@ typed metadata object. Its option names and values are discarded immediately; on
 provenance, and count survive. Secret payload material remains a manual, redacted boundary and is
 never retained.
 
+One narrow exception is a closed ledger classification, `runtime-only-discarded`. It covers only
+named process, storage, and effective-state projections that duplicate typed evidence or have no
+authored deployment meaning. Those members are discarded without a `PLN0023` occurrence and do
+not consume retention. Configured members are not admitted to that set merely because no current
+neutral mapping exists.
+
 Unknown metadata remains bounded. `ObservationHeader::unmodelled_completeness()` is incomplete for
 an unavailable or malformed inspection or whenever `PLN0021` reports overflow. Consumers must not
-mistake the retained slice for complete native configuration in either case.
+mistake the retained slice for complete native configuration in either case. While decoding one
+resource kind, the inventory-wide budget reserves one descriptor for every later non-empty kind.
+Unused reservations carry forward. This preserves the ordinary per-resource ceiling and prevents
+early containers from starving every later resource kind of path evidence.
 
 ## Consequences
 
@@ -61,3 +70,5 @@ mistake the retained slice for complete native configuration in either case.
   line records
   immutable B4 evidence with mutually exclusive exact, target-gated, manual, and blocked sets.
 - The bounded unknown-field policy stays explicit without retaining raw values or secret material.
+- Mount `Mode` has a typed SELinux relabel subset. A correlated `HostConfig.Binds` entry contributes
+  only the closed `z`/`Z` choice; the raw bind specification remains outside the retained model.

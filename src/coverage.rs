@@ -21,6 +21,8 @@ pub enum NativeFieldCoverageClassification {
     ObservationOnly,
     /// Retained metadata is deliberately bounded and therefore not exhaustive.
     UnknownIncomplete,
+    /// A closed, reviewed runtime projection is deliberately discarded.
+    RuntimeOnlyDiscarded,
 }
 
 /// The contract plane represented by one strict coverage-ledger row.
@@ -42,6 +44,7 @@ impl NativeFieldCoverageClassification {
             Self::Manual => "manual",
             Self::ObservationOnly => "observation-only",
             Self::UnknownIncomplete => "unknown-incomplete",
+            Self::RuntimeOnlyDiscarded => "runtime-only-discarded",
         }
     }
 }
@@ -92,6 +95,24 @@ macro_rules! b4_input {
             "PLN0017",
             "tests::inventory::native_image_volume_and_secret_metadata_are_typed_and_redacted",
             "tests::inventory::native_image_volume_and_secret_metadata_malformed_fields_fail_closed"
+        )
+    };
+}
+
+macro_rules! runtime_only_input {
+    ($id:literal, $resource_kind:literal, $native_path:literal) => {
+        expected!(
+            $id,
+            $resource_kind,
+            $native_path,
+            "runtime-only-discarded",
+            "inventory::is_known_runtime_only_field",
+            "not_applicable",
+            "not_applicable",
+            "ObservationHeader::unmodelled_fields",
+            "PLN0017",
+            "tests::inventory::known_runtime_projection_fields_do_not_consume_unmodelled_retention",
+            "tests::inventory::known_runtime_projection_fields_do_not_consume_unmodelled_retention"
         )
     };
 }
@@ -1872,6 +1893,75 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps",
         "tests::inventory::unpodded_network_settings_preserve_effective_attachment_names_and_reject_malformed_maps"
     ),
+    expected!(
+        "PLN-FLD-0146",
+        "container",
+        "$.Mounts.Mode",
+        "observation-only",
+        "inventory::decode_mount_selinux_relabel",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::selinux_relabel",
+        "PLN0017",
+        "tests::inventory::mount_selinux_relabel_is_typed_without_retaining_native_bind_values",
+        "tests::inventory::conflicting_or_malformed_selinux_relabel_evidence_fails_the_mount_family_closed"
+    ),
+    expected!(
+        "PLN-FLD-0147",
+        "container",
+        "$.HostConfig.Binds[*].<SELinuxRelabel>",
+        "observation-only",
+        "inventory::decode_native_bind_selinux_relabels",
+        "not_applicable",
+        "not_applicable",
+        "ContainerMountObservation::selinux_relabel",
+        "PLN0017",
+        "tests::inventory::mount_selinux_relabel_is_typed_without_retaining_native_bind_values",
+        "tests::inventory::conflicting_or_malformed_selinux_relabel_evidence_fails_the_mount_family_closed"
+    ),
+    runtime_only_input!("PLN-FLD-0148", "container", "$.AppArmorProfile"),
+    runtime_only_input!("PLN-FLD-0149", "container", "$.Args"),
+    runtime_only_input!("PLN-FLD-0150", "container", "$.BoundingCaps"),
+    runtime_only_input!("PLN-FLD-0151", "container", "$.ConmonPidFile"),
+    runtime_only_input!("PLN-FLD-0152", "container", "$.Created"),
+    runtime_only_input!("PLN-FLD-0153", "container", "$.Driver"),
+    runtime_only_input!("PLN-FLD-0154", "container", "$.EffectiveCaps"),
+    runtime_only_input!("PLN-FLD-0155", "container", "$.ExecIDs"),
+    runtime_only_input!("PLN-FLD-0156", "container", "$.ExitCommand"),
+    runtime_only_input!("PLN-FLD-0157", "container", "$.GraphDriver"),
+    runtime_only_input!("PLN-FLD-0158", "container", "$.HostnamePath"),
+    runtime_only_input!("PLN-FLD-0159", "container", "$.HostsPath"),
+    runtime_only_input!("PLN-FLD-0160", "container", "$.LockNumber"),
+    runtime_only_input!("PLN-FLD-0161", "container", "$.MountLabel"),
+    runtime_only_input!("PLN-FLD-0162", "container", "$.Namespace"),
+    runtime_only_input!("PLN-FLD-0163", "container", "$.OCIConfigPath"),
+    runtime_only_input!("PLN-FLD-0164", "container", "$.OCIRuntime"),
+    runtime_only_input!("PLN-FLD-0165", "container", "$.Path"),
+    runtime_only_input!("PLN-FLD-0166", "container", "$.PidFile"),
+    runtime_only_input!("PLN-FLD-0167", "container", "$.ProcessLabel"),
+    runtime_only_input!("PLN-FLD-0168", "container", "$.ResolvConfPath"),
+    runtime_only_input!("PLN-FLD-0169", "container", "$.RestartCount"),
+    runtime_only_input!("PLN-FLD-0170", "container", "$.Rootfs"),
+    runtime_only_input!("PLN-FLD-0171", "container", "$.SizeRootFs"),
+    runtime_only_input!("PLN-FLD-0172", "container", "$.SizeRw"),
+    runtime_only_input!("PLN-FLD-0173", "container", "$.State"),
+    runtime_only_input!("PLN-FLD-0174", "container", "$.StaticDir"),
+    runtime_only_input!("PLN-FLD-0175", "image", "$.GraphDriver"),
+    runtime_only_input!("PLN-FLD-0176", "image", "$.History"),
+    runtime_only_input!("PLN-FLD-0177", "image", "$.NamesHistory"),
+    runtime_only_input!("PLN-FLD-0178", "image", "$.Parent"),
+    runtime_only_input!("PLN-FLD-0179", "image", "$.RootFS"),
+    runtime_only_input!("PLN-FLD-0180", "image", "$.Size"),
+    runtime_only_input!("PLN-FLD-0181", "image", "$.VirtualSize"),
+    runtime_only_input!("PLN-FLD-0182", "image", "$.Version"),
+    runtime_only_input!("PLN-FLD-0183", "volume", "$.LockNumber"),
+    runtime_only_input!("PLN-FLD-0184", "volume", "$.MountCount"),
+    runtime_only_input!("PLN-FLD-0185", "volume", "$.Mountpoint"),
+    runtime_only_input!("PLN-FLD-0186", "volume", "$.NeedsChown"),
+    runtime_only_input!("PLN-FLD-0187", "volume", "$.NeedsCopyUp"),
+    runtime_only_input!("PLN-FLD-0188", "volume", "$.Scope"),
+    runtime_only_input!("PLN-FLD-0189", "network", "$.containers"),
+    runtime_only_input!("PLN-FLD-0190", "network", "$.created"),
 ];
 
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];

@@ -130,12 +130,12 @@ pub use networking::{
 };
 pub use observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
-    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
-    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation, Labels,
-    NativeCapability, NativeHealthCheckObservation, NativeHealthCommand, NativeHealthFailureAction,
-    NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode, NativeNamespaceObservation,
-    NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation, NativeNetworkRouteType,
-    NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
+    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSelinuxRelabel,
+    ContainerMountSource, ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference,
+    ImageObservation, Labels, NativeCapability, NativeHealthCheckObservation, NativeHealthCommand,
+    NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode,
+    NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
+    NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
     NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeResourceControlObservation,
     NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation, NativeSecretDriverObservation,
     NativeSecretDriverOptions, NativeSecurityObservation, NativeStartupHealthCheckObservation, NativeTimestamp,

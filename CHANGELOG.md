@@ -5,6 +5,12 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Changed
+
+- Delegate live rootful and rootless version/distribution conformance to BoxFerry's shared
+  digest-pinned container harness after its 48-cell matrix passed through PodmanLens's production
+  read-only acquisition path ([#3](https://github.com/Strukturpiloten/podman-lens/issues/3)).
+
 ## [0.2.1](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.0...v0.2.1) - 2026-08-25
 
 ### Fixed

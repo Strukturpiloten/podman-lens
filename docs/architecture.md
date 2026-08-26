@@ -73,7 +73,15 @@ or locally resolved. Downstream policy must inspect both state and origin before
 state.
 
 Private Libpod response types do not cross the public API. Unsupported input is retained as
-bounded semantic metadata without retaining arbitrary raw JSON.
+bounded semantic metadata without retaining arbitrary raw JSON. The inventory-wide bound is
+allocated fairly across listed resources so an early resource kind cannot consume every retained
+path descriptor. Closed runtime projections that duplicate typed or host-local state are recorded
+in the strict coverage ledger and discarded instead of being reported as unknown authored intent.
+
+Container mount decoding retains a case-sensitive SELinux `z` or `Z` choice as a typed configured
+observation. It reads the normalized `Mounts[].Mode` evidence first and may correlate the same
+closed choice from `HostConfig.Binds`; raw bind strings, host paths, and other creation arguments do
+not cross the decoder boundary.
 
 ## Discovery
 

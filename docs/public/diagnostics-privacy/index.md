@@ -28,6 +28,11 @@ observational snapshots, and deployment artifacts:
 - raw unknown JSON, observed native label values, Compose ownership values, and host-local unknown
   values.
 
+Container-mount `Debug` output reports field state and option counts rather than source,
+destination, backing-path, propagation, or subpath values. SELinux relabel decoding retains only
+the closed `Shared` (`z`) or `Private` (`Z`) choice; raw `HostConfig.Binds` strings remain outside
+the public API and snapshots.
+
 A caller-selected non-sensitive connection name may remain as provenance. Public target labels
 authored explicitly by the caller are serialized into deployment artifacts by design. Secret
 payload endpoints are never requested. Base64 is not protection. A caller must explicitly construct

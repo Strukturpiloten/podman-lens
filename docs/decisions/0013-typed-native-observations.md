@@ -41,6 +41,12 @@ creation time, and anonymous status are effective evidence. Secret creation/upda
 driver object are effective metadata, but driver option names and values are discarded immediately;
 only option state, provenance, and count remain observable.
 
+Each typed container mount also exposes `ContainerMountSelinuxRelabel`. The case-sensitive
+`Shared` (`z`) and `Private` (`Z`) variants are configured evidence recovered from normalized mount
+mode or a matching bind declaration. Conflicting or malformed evidence makes the mount family
+malformed. Raw bind declarations, source paths, and command arrays are never added to this public
+type, `Debug`, or snapshots.
+
 Native image, volume, and secret timestamps use `NativeTimestamp`. It validates RFC 3339 while
 preserving the exact wire spelling, including offset and fractional precision, so observation does
 not silently normalize evidence before a caller maps it.
@@ -75,6 +81,7 @@ redacted detail summaries. No deprecated aliases or legacy record projections ar
   timestamp spelling remains available for evidence and diagnostics.
 - Secret driver option names and values cannot escape through public observation values, debug
   output, or snapshots.
+- BoxFerry can preserve an explicit SELinux relabel choice without parsing native bind strings.
 - Snapshots retain structural state and provenance while continuing to redact protected values.
 - The coverage ledger and focused tests must name typed observation owners, rather than generic
   record accessors, as the API reaches its first release.

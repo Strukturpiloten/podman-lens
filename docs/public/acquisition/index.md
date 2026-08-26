@@ -32,6 +32,23 @@ configured, effective, runtime-assigned, and local-resolution evidence.
 Do not promote effective, runtime-assigned, or local-resolution evidence into portable desired
 state automatically. That decision belongs to the caller's mapping policy.
 
+## Bounded native evidence
+
+PodmanLens retains field paths and JSON value kinds for genuinely unmodelled native members, never
+their raw values. While reading one resource kind, the inventory-wide descriptor budget reserves
+one slot for every later non-empty kind. Unused reservations carry forward, so later kinds still
+receive diagnostic evidence without reducing ordinary per-resource coverage.
+
+Closed runtime projections such as process state, local storage paths, and effective capability
+summaries are listed in the strict native-field ledger and discarded. They neither consume the
+unmodelled budget nor masquerade as authored intent. Configured fields that still need a typed
+contract—including network driver/IPAM settings and volume options—remain explicit unmodelled
+evidence.
+
+For mounts, the case-sensitive SELinux relabel choices `z` and `Z` are typed configured evidence.
+The decoder prefers `Mounts[].Mode` and uses only a correlated relabel token from
+`HostConfig.Binds` as a fallback. It does not retain a raw bind string or creation command.
+
 ## Protected values
 
 The default acquisition policy retains environment names and order but redacts values. Explicit

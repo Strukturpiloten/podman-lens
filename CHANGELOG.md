@@ -5,6 +5,12 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve configured SELinux `z`/`Z` mount relabel intent through a typed, redaction-safe
+  observation; classify reviewed runtime-only inspect projections separately from authored intent;
+  and allocate bounded unmodelled path evidence fairly across resource kinds ([#27](https://github.com/Strukturpiloten/podman-lens/issues/27)).
+
 ### Changed
 
 - Delegate live rootful and rootless version/distribution conformance to BoxFerry's shared

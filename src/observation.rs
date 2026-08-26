@@ -633,6 +633,20 @@ pub enum ContainerMountSource {
     LocalBindPath(String),
 }
 
+/// An explicitly configured `SELinux` relabel policy for one bind mount.
+///
+/// Podman reports this intent as the case-sensitive `z` or `Z` option. The
+/// decoder retains only that closed semantic choice; it never exposes the
+/// surrounding native bind specification.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ContainerMountSelinuxRelabel {
+    /// Relabel content so multiple containers may share it (`z`).
+    Shared,
+    /// Relabel content for private use by one container (`Z`).
+    Private,
+}
+
 impl ContainerMountSource {
     /// Returns the native source spelling. A bind path is local-resolution evidence and must not
     /// be promoted automatically into portable intent.
@@ -663,6 +677,7 @@ pub struct ContainerMountObservation {
     destination: ObservationField<String>,
     writable: ObservationField<bool>,
     options: ObservationField<Vec<String>>,
+    selinux_relabel: ObservationField<ContainerMountSelinuxRelabel>,
     propagation: ObservationField<String>,
     subpath: ObservationField<String>,
 }
@@ -676,6 +691,7 @@ impl ContainerMountObservation {
         destination: ObservationField<String>,
         writable: ObservationField<bool>,
         options: ObservationField<Vec<String>>,
+        selinux_relabel: ObservationField<ContainerMountSelinuxRelabel>,
         propagation: ObservationField<String>,
         subpath: ObservationField<String>,
     ) -> Self {
@@ -686,6 +702,7 @@ impl ContainerMountObservation {
             destination,
             writable,
             options,
+            selinux_relabel,
             propagation,
             subpath,
         }
@@ -722,6 +739,13 @@ impl ContainerMountObservation {
     pub fn options(&self) -> &ObservationField<Vec<String>> {
         &self.options
     }
+
+    /// Returns the configured `SELinux` relabel choice recovered from bounded
+    /// native mount evidence.
+    #[must_use]
+    pub fn selinux_relabel(&self) -> &ObservationField<ContainerMountSelinuxRelabel> {
+        &self.selinux_relabel
+    }
     /// Returns mount propagation when the native response supplied it.
     #[must_use]
     pub fn propagation(&self) -> &ObservationField<String> {
@@ -740,13 +764,32 @@ impl fmt::Debug for ContainerMountObservation {
             .debug_struct("ContainerMountObservation")
             .field("kind", &self.kind)
             .field("source", &self.source)
-            .field("local_backing_path", &self.local_backing_path)
-            .field("destination", &self.destination)
+            .field(
+                "local_backing_path_state",
+                &observation_field_state(&self.local_backing_path),
+            )
+            .field("destination_state", &observation_field_state(&self.destination))
             .field("writable", &self.writable)
-            .field("options", &self.options)
-            .field("propagation", &self.propagation)
-            .field("subpath", &self.subpath)
+            .field(
+                "option_count",
+                &self.options.observed().map_or(0, |options| options.value().len()),
+            )
+            .field("selinux_relabel", &self.selinux_relabel)
+            .field("propagation_state", &observation_field_state(&self.propagation))
+            .field("subpath_state", &observation_field_state(&self.subpath))
             .finish()
+    }
+}
+
+fn observation_field_state<T>(field: &ObservationField<T>) -> &'static str {
+    match field {
+        ObservationField::Observed(_) => "observed",
+        ObservationField::Absent => "absent",
+        ObservationField::Unavailable => "unavailable",
+        ObservationField::Malformed => "malformed",
+        ObservationField::VersionInapplicable => "version-inapplicable",
+        ObservationField::NotApplicable => "not-applicable",
+        ObservationField::Unmodelled(_) => "unmodelled",
     }
 }
 

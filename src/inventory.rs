@@ -9,18 +9,18 @@ use serde_json::{Map, Value};
 
 use crate::observation::{
     ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
-    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSource,
-    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation,
-    ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation, NativeHealthCommand,
-    NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode,
-    NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
-    NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
-    NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeRelationship,
-    NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation,
-    NativeSecretDriverObservation, NativeSecretDriverOptions, NativeSecurityObservation,
-    NativeStartupHealthCheckObservation, NativeTimestamp, NativeUlimitObservation, NetworkObservation,
-    NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation,
-    ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
+    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSelinuxRelabel,
+    ContainerMountSource, ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference,
+    ImageObservation, ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation,
+    NativeHealthCommand, NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation,
+    NativeNamespaceMode, NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange,
+    NativeNetworkRouteObservation, NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation,
+    NativeOpaqueNetworkOptions, NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol,
+    NativeRelationship, NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName,
+    NativeRestartPolicyObservation, NativeSecretDriverObservation, NativeSecretDriverOptions,
+    NativeSecurityObservation, NativeStartupHealthCheckObservation, NativeTimestamp, NativeUlimitObservation,
+    NetworkObservation, NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue,
+    PodObservation, ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
     ResourceDetails, ResourceObservation, ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId,
     UnmodelledCompleteness, UnmodelledField, VolumeObservation, VolumeOwnerIdWireValue,
 };
@@ -35,6 +35,58 @@ pub const MAX_INVENTORY_JSON_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_UNKNOWN_FIELDS_PER_RECORD: usize = 128;
 /// Maximum unknown native fields retained across one inventory response.
 pub const MAX_UNKNOWN_FIELDS_PER_INVENTORY: usize = 2_048;
+
+const CONTAINER_RUNTIME_ONLY_TOP_LEVEL_FIELDS: &[&str] = &[
+    "AppArmorProfile",
+    "Args",
+    "BoundingCaps",
+    "ConmonPidFile",
+    "Created",
+    "Driver",
+    "EffectiveCaps",
+    "ExecIDs",
+    "ExitCommand",
+    "GraphDriver",
+    "HostnamePath",
+    "HostsPath",
+    "LockNumber",
+    "MountLabel",
+    "Namespace",
+    "OCIConfigPath",
+    "OCIRuntime",
+    "Path",
+    "PidFile",
+    "ProcessLabel",
+    "ResolvConfPath",
+    "RestartCount",
+    "Rootfs",
+    "SizeRootFs",
+    "SizeRw",
+    "State",
+    "StaticDir",
+];
+
+const IMAGE_RUNTIME_ONLY_TOP_LEVEL_FIELDS: &[&str] = &[
+    "GraphDriver",
+    "History",
+    "NamesHistory",
+    "Parent",
+    "RootFS",
+    "Size",
+    "VirtualSize",
+    "Version",
+];
+
+const VOLUME_RUNTIME_ONLY_TOP_LEVEL_FIELDS: &[&str] = &[
+    "LockNumber",
+    "MountCount",
+    "Mountpoint",
+    "NeedsChown",
+    "NeedsCopyUp",
+    "Scope",
+];
+
+const NETWORK_RUNTIME_ONLY_TOP_LEVEL_FIELDS: &[&str] = &["containers", "created"];
 
 /// Controls how runtime environment values are retained after an explicit read-only inspection.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -483,9 +535,10 @@ pub async fn acquire_inventory(
             listed.push((kind, list_section(transport, &service, kind).await));
         }
     }
+    let later_kind_reservations = later_kind_unknown_field_reservations(&listed);
     let mut sections = Vec::with_capacity(ResourceKind::ALL.len());
     let mut remaining_unknown_fields = MAX_UNKNOWN_FIELDS_PER_INVENTORY;
-    for (kind, identities) in listed {
+    for (section_index, (kind, identities)) in listed.into_iter().enumerate() {
         match identities {
             Ok(listed) => {
                 let mut observations = Vec::with_capacity(listed.identities.len());
@@ -496,7 +549,9 @@ pub async fn acquire_inventory(
                         evidence.clone(),
                         identity,
                         options,
-                        remaining_unknown_fields.min(MAX_UNKNOWN_FIELDS_PER_RECORD),
+                        remaining_unknown_fields
+                            .saturating_sub(later_kind_reservations[section_index])
+                            .min(MAX_UNKNOWN_FIELDS_PER_RECORD),
                     )
                     .await;
                     remaining_unknown_fields =
@@ -518,6 +573,17 @@ pub async fn acquire_inventory(
     }
     reconcile_relationships(&mut sections);
     Ok(ResourceInventory { service, sections })
+}
+
+fn later_kind_unknown_field_reservations(listed: &[(ResourceKind, PodmanLensResult<ListedSection>)]) -> Vec<usize> {
+    (0..listed.len())
+        .map(|section_index| {
+            listed[section_index + 1..]
+                .iter()
+                .filter(|(_, section)| section.as_ref().is_ok_and(|section| !section.identities.is_empty()))
+                .count()
+        })
+        .collect()
 }
 
 fn resource_kind_is_version_inapplicable(kind: ResourceKind, service: &ServiceObservation) -> bool {
@@ -928,7 +994,7 @@ fn decode_observation(
         ResourceKind::Secret => decode_secret(listed_identity, object)?,
     };
     let mut unknown_fields = UnknownFieldCollector::new(&identity, &evidence, unknown_field_limit);
-    unknown_top_level(object, known, &mut unknown_fields);
+    unknown_top_level(listed_identity.kind, object, known, &mut unknown_fields);
     unknown_nested_fields(listed_identity.kind, object, &evidence, &mut unknown_fields);
     append_container_unmodelled(&mut unknown_fields, container_b3.as_ref());
     let (unknown_fields, unmodelled_completeness) = finish_unknown_fields(unknown_fields, &identity, &mut findings);
@@ -3482,6 +3548,12 @@ struct ContainerMountDecoded {
     relationships: RelationshipDecoding,
 }
 
+struct NativeBindSelinuxRelabel {
+    source: String,
+    destination: String,
+    relabel: ContainerMountSelinuxRelabel,
+}
+
 #[allow(clippy::too_many_lines, clippy::single_match_else)] // one bounded native object is decoded atomically.
 fn decode_container_mounts(
     object: &Map<String, Value>,
@@ -3489,6 +3561,7 @@ fn decode_container_mounts(
     relationships: &mut Vec<NativeRelationship>,
     findings: &mut Vec<InventoryFinding>,
 ) -> ContainerMountDecoded {
+    let bind_relabels = decode_native_bind_selinux_relabels(object, identity, findings);
     let Some(value) = object.get("Mounts") else {
         return ContainerMountDecoded {
             field: ObservationField::Absent,
@@ -3598,6 +3671,19 @@ fn decode_container_mounts(
         let writable = optional_observed_bool(mount.get("RW"), &format!("{path}.RW"), identity, findings);
         let options =
             optional_observed_string_array(mount.get("Options"), &format!("{path}.Options"), identity, findings);
+        let selinux_relabel = decode_mount_selinux_relabel(
+            mount,
+            &path,
+            &source,
+            &destination,
+            if kind == ContainerMountKind::Bind {
+                bind_relabels.as_deref()
+            } else {
+                Ok(&[])
+            },
+            identity,
+            findings,
+        );
         let propagation = optional_observed_string(
             mount.get("Propagation"),
             &format!("{path}.Propagation"),
@@ -3616,6 +3702,7 @@ fn decode_container_mounts(
             || local_backing_path.is_malformed()
             || writable.is_malformed()
             || options.is_malformed()
+            || selinux_relabel.is_malformed()
             || propagation.is_malformed()
             || subpath.is_malformed();
         if member_malformed {
@@ -3642,6 +3729,7 @@ fn decode_container_mounts(
             destination,
             writable,
             options,
+            selinux_relabel,
             propagation,
             subpath,
         ));
@@ -3657,6 +3745,184 @@ fn decode_container_mounts(
             malformed,
         },
     }
+}
+
+fn decode_native_bind_selinux_relabels(
+    object: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> Result<Vec<NativeBindSelinuxRelabel>, ()> {
+    let Some(value) = object
+        .get("HostConfig")
+        .and_then(Value::as_object)
+        .and_then(|host_config| host_config.get("Binds"))
+    else {
+        return Ok(Vec::new());
+    };
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let Some(bindings) = value.as_array() else {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            "$.HostConfig.Binds",
+        ));
+        return Err(());
+    };
+
+    let mut decoded: Vec<NativeBindSelinuxRelabel> = Vec::new();
+    let mut malformed = false;
+    for (index, binding) in bindings.iter().enumerate() {
+        let Some(binding) = binding.as_str() else {
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.HostConfig.Binds",
+                index,
+            ));
+            malformed = true;
+            continue;
+        };
+        let Some((mount, options)) = binding.rsplit_once(':') else {
+            continue;
+        };
+        let relabel = match selinux_relabel_from_tokens(options.split(',')) {
+            Ok(Some(relabel)) => relabel,
+            Ok(None) => continue,
+            Err(()) => {
+                findings.push(InventoryFinding::at_occurrence(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    "$.HostConfig.Binds",
+                    index,
+                ));
+                malformed = true;
+                continue;
+            }
+        };
+        let Some((source, destination)) = mount.split_once(':') else {
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.HostConfig.Binds",
+                index,
+            ));
+            malformed = true;
+            continue;
+        };
+        if source.is_empty() || destination.is_empty() {
+            findings.push(InventoryFinding::at_occurrence(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.HostConfig.Binds",
+                index,
+            ));
+            malformed = true;
+            continue;
+        }
+        if let Some(previous) = decoded
+            .iter()
+            .find(|candidate| candidate.source == source && candidate.destination == destination)
+        {
+            if previous.relabel != relabel {
+                findings.push(InventoryFinding::at_occurrence(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    "$.HostConfig.Binds",
+                    index,
+                ));
+                malformed = true;
+            }
+            continue;
+        }
+        decoded.push(NativeBindSelinuxRelabel {
+            source: source.to_owned(),
+            destination: destination.to_owned(),
+            relabel,
+        });
+    }
+    if malformed { Err(()) } else { Ok(decoded) }
+}
+
+fn decode_mount_selinux_relabel(
+    mount: &Map<String, Value>,
+    path: &str,
+    source: &ContainerMountSource,
+    destination: &ObservationField<String>,
+    bind_relabels: Result<&[NativeBindSelinuxRelabel], &()>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<ContainerMountSelinuxRelabel> {
+    let mode_relabel = match mount.get("Mode") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(mode)) => {
+            let Ok(relabel) = selinux_relabel_from_tokens(mode.split(',')) else {
+                findings.push(InventoryFinding::field(
+                    DiagnosticCode::ResourceMalformed,
+                    identity.clone(),
+                    format!("{path}.Mode"),
+                ));
+                return ObservationField::Malformed;
+            };
+            relabel
+        }
+        Some(_) => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                format!("{path}.Mode"),
+            ));
+            return ObservationField::Malformed;
+        }
+    };
+    let Ok(bind_relabels) = bind_relabels else {
+        return ObservationField::Malformed;
+    };
+    let bind_relabel = destination
+        .observed()
+        .map(ObservedValue::value)
+        .and_then(|destination| {
+            bind_relabels
+                .iter()
+                .find(|binding| {
+                    binding.source == source.value() && binding.destination.as_str() == destination.as_str()
+                })
+                .map(|binding| binding.relabel)
+        });
+    let relabel = match (mode_relabel, bind_relabel) {
+        (Some(left), Some(right)) if left != right => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                format!("{path}.Mode"),
+            ));
+            return ObservationField::Malformed;
+        }
+        (Some(relabel), _) | (_, Some(relabel)) => relabel,
+        (None, None) => return ObservationField::Absent,
+    };
+    ObservationField::Observed(ObservedValue::new(relabel, ObservationOrigin::Configured))
+}
+
+fn selinux_relabel_from_tokens<'a>(
+    tokens: impl Iterator<Item = &'a str>,
+) -> Result<Option<ContainerMountSelinuxRelabel>, ()> {
+    let mut relabel = None;
+    for token in tokens {
+        let candidate = match token {
+            "z" => Some(ContainerMountSelinuxRelabel::Shared),
+            "Z" => Some(ContainerMountSelinuxRelabel::Private),
+            _ => None,
+        };
+        if let Some(candidate) = candidate {
+            if relabel.is_some_and(|previous| previous != candidate) {
+                return Err(());
+            }
+            relabel = Some(candidate);
+        }
+    }
+    Ok(relabel)
 }
 
 struct ContainerSecretGrantsDecoded {
@@ -5143,11 +5409,29 @@ impl<'a> UnknownFieldCollector<'a> {
     }
 }
 
-fn unknown_top_level(object: &Map<String, Value>, known: &[&str], fields: &mut UnknownFieldCollector<'_>) {
-    for (key, value) in object.iter().filter(|(key, _)| !known.contains(&key.as_str())) {
+fn unknown_top_level(
+    kind: ResourceKind,
+    object: &Map<String, Value>,
+    known: &[&str],
+    fields: &mut UnknownFieldCollector<'_>,
+) {
+    for (key, value) in object
+        .iter()
+        .filter(|(key, _)| !known.contains(&key.as_str()) && !is_known_runtime_only_field(kind, key))
+    {
         if !fields.push(|| format!("$.{key}"), value) {
             break;
         }
+    }
+}
+
+fn is_known_runtime_only_field(kind: ResourceKind, key: &str) -> bool {
+    match kind {
+        ResourceKind::Container => CONTAINER_RUNTIME_ONLY_TOP_LEVEL_FIELDS.contains(&key),
+        ResourceKind::Network => NETWORK_RUNTIME_ONLY_TOP_LEVEL_FIELDS.contains(&key),
+        ResourceKind::Volume => VOLUME_RUNTIME_ONLY_TOP_LEVEL_FIELDS.contains(&key),
+        ResourceKind::Image => IMAGE_RUNTIME_ONLY_TOP_LEVEL_FIELDS.contains(&key),
+        ResourceKind::Pod | ResourceKind::Secret => false,
     }
 }
 
@@ -5232,11 +5516,13 @@ fn unknown_nested_fields(
                     "Destination",
                     "RW",
                     "Options",
+                    "Mode",
                     "Propagation",
                     "SubPath",
                 ],
                 fields,
             );
+            unknown_unrepresented_mount_modes(object.get("Mounts"), fields);
             unknown_unsupported_mounts(object.get("Mounts"), fields);
             unknown_array_object_members(
                 object
@@ -5423,6 +5709,36 @@ fn unknown_unsupported_mounts(value: Option<&Value>, fields: &mut UnknownFieldCo
             .and_then(Value::as_str)
             .is_some_and(|kind| !matches!(kind, "volume" | "bind"));
         if unsupported && !fields.push(|| format!("$.Mounts[{index}]"), mount) {
+            break;
+        }
+    }
+}
+
+fn unknown_unrepresented_mount_modes(value: Option<&Value>, fields: &mut UnknownFieldCollector<'_>) {
+    let Some(mounts) = value.and_then(Value::as_array) else {
+        return;
+    };
+    for (index, mount) in mounts.iter().enumerate() {
+        let Some(mount) = mount.as_object() else {
+            continue;
+        };
+        let Some(mode) = mount.get("Mode").and_then(Value::as_str) else {
+            continue;
+        };
+        let represented = mode
+            .split(',')
+            .filter(|token| !token.is_empty())
+            .all(|token| match token {
+                "z" | "Z" => true,
+                "ro" => mount.get("RW").and_then(Value::as_bool) == Some(false),
+                "rw" => mount.get("RW").and_then(Value::as_bool) == Some(true),
+                value if mount.get("Propagation").and_then(Value::as_str) == Some(value) => true,
+                value => mount
+                    .get("Options")
+                    .and_then(Value::as_array)
+                    .is_some_and(|options| options.iter().any(|option| option.as_str() == Some(value))),
+            });
+        if !represented && !fields.push_kind(format!("$.Mounts[{index}].Mode"), JsonValueKind::String) {
             break;
         }
     }

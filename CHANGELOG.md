@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.1...v0.2.2) - 2026-08-27
+
 ### Fixed
 
 - Preserve configured SELinux `z`/`Z` mount relabel intent through a typed, redaction-safe

@@ -13,9 +13,10 @@ Use a breaking `!` only for an intentional public break that follows
 [the API stability policy](api-stability.md).
 
 Record user-visible changes in the single `Unreleased` section. Ordinary product pull requests
-must not create a future numbered section, set its date, or bump the crate version. release-plz
-owns those three operations so generated commit notes and reviewed notes become one release
-section instead of duplicate `Added`, `Changed`, or `Fixed` headings.
+must not create a future numbered section, set its date, or bump the crate version. Release-plz
+inserts only the dated version heading, with blank lines on both sides; the curated notes below
+`Unreleased` thereby become that release's notes exactly once, without duplicate `Added`,
+`Changed`, or `Fixed` headings.
 
 The API check reads all Conventional Commits since the latest release tag. A `!` subject marker or
 `BREAKING CHANGE:` footer authorizes a break in the next pre-1.0 minor release. The wrapper passes

@@ -13,6 +13,9 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ### Changed
 
+- Promote curated `Unreleased` notes under a blank-line-safe release-plz version heading instead
+  of generating duplicate changelog groups ([#30](https://github.com/Strukturpiloten/podman-lens/issues/30)).
+
 - Delegate live rootful and rootless version/distribution conformance to BoxFerry's shared
   digest-pinned container harness after its 48-cell matrix passed through PodmanLens's production
   read-only acquisition path ([#3](https://github.com/Strukturpiloten/podman-lens/issues/3)).

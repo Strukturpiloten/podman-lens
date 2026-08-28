@@ -320,6 +320,32 @@ fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::
 }
 
 #[test]
+fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std::io::Error> {
+    let configuration = fs::read_to_string(".github/renovate.json")?;
+    for required in [
+        "Automerge tested non-major dependency updates",
+        "Do not delay BoxFerry and Lens releases",
+        r#""minimumReleaseAge": "0 days""#,
+        r#""platformAutomerge": false"#,
+        r#""boxferry-model""#,
+        r#""compose-lens""#,
+        r#""podman-lens""#,
+        r#""quadlet-lens""#,
+    ] {
+        assert!(
+            configuration.contains(required),
+            "Renovate configuration is missing {required}"
+        );
+    }
+    assert_eq!(
+        configuration.matches(r#""automerge": false"#).count(),
+        2,
+        "Dev Container features and checksum-pinned tools must remain manual"
+    );
+    Ok(())
+}
+
+#[test]
 fn devcontainer_persists_private_github_cli_configuration() -> Result<(), std::io::Error> {
     let configuration = fs::read_to_string(".devcontainer/devcontainer.json")?;
     assert!(configuration.contains("GH_CONFIG_DIR"));

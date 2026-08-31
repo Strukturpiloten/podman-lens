@@ -1,8 +1,12 @@
 # PodmanLens
 
-PodmanLens is a Rust library for inspecting native Podman state and producing version-aware,
-non-executing deployment plans. It is the Podman boundary used by
+PodmanLens is an open-source Rust library for inspecting native Podman resources through the Libpod
+API and producing version-aware, non-executing deployment plans. It is the Podman boundary used by
 [BoxFerry](https://github.com/Strukturpiloten/boxferry), but it has no BoxFerry dependency.
+
+[Guides](https://boxferry.dev/docs/libraries/podman-lens/) ·
+[Rust API](https://docs.rs/podman-lens) · [crates.io](https://crates.io/crates/podman-lens) ·
+[Source code](https://github.com/Strukturpiloten/podman-lens)
 
 PodmanLens can:
 
@@ -61,3 +65,11 @@ testable.
 
 PodmanLens requires Rust 1.85.0 or newer. The Dev Container supplies the pinned development
 toolchain. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop and evidence rules.
+
+## Open source
+
+PodmanLens is an independent, from-scratch implementation maintained by
+[Martin “Becks” Beckert](https://github.com/TheRealBecks) through
+[Strukturpiloten OHG](https://www.strukturpiloten.de/) and released under the
+[Mozilla Public License 2.0](LICENSE). Contributions and real-world Podman compatibility reports
+are welcome.

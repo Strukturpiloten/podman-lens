@@ -3,13 +3,13 @@ name = "podman-lens"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Version-aware native Podman inspection and deployment planning"
+description = "Rust library for version-aware native Podman inspection and non-executing deployment planning"
 documentation = "https://docs.rs/podman-lens"
 readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-keywords = ["containers", "libpod", "podman", "rest-api"]
+keywords = ["containers", "deployment", "libpod", "podman", "rest-api"]
 categories = ["api-bindings", "config"]
 include = [
   "/.cargo/**",
@@ -69,7 +69,7 @@ members = ["."]
 version = "0.2.2"
 edition = "2024"
 rust-version = "1.85.0"
-homepage = "https://boxferry.dev/"
+homepage = "https://boxferry.dev/docs/libraries/podman-lens/"
 repository = "https://github.com/Strukturpiloten/podman-lens"
 license = "MPL-2.0"
 

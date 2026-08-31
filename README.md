@@ -68,5 +68,8 @@ toolchain. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop and e
 
 ## Open source
 
-PodmanLens is released under the [Mozilla Public License 2.0](LICENSE). Contributions and
-real-world Podman compatibility reports are welcome.
+PodmanLens is an independent, from-scratch implementation maintained by
+[Martin “Becks” Beckert](https://github.com/TheRealBecks) through
+[Strukturpiloten OHG](https://www.strukturpiloten.de/) and released under the
+[Mozilla Public License 2.0](LICENSE). Contributions and real-world Podman compatibility reports
+are welcome.

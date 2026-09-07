@@ -84,6 +84,8 @@ jobs:
         run: cargo ci-clippy
       - name: Run tests
         run: cargo ci-test
+      - name: Check captured native release contract
+        run: bash scripts/check-native-release-contract.sh
       - name: Run documentation tests
         run: cargo ci-doctest
       - name: Build documentation

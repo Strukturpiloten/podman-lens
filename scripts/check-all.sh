@@ -9,7 +9,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=21
+readonly total_steps=22
 
 fail() {
   printf 'PodmanLens local validation failed: %s\n' "$1" >&2
@@ -94,6 +94,7 @@ run_step "Check all workspace targets and features" cargo ci-check
 run_step "Check repository policies" cargo ci-policy
 run_step "Run Clippy with warnings denied" cargo ci-clippy
 run_step "Run workspace tests" cargo ci-test
+run_step "Check captured native release contract" bash scripts/check-native-release-contract.sh
 run_step "Run documentation tests" cargo ci-doctest
 run_step "Build documentation with warnings denied" env RUSTDOCFLAGS="-D warnings" cargo ci-doc
 run_step "Verify the release package" cargo package --locked --allow-dirty

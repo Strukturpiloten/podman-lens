@@ -85,3 +85,7 @@ The additive bounded
 [`ContainerObservation::creation_evidence` contract](decisions/0015-bounded-creation-command-evidence.md)
 exposes independent image-spelling and mount-relabel field states and does not change the immutable
 redacted `snapshot::v1` schema.
+
+## Repository test formats
+
+The request-aware cassette schema and captured-native capture manifest are repository test formats. They are not public Rust APIs, trusted deserialization APIs, migration interchange formats, or compatibility promises. They may be included in the source package for auditability, but production modules do not import them. Their version and shape may change with the release test harness while the public observation and serialization contracts above remain stable.

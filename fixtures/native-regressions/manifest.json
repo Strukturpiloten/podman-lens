@@ -1,35 +1,79 @@
 {
   "schema_version": 1,
-  "evidence_kind": "sanitized-derived-native-regression",
+  "evidence_kind": "sanitized-native-regression-registry",
+  "test_only": true,
   "license": {
     "repository_fixture": "MPL-2.0",
-    "upstream_podman": "Apache-2.0"
+    "upstream_podman": "Apache-2.0",
+    "upstream_compose": "Apache-2.0"
   },
   "privacy": {
-    "classification": "sanitized-derived",
-    "statement": "Selected native inspect fields captured in a trusted disposable environment and consistently replaced. No real endpoint, host, user, credential, secret, environment value, container, image, path, or repository data is present; no full inspect response is committed."
+    "classification": "sanitized-captured-and-derived",
+    "statement": "Fixtures contain deterministic replacements only. No real endpoint, host, user, credential, secret payload, environment value, container identity, image identity, capture directory or repository data is committed."
   },
   "provenance": {
     "podman_engine": "6.1.0",
     "release_tag": "v6.1.0",
     "podman_commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
     "source_urls": [
-      "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod"
+      "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "https://github.com/Strukturpiloten/boxferry/blob/52b7600afe936b3c688294bd9a7f43e1afa9bf1f/fixtures/conformance/podman-live/matrix.tsv",
+      "https://github.com/docker/compose/releases/tag/v5.5.0"
     ],
     "compose_provider": "5.5.0",
-    "outer_image_digest": "sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
-    "capture_scope": "trusted disposable rootful outer; network disabled; no host socket or repository mount",
-    "capture_commands": "CLI: local scratch build/tag then podman create only. Provider: Compose create with --pull never then native podman inspect. Neither capture establishes pull or build history."
+    "compose_provider_binary_sha256": "abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6",
+    "runtime_repository": "https://github.com/Strukturpiloten/boxferry",
+    "runtime_revision": "52b7600afe936b3c688294bd9a7f43e1afa9bf1f",
+    "runtime_matrix_cell": "podman-6.1-rootful",
+    "runtime_matrix_sha256": "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25",
+    "runtime_image": "ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
+    "capture_scope": "trusted disposable rootful outer; network disabled during resource creation and acquisition; no host socket or repository mount",
+    "capture_contract": "one-off captured regression evidence; BoxFerry remains the maintained live matrix"
   },
   "artifacts": [
     {
       "artifact": "creation-evidence-6.1.0.json",
+      "kind": "focused-derived-native-observation",
       "sha256": "84c6e4b8ab644661259bccf08ddfcf3cac949da01917bdbcc381a7e93db76f6c",
       "coverage": [
         "CLI-authored configured image spelling versus local image identity",
         "CLI-authored case-sensitive SELinux mount relabel choice",
         "Compose-provider absence of creation-command evidence",
-        "redacted post-image, environment, path, and image operands"
+        "redacted post-image, environment, path and image operands"
+      ]
+    },
+    {
+      "artifact": "capture-manifest-6.1.0-rootful.json",
+      "kind": "capture-manifest",
+      "sha256": "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2",
+      "coverage": [
+        "raw interaction hashes and request order for CLI-only and mixed-origin sessions",
+        "digest-pinned BoxFerry runtime matrix provenance",
+        "Podman, Compose, setup, recorder and sanitizer provenance",
+        "explicit one-off capture and privacy-normalization boundaries"
+      ]
+    },
+    {
+      "artifact": "captured-cli-only-6.1.0-rootful.cassette.json",
+      "kind": "libpod-cassette",
+      "sha256": "98e003a18ec79864862bf524e004b5d9a1c90f93acae4b4a9f5215901b6beb35",
+      "capture_manifest_sha256": "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2",
+      "coverage": [
+        "two CLI-created containers replayed through production acquisition",
+        "configured image, command, mount relabel and authored creation evidence",
+        "strict twelve-request consumption"
+      ]
+    },
+    {
+      "artifact": "captured-mixed-origin-6.1.0-rootful.cassette.json",
+      "kind": "libpod-cassette",
+      "sha256": "4fff2585def69669f0cff9f8cd5b2f6275a8774ddaa6840f16ec8930523355cd",
+      "capture_manifest_sha256": "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2",
+      "coverage": [
+        "Compose-provider and CLI-created containers coexist in one captured inventory",
+        "provider-authored labels, command, entrypoint, environment and mount observations",
+        "partial list failure, stale inspect, malformed inspect and future unknown mutations",
+        "strict thirteen-request consumption"
       ]
     }
   ]

@@ -37,8 +37,8 @@ separately chosen modern target.
 These are finite source-backed upstream API anchors, not a claim for every Podman 3.x or 4.x patch
 or for distribution runtime behavior. Input acquisition records the exact engine and Libpod API
 evidence. In Podman 3.0.1, secret metadata endpoints do not exist; its secret section is reported
-as version-inapplicable without requesting it. Rootful and rootless distribution-image validation
-will be recorded only after the live matrix succeeds.
+as version-inapplicable without requesting it. The completed rootful and rootless
+distribution-image matrix is recorded below.
 
 The UBI 8 package reports `4.9.4-rhel` on the wire. PodmanLens retains that exact observation while
 matching only its reviewed `4.9.4` semantic core; other prerelease-style vendor spellings remain
@@ -63,10 +63,12 @@ disappeared, and malformed observations. Deployment catalogues and renderer test
 gates independently of observed-inventory cassettes. These source-derived, synthetic, sanitized
 fixtures are not exports of live Podman environments.
 
-Live rootful/rootless conformance remains deferred in
-[GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3) until all 14 reproducible,
-digest-pinned environments exist. That future workflow is manual-only, has no nightly or
-pull-request trigger, and may not skip unavailable cells.
+BoxFerry owns the completed digest-pinned live rootful/rootless matrix. All 48 cells passed
+through PodmanLens's production read-only acquisition path, including strict Podman 6.1
+native-field checks. PodmanLens additionally retains two captured native Podman 6.1 rootful
+cassettes (CLI-only and mixed CLI/Compose-provider) as privacy-reviewed, deterministic release
+evidence. The cassettes and capture manifest are test-only repository formats, not a second
+live matrix or a public interchange contract.
 
 See the packaged `catalogue/v1/podman-capabilities.json`,
 `catalogue/v1/podman-deployment-rendering.json`, and

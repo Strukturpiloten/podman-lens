@@ -11,6 +11,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ### Changed
 
+- Admit privacy-reviewed Podman 6.1 native capture evidence with exact replay, provenance, semantic, fault, and release-gate contracts while BoxFerry remains owner of the live matrix ([#54](https://github.com/Strukturpiloten/podman-lens/issues/54)).
+
 - Standardize repository-local agent roles and model-independent workflow ownership; add
   non-formatting full verification and regression tests
   ([#55](https://github.com/Strukturpiloten/podman-lens/issues/55)).

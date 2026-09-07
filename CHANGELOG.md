@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.2...v0.2.3) - 2026-09-07
+
 ### Fixed
 
 - Retain bounded, redacted `Config.CreateCommand` image-spelling and SELinux-relabel consistency evidence with independent field states, without exposing raw creation arguments or inferring image/lifecycle history ([#27](https://github.com/Strukturpiloten/podman-lens/issues/27)).

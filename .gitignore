@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.codegraph/
 .lycheecache
 .vscode/*.code-workspace
 node_modules/

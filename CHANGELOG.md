@@ -5,6 +5,12 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Changed
+
+- Standardize repository-local agent roles and model-independent workflow ownership; add
+  non-formatting full verification and regression tests
+  ([#55](https://github.com/Strukturpiloten/podman-lens/issues/55)).
+
 ## [0.2.2](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.1...v0.2.2) - 2026-08-27
 
 ### Fixed

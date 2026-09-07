@@ -21,6 +21,17 @@ report_failure() {
   exit "${status}"
 }
 trap report_failure ERR
+
+format_mode="fix"
+if (($# > 1)); then
+  fail "Usage: $0 [--check|--fix]"
+fi
+case "${1:---fix}" in
+  --check) format_mode="check" ;;
+  --fix) ;;
+  *) fail "Usage: $0 [--check|--fix]" ;;
+esac
+readonly format_mode
 run_step() {
   local label=$1
   shift
@@ -69,8 +80,13 @@ for directory in "${coverage_target_dir}" "${semver_cargo_home}" "${semver_targe
 done
 readonly coverage_target_dir semver_cargo_home semver_target_dir
 
-run_step "Format Rust" cargo fmt --all
-run_step "Format and lint non-Rust files" bash scripts/check-files.sh --fix
+if [[ "${format_mode}" == "check" ]]; then
+  run_step "Check Rust formatting" cargo fmt --all -- --check
+  run_step "Check non-Rust files" bash scripts/check-files.sh --check
+else
+  run_step "Format Rust" cargo fmt --all
+  run_step "Format and lint non-Rust files" bash scripts/check-files.sh --fix
+fi
 run_step "Check whitespace errors" git --no-pager diff --check
 run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows

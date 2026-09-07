@@ -58,7 +58,7 @@ or pull request.
 
 ## Git and GitHub workflow
 
-The primary Sol agent owns issue creation, branches, final integration, the complete validation
+The primary agent owns issue creation, branches, final integration, the complete validation
 gate, staging, commit, push, pull request creation, and GitHub readback. Workers may research,
 implement bounded changes, or verify, but never commit, push, publish, tag, or create GitHub
 objects.
@@ -78,3 +78,40 @@ the merged state and merge commit.
 Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code. Use
 `docs`, `test`, `ci`, `build`, `style`, or `chore` for maintenance so release-plz does
 not propose an unnecessary crate release.
+
+## Agent roles and verification
+
+Model defaults belong in [`.codex/config.toml`](.codex/config.toml); task-specific models and
+reasoning belong in [`.codex/agents/`](.codex/agents/). Use the repository's high-effort primary
+default for normal work; explicitly request `xhigh` for unusually difficult architecture or
+migration analysis. These are defaults, not permission grants.
+
+- Delegate only when the user or applicable instructions request it, and assign a bounded task.
+- Use at most three subagents. Define the shared contract and file ownership before delegation.
+- Never run two writers in one checkout. Research and review remain read-only.
+- The reviewer checks the original requirements and independent expected results, not just agreement
+  between the implementation and its tests.
+- After writing finishes, the verifier runs `./scripts/check-all.sh --check`. It reports failures
+  without formatting or editing tracked files; ignored build artifacts and caches are allowed.
+- Avoid concurrent full gates or heavy runtime tests. The primary agent owns integration, the final
+  complete gate, and every authorized Git or GitHub write.
+
+The default `./scripts/check-all.sh` still formats before checking. `--check` runs the same
+complete gate without source formatting; it is not a reduced test tier. A later edit invalidates
+either result. Neither mode grants release, publication, or deployment authority.
+
+## Code discovery
+
+For code discovery, use an available codebase-memory graph first; otherwise use CodeGraph only if
+the repository already has a usable index. Do not create an index without user authorization.
+If neither graph is available or a query cannot answer the question, use `rg` and targeted reads.
+For string literals, configuration, scripts, and documentation, start with `rg` directly.
+
+## After an authorized merge
+
+Read back the merged state and exact merge commit, then synchronize the primary checkout with
+`origin/main`. Preserve unrelated files. Remove only the recorded task worktree with
+`git worktree remove <recorded-path>`, delete the verified merged local issue branch with
+`git branch --delete --force TheRealBecks/issue<NUMBER>`, and run
+`git worktree prune --verbose`. Read back `git worktree list --porcelain` and
+`git status --short --branch`; do not leave stale task worktree registrations.

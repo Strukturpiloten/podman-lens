@@ -414,7 +414,7 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
-    assert_eq!(entries.len(), 238);
+    assert_eq!(entries.len(), 239);
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0142"
             && entry.plane() == NativeFieldCoveragePlane::InputObservation
@@ -438,6 +438,17 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
             && entry.public_contract() == "NativeUlimitObservation::hard"
             && entry.finding() == "PLN0017"
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.id() == "PLN-FLD-0191"
+            && entry.plane() == NativeFieldCoveragePlane::InputObservation
+            && entry.field_path() == "$.Config.CreateCommand"
+            && entry.classification() == NativeFieldCoverageClassification::ObservationOnly
+            && entry.observation() == "inventory::decode_container_creation_evidence"
+            && entry.public_contract() == "ContainerObservation::creation_evidence"
+            && entry.finding() == "PLN0050"
+            && entry.negative_test()
+                == "tests::inventory::typed_mount_relabel_state_only_conflicts_when_observed_and_different"
     }));
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-OUT-0015"
@@ -714,4 +725,35 @@ async fn external_consumer_can_use_the_fixed_read_only_probe_contract() -> Resul
     let transport = ReadOnlyUnixTransport::new(unix, TransportLimits::default(), timeouts)?;
     assert_eq!(transport.timeouts(), timeouts);
     Ok(())
+}
+
+#[test]
+fn public_creation_evidence_accessor_is_typed_and_closed() {
+    let accessor: for<'a> fn(
+        &'a podman_lens::ContainerObservation,
+    ) -> &'a podman_lens::ObservationField<podman_lens::ContainerCreationEvidence> =
+        podman_lens::ContainerObservation::creation_evidence;
+    let _ = accessor;
+    let consume = |evidence: &podman_lens::ContainerCreationEvidence| {
+        let image_state = match evidence.image().observed().map(podman_lens::ObservedValue::value) {
+            Some(podman_lens::AuthoredImageSpellingHint::MatchesConfiguredImage) => 0,
+            Some(podman_lens::AuthoredImageSpellingHint::MatchesLocalImageId) => 1,
+            Some(podman_lens::AuthoredImageSpellingHint::Contradictory) => 2,
+            Some(_) | None => usize::MAX,
+        };
+        let _ = image_state;
+        if let Some(relabels) = evidence.mount_relabels().observed() {
+            for relabel in relabels.value() {
+                match relabel {
+                    podman_lens::AuthoredMountRelabelHint::Shared { mount_index }
+                    | podman_lens::AuthoredMountRelabelHint::Private { mount_index }
+                    | podman_lens::AuthoredMountRelabelHint::Contradictory { mount_index } => {
+                        let _ = mount_index;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    };
+    let _ = consume;
 }

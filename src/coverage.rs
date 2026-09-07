@@ -1962,6 +1962,19 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
     runtime_only_input!("PLN-FLD-0188", "volume", "$.Scope"),
     runtime_only_input!("PLN-FLD-0189", "network", "$.containers"),
     runtime_only_input!("PLN-FLD-0190", "network", "$.created"),
+    expected!(
+        "PLN-FLD-0191",
+        "container",
+        "$.Config.CreateCommand",
+        "observation-only",
+        "inventory::decode_container_creation_evidence",
+        "not_applicable",
+        "not_applicable",
+        "ContainerObservation::creation_evidence",
+        "PLN0050",
+        "tests::inventory::creation_evidence_is_typed_indexed_and_redacts_command_values",
+        "tests::inventory::typed_mount_relabel_state_only_conflicts_when_observed_and_different"
+    ),
 ];
 
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];

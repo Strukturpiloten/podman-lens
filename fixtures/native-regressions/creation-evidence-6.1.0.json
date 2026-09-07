@@ -1,0 +1,97 @@
+{
+  "fixture_kind": "sanitized-derived-native-creation-evidence",
+  "provenance": {
+    "podman_engine": "6.1.0",
+    "podman_commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+    "compose_provider": "5.5.0",
+    "outer_image_digest": "sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
+    "capture_scope": "trusted disposable rootful outer; network disabled; no host socket or repository mount",
+    "capture_commands": "CLI: local scratch build/tag then podman create only. Provider: Compose create with --pull never then native podman inspect. Neither capture establishes pull or build history.",
+    "sanitization": "Derived projection of selected inspect fields only. Resource names, paths, environment value, and image references are consistently replaced. Array order, option spelling, nullability, field shape, and local-image identity equality are retained. No full inspect response is committed."
+  },
+  "cli_authored": {
+    "Name": "fixture-cli-authored",
+    "Image": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "ImageName": "localhost/fixture-authored:1",
+    "Config": {
+      "Image": "localhost/fixture-authored:1",
+      "CreateCommand": [
+        "podman",
+        "create",
+        "--pull=never",
+        "--name",
+        "fixture-cli-authored",
+        "--network=none",
+        "--volume",
+        "/fixture/cli-data:/data:Z",
+        "--env",
+        "FIXTURE_ENV=redacted",
+        "--entrypoint",
+        "/bin/false",
+        "localhost/fixture-authored:1",
+        "fixture-post-image-command"
+      ]
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/fixture/cli-data",
+        "Destination": "/data",
+        "Mode": "Z",
+        "Options": ["rbind"],
+        "RW": true
+      }
+    ],
+    "HostConfig": { "Binds": ["/fixture/cli-data:/data:Z,rprivate,rbind"] }
+  },
+  "cli_tagged": {
+    "Name": "fixture-cli-tagged",
+    "Image": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "ImageName": "docker.io/library/fixture-native-evidence:fixture",
+    "Config": {
+      "Image": "docker.io/library/fixture-native-evidence:fixture",
+      "CreateCommand": [
+        "podman",
+        "create",
+        "--pull=never",
+        "--name",
+        "fixture-cli-tagged",
+        "--network=none",
+        "--volume",
+        "/fixture/cli-data:/data:z",
+        "docker.io/library/fixture-native-evidence:fixture"
+      ]
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/fixture/cli-data",
+        "Destination": "/data",
+        "Mode": "z",
+        "Options": ["rbind"],
+        "RW": true
+      }
+    ],
+    "HostConfig": { "Binds": ["/fixture/cli-data:/data:z,rprivate,rbind"] }
+  },
+  "provider": {
+    "Name": "fixture-provider-app",
+    "Image": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "ImageName": "docker.io/library/fixture-native-evidence:fixture",
+    "Config": {
+      "CreateCommand": null,
+      "Image": "docker.io/library/fixture-native-evidence:fixture"
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/fixture/provider-data",
+        "Destination": "/data",
+        "Mode": "",
+        "Options": ["bind"],
+        "RW": true
+      }
+    ],
+    "HostConfig": { "Binds": ["/fixture/provider-data:/data:bind,private"] }
+  }
+}

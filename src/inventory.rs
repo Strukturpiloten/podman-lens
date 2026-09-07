@@ -8,19 +8,20 @@ use std::{collections::BTreeMap, fmt, net::IpAddr};
 use serde_json::{Map, Value};
 
 use crate::observation::{
-    ConfiguredContainerCommand, ConfiguredContainerEntrypoint, ConfiguredContainerHostname, ConfiguredContainerUser,
-    ConfiguredContainerWorkdir, ContainerMountKind, ContainerMountObservation, ContainerMountSelinuxRelabel,
-    ContainerMountSource, ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference,
-    ImageObservation, ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation,
-    NativeHealthCommand, NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation,
-    NativeNamespaceMode, NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange,
-    NativeNetworkRouteObservation, NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation,
-    NativeOpaqueNetworkOptions, NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol,
-    NativeRelationship, NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName,
-    NativeRestartPolicyObservation, NativeSecretDriverObservation, NativeSecretDriverOptions,
-    NativeSecurityObservation, NativeStartupHealthCheckObservation, NativeTimestamp, NativeUlimitObservation,
-    NetworkObservation, NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue,
-    PodObservation, ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
+    AuthoredImageSpellingHint, AuthoredMountRelabelHint, ConfiguredContainerCommand, ConfiguredContainerEntrypoint,
+    ConfiguredContainerHostname, ConfiguredContainerUser, ConfiguredContainerWorkdir, ContainerCreationEvidence,
+    ContainerMountKind, ContainerMountObservation, ContainerMountSelinuxRelabel, ContainerMountSource,
+    ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation,
+    ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation, NativeHealthCommand,
+    NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode,
+    NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
+    NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
+    NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeRelationship,
+    NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation,
+    NativeSecretDriverObservation, NativeSecretDriverOptions, NativeSecurityObservation,
+    NativeStartupHealthCheckObservation, NativeTimestamp, NativeUlimitObservation, NetworkObservation,
+    NetworkOptionKeys, ObservationField, ObservationHeader, ObservationOrigin, ObservedValue, PodObservation,
+    ProtectedEnvironment, ProtectedEnvironmentEntry, ProtectedEnvironmentValue, ProtectedHealthCommand,
     ResourceDetails, ResourceObservation, ResourceObservationState, SecretObservation, UnixId as VolumeOwnerUnixId,
     UnmodelledCompleteness, UnmodelledField, VolumeObservation, VolumeOwnerIdWireValue,
 };
@@ -1208,6 +1209,7 @@ type NetworkDecoded = (
     ObservationField<Vec<NativeNetworkRouteObservation>>,
 );
 struct ContainerB3Decoded {
+    creation_evidence: ObservationField<ContainerCreationEvidence>,
     restart_policy: ObservationField<NativeRestartPolicyObservation>,
     health_check: ObservationField<NativeHealthCheckObservation>,
     health_failure_action: ObservationField<NativeHealthFailureAction>,
@@ -1243,6 +1245,7 @@ enum B4Decoded {
 impl Default for ContainerB3Decoded {
     fn default() -> Self {
         Self {
+            creation_evidence: ObservationField::NotApplicable,
             restart_policy: ObservationField::NotApplicable,
             health_check: ObservationField::NotApplicable,
             health_failure_action: ObservationField::NotApplicable,
@@ -1298,6 +1301,7 @@ fn details_from_decoded(kind: ResourceKind, details: DecodedDetails) -> Resource
 
 fn container_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
     let ContainerB3Decoded {
+        creation_evidence,
         restart_policy,
         health_check,
         health_failure_action,
@@ -1334,6 +1338,7 @@ fn container_details_from_decoded(details: DecodedDetails) -> ResourceDetails {
         namespaces,
         resource_controls,
         details.container_networking.unwrap_or(ObservationField::Absent),
+        creation_evidence,
     ))
 }
 
@@ -1456,6 +1461,7 @@ fn partial_observation(
     ))
 }
 
+#[allow(clippy::too_many_lines)] // one bounded native object decoded atomically.
 fn decode_container(
     listed: &ResourceIdentity,
     object: &Map<String, Value>,
@@ -1508,6 +1514,14 @@ fn decode_container(
     );
     let mounts = decode_container_mounts(object, &identity, &mut relationships, &mut findings);
     relationship_decoding.merge(mounts.relationships);
+    let creation_evidence = decode_container_creation_evidence(
+        container_create_command(object),
+        &configured_image,
+        &local_image_id,
+        &mounts.field,
+        &identity,
+        &mut findings,
+    );
     let native_dependencies = decode_native_dependencies(object.get("Dependencies"), &identity, &mut findings);
     relationship_decoding.merge(append_native_dependency_relationships(
         &native_dependencies,
@@ -1517,7 +1531,8 @@ fn decode_container(
         decode_container_secret_grants(object.get("Config"), &identity, &mut relationships, &mut findings);
     relationship_decoding.merge(secret_grants.relationships);
     let memory_swappiness = decode_memory_swappiness(object, evidence, &identity, &mut findings);
-    let container_b3 = decode_container_b3(object, &identity, &mut findings);
+    let mut container_b3 = decode_container_b3(object, &identity, &mut findings);
+    container_b3.creation_evidence = creation_evidence;
     let is_infra = decode_is_infra(object, &identity, &mut findings);
     Ok((
         identity,
@@ -1562,6 +1577,499 @@ fn decode_container(
             "IsInfra",
         ],
     ))
+}
+
+const MAX_AUTHORED_MOUNT_RELABELS: usize = 64;
+const MAX_CREATE_COMMAND_ARGUMENTS: usize = 256;
+const MAX_CREATE_COMMAND_ARGUMENT_BYTES: usize = 16 * 1024;
+const MAX_CREATE_COMMAND_ARGUMENT_BYTES_PER_VALUE: usize = 4 * 1024;
+
+fn container_create_command(object: &Map<String, Value>) -> Option<&Value> {
+    match object.get("Config") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(config)) => config.get("CreateCommand"),
+        Some(value) => Some(value),
+    }
+}
+
+struct ParsedCreateMount<'a> {
+    source: &'a str,
+    destination: &'a str,
+    relabel: ContainerMountSelinuxRelabel,
+}
+
+struct ParsedCreateCommand<'a> {
+    image: &'a str,
+    mount_relabels: ParsedCreateMountRelabels<'a>,
+}
+
+enum ParsedCreateMountRelabels<'a> {
+    Observed(Vec<ParsedCreateMount<'a>>),
+    Malformed,
+    Unavailable,
+}
+
+enum ParsedCreateMountRelabel<'a> {
+    Irrelevant,
+    Observed(ParsedCreateMount<'a>),
+    Malformed,
+    Unavailable,
+}
+
+impl<'a> ParsedCreateMountRelabels<'a> {
+    fn record(&mut self, parsed: ParsedCreateMountRelabel<'a>) {
+        match parsed {
+            ParsedCreateMountRelabel::Irrelevant => {}
+            ParsedCreateMountRelabel::Observed(mount) => {
+                let Self::Observed(mounts) = self else {
+                    return;
+                };
+                if mounts.len() >= MAX_AUTHORED_MOUNT_RELABELS {
+                    *self = Self::Unavailable;
+                } else {
+                    mounts.push(mount);
+                }
+            }
+            ParsedCreateMountRelabel::Malformed => *self = Self::Malformed,
+            ParsedCreateMountRelabel::Unavailable => {
+                if !matches!(self, Self::Malformed) {
+                    *self = Self::Unavailable;
+                }
+            }
+        }
+    }
+}
+
+enum CreateCommandParse<'a> {
+    Absent,
+    Malformed,
+    Unavailable,
+    Parsed(ParsedCreateCommand<'a>),
+}
+
+fn decode_container_creation_evidence(
+    value: Option<&Value>,
+    configured_image: &ObservationField<String>,
+    local_image_id: &ObservationField<String>,
+    mounts: &ObservationField<Vec<ContainerMountObservation>>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<ContainerCreationEvidence> {
+    let parsed = match parse_create_command(value) {
+        CreateCommandParse::Absent => return ObservationField::Absent,
+        CreateCommandParse::Malformed => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.Config.CreateCommand",
+            ));
+            return ObservationField::Malformed;
+        }
+        CreateCommandParse::Unavailable => return ObservationField::Unavailable,
+        CreateCommandParse::Parsed(parsed) => parsed,
+    };
+
+    let image = decode_authored_image_spelling_hint(parsed.image, configured_image, local_image_id, identity, findings);
+
+    let mount_relabels = match parsed.mount_relabels {
+        ParsedCreateMountRelabels::Observed(parsed_mounts) => {
+            correlate_authored_mount_relabels(parsed_mounts, mounts, identity, findings)
+        }
+        ParsedCreateMountRelabels::Malformed => {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                "$.Config.CreateCommand",
+            ));
+            ObservationField::Malformed
+        }
+        ParsedCreateMountRelabels::Unavailable => ObservationField::Unavailable,
+    };
+
+    ObservationField::Observed(ObservedValue::new(
+        ContainerCreationEvidence::new(image, mount_relabels),
+        ObservationOrigin::Configured,
+    ))
+}
+
+fn correlate_authored_mount_relabels(
+    parsed_mounts: Vec<ParsedCreateMount<'_>>,
+    mounts: &ObservationField<Vec<ContainerMountObservation>>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<AuthoredMountRelabelHint>> {
+    if parsed_mounts.is_empty() {
+        return configured_creation_hint(Vec::new());
+    }
+    let Some(inspect_mounts) = mounts.observed().map(ObservedValue::value) else {
+        return ObservationField::Unavailable;
+    };
+    let mut relabels = Vec::with_capacity(parsed_mounts.len());
+    for candidate in parsed_mounts {
+        let mut matching = inspect_mounts.iter().enumerate().filter(|(_, mount)| {
+            mount
+                .source()
+                .observed()
+                .is_some_and(|source| source.value().value() == candidate.source)
+                && mount
+                    .destination()
+                    .observed()
+                    .is_some_and(|destination| destination.value() == candidate.destination)
+        });
+        let Some((mount_index, mount)) = matching.next() else {
+            return ObservationField::Unavailable;
+        };
+        if matching.next().is_some() {
+            return ObservationField::Unavailable;
+        }
+        let hint = match mount.selinux_relabel() {
+            ObservationField::Observed(relabel) if *relabel.value() == candidate.relabel => match candidate.relabel {
+                ContainerMountSelinuxRelabel::Shared => AuthoredMountRelabelHint::Shared { mount_index },
+                ContainerMountSelinuxRelabel::Private => AuthoredMountRelabelHint::Private { mount_index },
+            },
+            ObservationField::Observed(_) => {
+                findings.push(InventoryFinding::at_occurrence(
+                    DiagnosticCode::CreationEvidenceConflict,
+                    identity.clone(),
+                    "$.Config.CreateCommand",
+                    mount_index,
+                ));
+                AuthoredMountRelabelHint::Contradictory { mount_index }
+            }
+            _ => return ObservationField::Unavailable,
+        };
+        relabels.push(hint);
+    }
+
+    configured_creation_hint(relabels)
+}
+
+fn configured_creation_hint<T>(value: T) -> ObservationField<T> {
+    ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Configured))
+}
+
+fn decode_authored_image_spelling_hint(
+    parsed_image: &str,
+    configured_image: &ObservationField<String>,
+    local_image_id: &ObservationField<String>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<AuthoredImageSpellingHint> {
+    let configured = configured_image.observed();
+    let local = local_image_id.observed();
+    if configured.is_some_and(|value| value.value() == parsed_image) {
+        return configured_creation_hint(AuthoredImageSpellingHint::MatchesConfiguredImage);
+    }
+    if local.is_some_and(|value| value.value() == parsed_image) {
+        return configured_creation_hint(AuthoredImageSpellingHint::MatchesLocalImageId);
+    }
+    if configured.is_none() || local.is_none() {
+        return ObservationField::Unavailable;
+    }
+    findings.push(InventoryFinding::field(
+        DiagnosticCode::CreationEvidenceConflict,
+        identity.clone(),
+        "$.Config.CreateCommand",
+    ));
+    configured_creation_hint(AuthoredImageSpellingHint::Contradictory)
+}
+
+fn bounded_create_command_values(value: Option<&Value>) -> Result<Option<Vec<&str>>, CreateCommandParse<'static>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let Some(arguments) = value.as_array() else {
+        return Err(CreateCommandParse::Malformed);
+    };
+    if arguments.len() > MAX_CREATE_COMMAND_ARGUMENTS {
+        return Err(CreateCommandParse::Unavailable);
+    }
+    let mut values = Vec::with_capacity(arguments.len());
+    let mut bytes = 0;
+    for argument in arguments {
+        let Some(argument) = argument.as_str() else {
+            return Err(CreateCommandParse::Malformed);
+        };
+        if argument.len() > MAX_CREATE_COMMAND_ARGUMENT_BYTES_PER_VALUE {
+            return Err(CreateCommandParse::Unavailable);
+        }
+        bytes += argument.len();
+        if bytes > MAX_CREATE_COMMAND_ARGUMENT_BYTES {
+            return Err(CreateCommandParse::Unavailable);
+        }
+        values.push(argument);
+    }
+    Ok(Some(values))
+}
+
+fn parse_create_command(value: Option<&Value>) -> CreateCommandParse<'_> {
+    let values = match bounded_create_command_values(value) {
+        Ok(Some(values)) => values,
+        Ok(None) => return CreateCommandParse::Absent,
+        Err(state) => return state,
+    };
+    let Some((first, remaining)) = values.split_first() else {
+        return CreateCommandParse::Malformed;
+    };
+    if !matches!(*first, "podman") && !first.ends_with("/podman") {
+        return CreateCommandParse::Unavailable;
+    }
+    let mut index = 0;
+    if remaining.get(index).is_some_and(|value| *value == "container") {
+        index += 1;
+    }
+    if !matches!(remaining.get(index), Some(&"create" | &"run")) {
+        return CreateCommandParse::Unavailable;
+    }
+    index += 1;
+    let mut mount_relabels = ParsedCreateMountRelabels::Observed(Vec::new());
+    while let Some(argument) = remaining.get(index) {
+        if *argument == "--" {
+            index += 1;
+            break;
+        }
+        if !argument.starts_with('-') || *argument == "-" {
+            break;
+        }
+        let argument = *argument;
+        let option_value = if let Some(value) = argument.strip_prefix("--volume=") {
+            Some(("volume", value))
+        } else if let Some(value) = argument.strip_prefix("--mount=") {
+            Some(("mount", value))
+        } else if let Some(value) = argument.strip_prefix("-v") {
+            (!value.is_empty()).then_some(("volume", value))
+        } else {
+            None
+        };
+        if let Some((kind, value)) = option_value {
+            mount_relabels.record(parse_create_mount_relabel(kind, value));
+            index += 1;
+            continue;
+        }
+        if matches!(argument, "--volume" | "-v" | "--mount") {
+            let Some(value) = remaining.get(index + 1) else {
+                return CreateCommandParse::Malformed;
+            };
+            let kind = if argument == "--mount" { "mount" } else { "volume" };
+            mount_relabels.record(parse_create_mount_relabel(kind, value));
+            index += 2;
+            continue;
+        }
+        if is_create_flag_without_value(argument) {
+            index += 1;
+            continue;
+        }
+        if let Some(option) = argument.strip_prefix("--") {
+            let (option, inline_value) = match option.split_once('=') {
+                Some((option, _value)) => (option, true),
+                None => (option, false),
+            };
+            if !is_create_flag_with_value(option) {
+                return CreateCommandParse::Unavailable;
+            }
+            if !inline_value && remaining.get(index + 1).is_none() {
+                return CreateCommandParse::Malformed;
+            }
+            index += if inline_value { 1 } else { 2 };
+            continue;
+        }
+        return CreateCommandParse::Unavailable;
+    }
+    let Some(image) = remaining.get(index) else {
+        return CreateCommandParse::Malformed;
+    };
+    CreateCommandParse::Parsed(ParsedCreateCommand { image, mount_relabels })
+}
+
+fn is_create_flag_without_value(option: &str) -> bool {
+    matches!(
+        option,
+        "-d" | "-i"
+            | "-t"
+            | "--detach"
+            | "--interactive"
+            | "--tty"
+            | "--rm"
+            | "--replace"
+            | "--privileged"
+            | "--read-only"
+            | "--init"
+            | "--no-hosts"
+            | "--http-proxy"
+    )
+}
+
+fn is_create_flag_with_value(option: &str) -> bool {
+    matches!(
+        option,
+        "name"
+            | "pod"
+            | "network"
+            | "network-alias"
+            | "publish"
+            | "env"
+            | "env-file"
+            | "label"
+            | "label-file"
+            | "annotation"
+            | "user"
+            | "workdir"
+            | "entrypoint"
+            | "hostname"
+            | "restart"
+            | "health-cmd"
+            | "health-interval"
+            | "health-timeout"
+            | "health-retries"
+            | "health-start-period"
+            | "memory"
+            | "memory-reservation"
+            | "memory-swap"
+            | "cpus"
+            | "cpu-shares"
+            | "cpu-period"
+            | "cpu-quota"
+            | "pids-limit"
+            | "ulimit"
+            | "security-opt"
+            | "cap-add"
+            | "cap-drop"
+            | "device"
+            | "dns"
+            | "dns-option"
+            | "dns-search"
+            | "add-host"
+            | "tmpfs"
+            | "expose"
+            | "stop-signal"
+            | "stop-timeout"
+            | "log-driver"
+            | "log-opt"
+            | "cgroup-parent"
+            | "cgroupns"
+            | "ipc"
+            | "pid"
+            | "uts"
+            | "userns"
+            | "gidmap"
+            | "uidmap"
+            | "shm-size"
+            | "secret"
+            | "credential"
+            | "pull"
+            | "authfile"
+            | "creds"
+            | "platform"
+            | "preserve-fd"
+    )
+}
+
+fn parse_create_mount_relabel<'a>(kind: &str, value: &'a str) -> ParsedCreateMountRelabel<'a> {
+    match kind {
+        "volume" => {
+            let mut parts = value.splitn(3, ':');
+            let (Some(source), Some(destination)) = (parts.next(), parts.next()) else {
+                return ParsedCreateMountRelabel::Malformed;
+            };
+            if source.is_empty() || destination.is_empty() {
+                return ParsedCreateMountRelabel::Malformed;
+            }
+            let Some(options) = parts.next() else {
+                return ParsedCreateMountRelabel::Irrelevant;
+            };
+            let relabel = match parse_volume_relabel(options) {
+                Ok(Some(relabel)) => relabel,
+                Ok(None) => return ParsedCreateMountRelabel::Irrelevant,
+                Err(()) => return ParsedCreateMountRelabel::Unavailable,
+            };
+            ParsedCreateMountRelabel::Observed(ParsedCreateMount {
+                source,
+                destination,
+                relabel,
+            })
+        }
+        "mount" => parse_structured_mount_relabel(value),
+        _ => ParsedCreateMountRelabel::Unavailable,
+    }
+}
+
+fn parse_volume_relabel(options: &str) -> Result<Option<ContainerMountSelinuxRelabel>, ()> {
+    let mut relabel = None;
+    for option in options.split(',') {
+        let candidate = match option {
+            "z" => Some(ContainerMountSelinuxRelabel::Shared),
+            "Z" => Some(ContainerMountSelinuxRelabel::Private),
+            _ => None,
+        };
+        if let Some(candidate) = candidate {
+            if relabel.is_some_and(|previous| previous != candidate) {
+                return Err(());
+            }
+            relabel = Some(candidate);
+        }
+    }
+    Ok(relabel)
+}
+
+fn parse_structured_mount_relabel(value: &str) -> ParsedCreateMountRelabel<'_> {
+    let mut source = None;
+    let mut destination = None;
+    let mut relabel = None;
+    for part in value.split(',') {
+        let Some((key, part_value)) = part.split_once('=') else {
+            return match part {
+                "relabel" | "source" | "src" | "destination" | "dst" | "target" => ParsedCreateMountRelabel::Malformed,
+                "ro" | "rw" | "bind-nonrecursive" | "nosuid" | "nodev" | "noexec" => {
+                    continue;
+                }
+                _ => ParsedCreateMountRelabel::Unavailable,
+            };
+        };
+        match key {
+            "source" | "src" => {
+                if part_value.is_empty() {
+                    return ParsedCreateMountRelabel::Malformed;
+                }
+                if source.replace(part_value).is_some() {
+                    return ParsedCreateMountRelabel::Unavailable;
+                }
+            }
+            "destination" | "dst" | "target" => {
+                if part_value.is_empty() {
+                    return ParsedCreateMountRelabel::Malformed;
+                }
+                if destination.replace(part_value).is_some() {
+                    return ParsedCreateMountRelabel::Unavailable;
+                }
+            }
+            "relabel" => {
+                let candidate = match part_value {
+                    "shared" => ContainerMountSelinuxRelabel::Shared,
+                    "private" => ContainerMountSelinuxRelabel::Private,
+                    _ => return ParsedCreateMountRelabel::Malformed,
+                };
+                if relabel.replace(candidate).is_some() {
+                    return ParsedCreateMountRelabel::Unavailable;
+                }
+            }
+            "type" if part_value == "bind" => {}
+            _ => return ParsedCreateMountRelabel::Unavailable,
+        }
+    }
+    let Some(relabel) = relabel else {
+        return ParsedCreateMountRelabel::Irrelevant;
+    };
+    let (Some(source), Some(destination)) = (source, destination) else {
+        return ParsedCreateMountRelabel::Malformed;
+    };
+    ParsedCreateMountRelabel::Observed(ParsedCreateMount {
+        source,
+        destination,
+        relabel,
+    })
 }
 
 fn decode_pod(
@@ -1678,6 +2186,7 @@ fn decode_container_b3(
         ),
     };
     ContainerB3Decoded {
+        creation_evidence: ObservationField::NotApplicable,
         restart_policy,
         health_check,
         health_failure_action,
@@ -5455,6 +5964,7 @@ fn unknown_nested_fields(
                     "Entrypoint",
                     "User",
                     "WorkingDir",
+                    "CreateCommand",
                     "Hostname",
                     "Healthcheck",
                     "HealthcheckOnFailureAction",
@@ -5826,7 +6336,7 @@ fn optional_string_any<'a>(object: &'a Map<String, Value>, keys: &[&str]) -> Opt
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::items_after_test_module)]
+#[allow(clippy::expect_used, clippy::items_after_test_module, clippy::panic)]
 mod typed_observation_constructor_tests {
     use super::*;
     use crate::capability_catalogue;
@@ -5846,6 +6356,26 @@ mod typed_observation_constructor_tests {
         )
     }
 
+    fn typed_bind_mount(selinux_relabel: ObservationField<ContainerMountSelinuxRelabel>) -> ContainerMountObservation {
+        ContainerMountObservation::new(
+            ContainerMountKind::Bind,
+            ObservationField::Observed(ObservedValue::new(
+                ContainerMountSource::LocalBindPath("/source".to_owned()),
+                ObservationOrigin::LocalResolution,
+            )),
+            ObservationField::Absent,
+            ObservationField::Observed(ObservedValue::new(
+                "/destination".to_owned(),
+                ObservationOrigin::Configured,
+            )),
+            ObservationField::Absent,
+            ObservationField::Absent,
+            selinux_relabel,
+            ObservationField::Absent,
+            ObservationField::Absent,
+        )
+    }
+
     #[test]
     fn list_paths_use_the_normalized_protocol_version() {
         let api = ObservedApiVersion::parse_reported("4.9.4-rhel").expect("reviewed RHEL alias");
@@ -5855,9 +6385,634 @@ mod typed_observation_constructor_tests {
     }
 
     #[test]
+    fn creation_command_parser_stops_at_image_and_rejects_unknown_option_arity() {
+        let command = serde_json::json!([
+            "podman",
+            "run",
+            "--env",
+            "SENTINEL_ENV=SENTINEL_VALUE",
+            "--volume",
+            "/SENTINEL_SOURCE:/container:Z",
+            "example.invalid/canary:1",
+            "SENTINEL_POST_IMAGE_COMMAND"
+        ]);
+        let CreateCommandParse::Parsed(parsed) = parse_create_command(Some(&command)) else {
+            panic!("bounded known command must parse");
+        };
+        assert_eq!(parsed.image, "example.invalid/canary:1");
+        let ParsedCreateMountRelabels::Observed(mounts) = parsed.mount_relabels else {
+            panic!("reviewed relabel must be observed");
+        };
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].relabel, ContainerMountSelinuxRelabel::Private);
+        assert!(matches!(
+            parse_create_command(Some(&serde_json::json!([
+                "podman",
+                "run",
+                "--future-option",
+                "value",
+                "image"
+            ]))),
+            CreateCommandParse::Unavailable
+        ));
+    }
+
+    #[test]
+    fn malformed_or_ambiguous_relabel_mounts_preserve_independent_image_evidence() {
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "container-id".to_owned(),
+            Some("canary".to_owned()),
+        );
+        let configured_image = ObservationField::Observed(ObservedValue::new(
+            "example.invalid/canary:1".to_owned(),
+            ObservationOrigin::Configured,
+        ));
+
+        let ambiguous_volume = serde_json::json!([
+            "podman",
+            "run",
+            "--volume",
+            "/SENTINEL_VOLUME_SOURCE:/data:z,Z",
+            "example.invalid/canary:1"
+        ]);
+        let mut findings = Vec::new();
+        let result = decode_container_creation_evidence(
+            Some(&ambiguous_volume),
+            &configured_image,
+            &ObservationField::Absent,
+            &ObservationField::Absent,
+            &identity,
+            &mut findings,
+        );
+        let ObservationField::Observed(result) = result else {
+            panic!("ambiguous relabel must not erase independent creation evidence");
+        };
+        assert!(matches!(
+            result.value().image(),
+            ObservationField::Observed(image)
+                if *image.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(result.value().mount_relabels(), ObservationField::Unavailable));
+        assert!(findings.is_empty());
+
+        let malformed_mount = serde_json::json!([
+            "podman",
+            "run",
+            "--mount",
+            "type=bind,src=/SENTINEL_MOUNT_SOURCE,target=/data,relabel",
+            "example.invalid/canary:1"
+        ]);
+        let mut findings = Vec::new();
+        let result = decode_container_creation_evidence(
+            Some(&malformed_mount),
+            &configured_image,
+            &ObservationField::Absent,
+            &ObservationField::Absent,
+            &identity,
+            &mut findings,
+        );
+        let ObservationField::Observed(result) = result else {
+            panic!("malformed mount must not erase independent creation evidence");
+        };
+        assert!(matches!(
+            result.value().image(),
+            ObservationField::Observed(image)
+                if *image.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(result.value().mount_relabels(), ObservationField::Malformed));
+        assert!(findings.iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed
+                && finding.field_path() == Some("$.Config.CreateCommand")
+        }));
+        let finding_debug = format!("{findings:?}");
+        assert!(!finding_debug.contains("SENTINEL_MOUNT_SOURCE"));
+    }
+
+    #[test]
+    fn typed_mount_relabel_state_only_conflicts_when_observed_and_different() {
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "container-id".to_owned(),
+            Some("canary".to_owned()),
+        );
+        let configured_image = ObservationField::Observed(ObservedValue::new(
+            "example.invalid/canary:1".to_owned(),
+            ObservationOrigin::Configured,
+        ));
+        let command = serde_json::json!([
+            "podman",
+            "run",
+            "--volume",
+            "/source:/destination:z",
+            "example.invalid/canary:1"
+        ]);
+
+        for relabel_state in [
+            ObservationField::Absent,
+            ObservationField::Unavailable,
+            ObservationField::Malformed,
+        ] {
+            let mounts = ObservationField::Observed(ObservedValue::new(
+                vec![typed_bind_mount(relabel_state)],
+                ObservationOrigin::Effective,
+            ));
+            let mut findings = Vec::new();
+            let evidence = decode_container_creation_evidence(
+                Some(&command),
+                &configured_image,
+                &ObservationField::Absent,
+                &mounts,
+                &identity,
+                &mut findings,
+            );
+            let ObservationField::Observed(evidence) = evidence else {
+                panic!("incomplete relabel state must preserve independent image evidence");
+            };
+            assert!(matches!(
+                evidence.value().image(),
+                ObservationField::Observed(image)
+                    if *image.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+            ));
+            assert!(matches!(
+                evidence.value().mount_relabels(),
+                ObservationField::Unavailable
+            ));
+            assert!(findings.is_empty(), "incomplete evidence is not contradictory");
+        }
+
+        let mounts = ObservationField::Observed(ObservedValue::new(
+            vec![typed_bind_mount(ObservationField::Observed(ObservedValue::new(
+                ContainerMountSelinuxRelabel::Private,
+                ObservationOrigin::Configured,
+            )))],
+            ObservationOrigin::Effective,
+        ));
+        let mut findings = Vec::new();
+        let evidence = decode_container_creation_evidence(
+            Some(&command),
+            &configured_image,
+            &ObservationField::Absent,
+            &mounts,
+            &identity,
+            &mut findings,
+        );
+        let ObservationField::Observed(evidence) = evidence else {
+            panic!("observed disagreement must retain independent creation evidence");
+        };
+        assert!(matches!(
+            evidence.value().mount_relabels(),
+            ObservationField::Observed(relabels)
+                if relabels.value().as_slice()
+                    == [AuthoredMountRelabelHint::Contradictory { mount_index: 0 }]
+        ));
+        assert!(findings.iter().any(|finding| {
+            finding.code() == DiagnosticCode::CreationEvidenceConflict
+                && finding.field_path() == Some("$.Config.CreateCommand")
+                && finding.occurrence() == Some(0)
+        }));
+    }
+
+    #[test]
+    fn unknown_structured_mount_option_is_unavailable_without_erasing_image_hint() {
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "container-id".to_owned(),
+            Some("canary".to_owned()),
+        );
+        let configured_image = ObservationField::Observed(ObservedValue::new(
+            "example.invalid/canary:1".to_owned(),
+            ObservationOrigin::Configured,
+        ));
+        let command = serde_json::json!([
+            "podman",
+            "run",
+            "--mount",
+            "type=bind,src=/SENTINEL_SOURCE,target=/data,relabel=private,future-option=value",
+            "example.invalid/canary:1"
+        ]);
+        let mut findings = Vec::new();
+        let evidence = decode_container_creation_evidence(
+            Some(&command),
+            &configured_image,
+            &ObservationField::Absent,
+            &ObservationField::Absent,
+            &identity,
+            &mut findings,
+        );
+        let ObservationField::Observed(evidence) = evidence else {
+            panic!("unknown mount option must preserve independent creation evidence");
+        };
+        assert!(matches!(
+            evidence.value().image(),
+            ObservationField::Observed(image)
+                if *image.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(
+            evidence.value().mount_relabels(),
+            ObservationField::Unavailable
+        ));
+        assert!(findings.is_empty());
+        assert!(!format!("{evidence:?}").contains("SENTINEL_SOURCE"));
+    }
+
+    #[test]
+    fn captured_cli_shape_accepts_known_equals_options_without_retaining_them() {
+        let command = serde_json::json!([
+            "podman",
+            "create",
+            "--pull=never",
+            "--name",
+            "capture-name",
+            "--network=none",
+            "--volume",
+            "/capture-only/data:/data:Z",
+            "localhost/pl27-authored:1",
+            "capture-post-image-command"
+        ]);
+        let CreateCommandParse::Parsed(parsed) = parse_create_command(Some(&command)) else {
+            panic!("reviewed sanitized CLI shape must parse");
+        };
+        assert_eq!(parsed.image, "localhost/pl27-authored:1");
+        let ParsedCreateMountRelabels::Observed(mounts) = parsed.mount_relabels else {
+            panic!("reviewed relabel must be observed");
+        };
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].relabel, ContainerMountSelinuxRelabel::Private);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)] // Captured CLI/provider evidence expectations stay adjacent.
+    fn derived_native_cli_and_provider_fixture_preserves_authored_vs_absent_evidence() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../fixtures/native-regressions/creation-evidence-6.1.0.json"
+        ))
+        .expect("reviewed sanitized fixture");
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "fixture-container".to_owned(),
+            Some("fixture".to_owned()),
+        );
+        let cli = fixture["cli_authored"].as_object().expect("CLI-authored object");
+        let mut findings = Vec::new();
+        let cli_mounts = decode_container_mounts(cli, &identity, &mut Vec::new(), &mut findings);
+        let configured_image = ObservationField::Observed(ObservedValue::new(
+            cli["ImageName"].as_str().expect("image name").to_owned(),
+            ObservationOrigin::Configured,
+        ));
+        let local_image_id = ObservationField::Observed(ObservedValue::new(
+            cli["Image"].as_str().expect("image").to_owned(),
+            ObservationOrigin::LocalResolution,
+        ));
+        let cli_evidence = decode_container_creation_evidence(
+            container_create_command(cli),
+            &configured_image,
+            &local_image_id,
+            &cli_mounts.field,
+            &identity,
+            &mut findings,
+        );
+        let cli_evidence = cli_evidence.observed().expect("CLI creation evidence").value();
+        assert!(matches!(
+            cli_evidence.image(),
+            ObservationField::Observed(value)
+                if *value.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(
+            cli_evidence.mount_relabels(),
+            ObservationField::Observed(value)
+                if value.value().as_slice() == [AuthoredMountRelabelHint::Private { mount_index: 0 }]
+        ));
+
+        for unavailable_configured in [
+            ObservationField::Absent,
+            ObservationField::Malformed,
+            ObservationField::Unavailable,
+        ] {
+            let independent = decode_container_creation_evidence(
+                container_create_command(cli),
+                &unavailable_configured,
+                &ObservationField::Observed(ObservedValue::new(
+                    "sha256:ordinary-local-id".to_owned(),
+                    ObservationOrigin::LocalResolution,
+                )),
+                &cli_mounts.field,
+                &identity,
+                &mut findings,
+            );
+            let independent = independent.observed().expect("independent creation evidence").value();
+            assert!(matches!(independent.image(), ObservationField::Unavailable));
+            assert!(matches!(
+                independent.mount_relabels(),
+                ObservationField::Observed(value)
+                    if value.value().as_slice() == [AuthoredMountRelabelHint::Private { mount_index: 0 }]
+            ));
+        }
+
+        let image_without_mounts = decode_container_creation_evidence(
+            container_create_command(cli),
+            &configured_image,
+            &local_image_id,
+            &ObservationField::Unavailable,
+            &identity,
+            &mut findings,
+        );
+        let image_without_mounts = image_without_mounts
+            .observed()
+            .expect("independent creation evidence")
+            .value();
+        assert!(matches!(
+            image_without_mounts.image(),
+            ObservationField::Observed(value)
+                if *value.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(
+            image_without_mounts.mount_relabels(),
+            ObservationField::Unavailable
+        ));
+
+        let provider = fixture["provider"].as_object().expect("provider object");
+        let tagged = fixture["cli_tagged"].as_object().expect("CLI-tagged object");
+        assert_eq!(cli["Image"], tagged["Image"]);
+        assert_eq!(tagged["Image"], provider["Image"]);
+
+        let tagged_mounts = decode_container_mounts(tagged, &identity, &mut Vec::new(), &mut findings);
+        let tagged_evidence = decode_container_creation_evidence(
+            container_create_command(tagged),
+            &ObservationField::Observed(ObservedValue::new(
+                tagged["ImageName"].as_str().expect("tagged image name").to_owned(),
+                ObservationOrigin::Configured,
+            )),
+            &ObservationField::Observed(ObservedValue::new(
+                tagged["Image"].as_str().expect("tagged image ID").to_owned(),
+                ObservationOrigin::LocalResolution,
+            )),
+            &tagged_mounts.field,
+            &identity,
+            &mut findings,
+        );
+        let tagged_evidence = tagged_evidence
+            .observed()
+            .expect("CLI-tagged creation evidence")
+            .value();
+        assert!(matches!(
+            tagged_evidence.image(),
+            ObservationField::Observed(value)
+                if *value.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(
+            tagged_evidence.mount_relabels(),
+            ObservationField::Observed(value)
+                if value.value().as_slice()
+                    == [AuthoredMountRelabelHint::Shared { mount_index: 0 }]
+        ));
+
+        let provider_mounts = decode_container_mounts(provider, &identity, &mut Vec::new(), &mut findings);
+        assert!(
+            provider_mounts
+                .field
+                .observed()
+                .and_then(|value| value.value()[0].selinux_relabel().observed())
+                .is_none()
+        );
+        assert!(matches!(
+            decode_container_creation_evidence(
+                container_create_command(provider),
+                &ObservationField::Observed(ObservedValue::new(
+                    provider["ImageName"].as_str().expect("image name").to_owned(),
+                    ObservationOrigin::Configured,
+                )),
+                &ObservationField::Observed(ObservedValue::new(
+                    provider["Image"].as_str().expect("image").to_owned(),
+                    ObservationOrigin::LocalResolution,
+                )),
+                &provider_mounts.field,
+                &identity,
+                &mut findings,
+            ),
+            ObservationField::Absent
+        ));
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn creation_evidence_preserves_absent_malformed_conflicting_and_bounded_states() {
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "container-id".to_owned(),
+            Some("canary".to_owned()),
+        );
+        let configured = ObservationField::Observed(ObservedValue::new(
+            "example.invalid/configured:1".to_owned(),
+            ObservationOrigin::Configured,
+        ));
+        let absent = serde_json::json!({"Config": {}});
+        let mut findings = Vec::new();
+        assert!(matches!(
+            decode_container_creation_evidence(
+                container_create_command(absent.as_object().expect("object")),
+                &configured,
+                &ObservationField::Absent,
+                &ObservationField::Absent,
+                &identity,
+                &mut findings,
+            ),
+            ObservationField::Absent
+        ));
+        assert!(findings.is_empty());
+
+        let malformed = serde_json::json!({"Config": {"CreateCommand": "not-an-array"}});
+        assert!(matches!(
+            decode_container_creation_evidence(
+                container_create_command(malformed.as_object().expect("object")),
+                &configured,
+                &ObservationField::Absent,
+                &ObservationField::Absent,
+                &identity,
+                &mut findings,
+            ),
+            ObservationField::Malformed
+        ));
+        assert!(findings.iter().any(|finding| {
+            finding.code() == DiagnosticCode::ResourceMalformed
+                && finding.field_path() == Some("$.Config.CreateCommand")
+        }));
+
+        let conflicting =
+            serde_json::json!({"Config": {"CreateCommand": ["podman", "run", "SENTINEL_CONFLICTING_IMAGE"]}});
+        let result = decode_container_creation_evidence(
+            container_create_command(conflicting.as_object().expect("object")),
+            &configured,
+            &ObservationField::Observed(ObservedValue::new(
+                "sha256:different".to_owned(),
+                ObservationOrigin::LocalResolution,
+            )),
+            &ObservationField::Absent,
+            &identity,
+            &mut findings,
+        );
+        assert!(matches!(
+            result,
+            ObservationField::Observed(ref value)
+                if matches!(value.value().image(), ObservationField::Observed(image)
+                    if *image.value() == AuthoredImageSpellingHint::Contradictory)
+                    && matches!(value.value().mount_relabels(), ObservationField::Observed(relabels)
+                        if relabels.value().is_empty())
+        ));
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.code() == DiagnosticCode::CreationEvidenceConflict)
+        );
+        let finding_debug = format!("{findings:?}");
+        assert!(!finding_debug.contains("SENTINEL_CONFLICTING_IMAGE"));
+
+        let local_match = serde_json::json!({"Config": {"CreateCommand": ["podman", "run", "sha256:local"]}});
+        let local_evidence = decode_container_creation_evidence(
+            container_create_command(local_match.as_object().expect("object")),
+            &ObservationField::Absent,
+            &ObservationField::Observed(ObservedValue::new(
+                "sha256:local".to_owned(),
+                ObservationOrigin::LocalResolution,
+            )),
+            &ObservationField::Absent,
+            &identity,
+            &mut Vec::new(),
+        );
+        assert!(matches!(
+            local_evidence,
+            ObservationField::Observed(ref value)
+                if matches!(value.value().image(), ObservationField::Observed(image)
+                    if *image.value() == AuthoredImageSpellingHint::MatchesLocalImageId)
+        ));
+    }
+
+    #[test]
+    fn creation_command_bounds_and_known_value_options_are_closed() {
+        let mut over_limit = vec![serde_json::json!("podman"), serde_json::json!("run")];
+        for index in 0..=MAX_AUTHORED_MOUNT_RELABELS {
+            over_limit.push(serde_json::json!("--volume"));
+            over_limit.push(serde_json::json!(format!("/bounded/{index}:/container{index}:z")));
+        }
+        over_limit.push(serde_json::json!("example.invalid/image:1"));
+        let over_limit = Value::Array(over_limit);
+        let CreateCommandParse::Parsed(parsed) = parse_create_command(Some(&over_limit)) else {
+            panic!("mount bound must not erase the independently parsed image");
+        };
+        assert_eq!(parsed.image, "example.invalid/image:1");
+        assert!(matches!(parsed.mount_relabels, ParsedCreateMountRelabels::Unavailable));
+        assert!(matches!(
+            parse_create_command(Some(&Value::Array(vec![
+                serde_json::json!("podman"),
+                serde_json::json!("run"),
+                serde_json::json!("--preserve-fd"),
+                serde_json::json!("3"),
+                serde_json::json!("example.invalid/image:1"),
+            ]))),
+            CreateCommandParse::Parsed(_)
+        ));
+        let excessive = Value::Array(
+            (0..=MAX_CREATE_COMMAND_ARGUMENTS)
+                .map(|_| serde_json::json!("bounded"))
+                .collect(),
+        );
+        assert!(matches!(
+            parse_create_command(Some(&excessive)),
+            CreateCommandParse::Unavailable
+        ));
+        let oversized = Value::Array(vec![
+            serde_json::json!("podman"),
+            serde_json::json!("run"),
+            serde_json::json!("x".repeat(MAX_CREATE_COMMAND_ARGUMENT_BYTES_PER_VALUE + 1)),
+        ]);
+        assert!(matches!(
+            parse_create_command(Some(&oversized)),
+            CreateCommandParse::Unavailable
+        ));
+    }
+
+    #[test]
+    fn creation_evidence_is_typed_indexed_and_redacts_command_values() {
+        let response = serde_json::json!({
+            "Config": {
+                "CreateCommand": [
+                    "podman",
+                    "create",
+                    "--env",
+                    "SENTINEL_ENV=SENTINEL_VALUE",
+                    "-v",
+                    "/SENTINEL_SOURCE:/container:z",
+                    "example.invalid/canary:1",
+                    "SENTINEL_POST_IMAGE_COMMAND"
+                ]
+            }
+        });
+        let mount = ContainerMountObservation::new(
+            ContainerMountKind::Bind,
+            ObservationField::Observed(ObservedValue::new(
+                ContainerMountSource::LocalBindPath("/SENTINEL_SOURCE".to_owned()),
+                ObservationOrigin::LocalResolution,
+            )),
+            ObservationField::Absent,
+            ObservationField::Observed(ObservedValue::new(
+                "/container".to_owned(),
+                ObservationOrigin::Configured,
+            )),
+            ObservationField::Absent,
+            ObservationField::Absent,
+            ObservationField::Observed(ObservedValue::new(
+                ContainerMountSelinuxRelabel::Shared,
+                ObservationOrigin::Configured,
+            )),
+            ObservationField::Absent,
+            ObservationField::Absent,
+        );
+        let identity = ResourceIdentity::new(
+            ResourceKind::Container,
+            "container-id".to_owned(),
+            Some("canary".to_owned()),
+        );
+        let mut findings = Vec::new();
+        let evidence = decode_container_creation_evidence(
+            container_create_command(response.as_object().expect("object")),
+            &ObservationField::Observed(ObservedValue::new(
+                "example.invalid/canary:1".to_owned(),
+                ObservationOrigin::Configured,
+            )),
+            &ObservationField::Absent,
+            &ObservationField::Observed(ObservedValue::new(vec![mount], ObservationOrigin::Effective)),
+            &identity,
+            &mut findings,
+        );
+        let observed = evidence.observed().expect("safe evidence");
+        assert_eq!(observed.origin(), ObservationOrigin::Configured);
+        assert!(matches!(
+            observed.value().image(),
+            ObservationField::Observed(value)
+                if *value.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(matches!(
+            observed.value().mount_relabels(),
+            ObservationField::Observed(value)
+                if value.value().as_slice() == [AuthoredMountRelabelHint::Shared { mount_index: 0 }]
+        ));
+        assert!(findings.is_empty());
+        let debug = format!("{:?}", observed.value());
+        for protected in [
+            "SENTINEL_ENV",
+            "SENTINEL_VALUE",
+            "SENTINEL_SOURCE",
+            "SENTINEL_POST_IMAGE_COMMAND",
+        ] {
+            assert!(!debug.contains(protected), "protected command value escaped debug");
+        }
+    }
+
+    #[test]
     fn kind_safe_resource_observation_constructor_accepts_every_matching_detail_and_rejects_mismatches() {
         let details = [
             ResourceDetails::Container(ContainerObservation::new(
+                ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,
                 ObservationField::Absent,

@@ -80,3 +80,8 @@ The check compares against the published baseline. A Conventional Commit breakin
 passes cargo-semver-checks its `major` category because that is the tool's name for an API break,
 even when the crate publishes the break as `0.x` minor. Otherwise the tool derives its release type
 from the manifest versions.
+
+The additive bounded
+[`ContainerObservation::creation_evidence` contract](decisions/0015-bounded-creation-command-evidence.md)
+exposes independent image-spelling and mount-relabel field states and does not change the immutable
+redacted `snapshot::v1` schema.

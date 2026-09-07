@@ -2,6 +2,13 @@
 
 use std::{error::Error, fmt};
 
+const NATIVE_FIELD_COVERAGE_UNAVAILABLE_MESSAGE: &str =
+    "the native-field coverage catalogue is malformed or incomplete";
+const IMAGE_PORTABILITY_MANUAL_MESSAGE: &str =
+    "the image source needs a manual portability decision before it can be acquired";
+const VOLUME_OWNER_DEFAULT_AMBIGUOUS_MESSAGE: &str =
+    "an omitted native volume owner ID may mean Podman's canonical zero default";
+
 /// A stable identifier for a `PodmanLens` diagnostic class.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]
@@ -104,6 +111,8 @@ pub enum DiagnosticCode {
     ImagePortabilityManual,
     /// An omitted native volume owner ID may mean Podman's canonical zero default.
     VolumeOwnerDefaultAmbiguous,
+    /// Bounded creation-command evidence disagrees with typed inspect evidence.
+    CreationEvidenceConflict,
 }
 
 impl DiagnosticCode {
@@ -160,6 +169,7 @@ impl DiagnosticCode {
             Self::NativeFieldCoverageUnavailable => "PLN0047",
             Self::ImagePortabilityManual => "PLN0048",
             Self::VolumeOwnerDefaultAmbiguous => "PLN0049",
+            Self::CreationEvidenceConflict => "PLN0050",
         }
     }
 }
@@ -273,14 +283,11 @@ impl Diagnostic {
                     "the selected Libpod API version lacks exact renderer evidence for the target engine"
                 }
                 DiagnosticCode::RenderingUnsupported => "a semantic operation has no reviewed renderer representation",
-                DiagnosticCode::NativeFieldCoverageUnavailable => {
-                    "the native-field coverage catalogue is malformed or incomplete"
-                }
-                DiagnosticCode::ImagePortabilityManual => {
-                    "the image source needs a manual portability decision before it can be acquired"
-                }
-                DiagnosticCode::VolumeOwnerDefaultAmbiguous => {
-                    "an omitted native volume owner ID may mean Podman's canonical zero default"
+                DiagnosticCode::NativeFieldCoverageUnavailable => NATIVE_FIELD_COVERAGE_UNAVAILABLE_MESSAGE,
+                DiagnosticCode::ImagePortabilityManual => IMAGE_PORTABILITY_MANUAL_MESSAGE,
+                DiagnosticCode::VolumeOwnerDefaultAmbiguous => VOLUME_OWNER_DEFAULT_AMBIGUOUS_MESSAGE,
+                DiagnosticCode::CreationEvidenceConflict => {
+                    "bounded creation-command evidence disagrees with typed inspect evidence"
                 }
             },
         }

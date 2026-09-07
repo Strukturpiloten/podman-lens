@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "sanitized-derived-native-regression",
+  "license": {
+    "repository_fixture": "MPL-2.0",
+    "upstream_podman": "Apache-2.0"
+  },
+  "privacy": {
+    "classification": "sanitized-derived",
+    "statement": "Selected native inspect fields captured in a trusted disposable environment and consistently replaced. No real endpoint, host, user, credential, secret, environment value, container, image, path, or repository data is present; no full inspect response is committed."
+  },
+  "provenance": {
+    "podman_engine": "6.1.0",
+    "release_tag": "v6.1.0",
+    "podman_commit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+    "source_urls": [
+      "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod"
+    ],
+    "compose_provider": "5.5.0",
+    "outer_image_digest": "sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
+    "capture_scope": "trusted disposable rootful outer; network disabled; no host socket or repository mount",
+    "capture_commands": "CLI: local scratch build/tag then podman create only. Provider: Compose create with --pull never then native podman inspect. Neither capture establishes pull or build history."
+  },
+  "artifacts": [
+    {
+      "artifact": "creation-evidence-6.1.0.json",
+      "sha256": "84c6e4b8ab644661259bccf08ddfcf3cac949da01917bdbcc381a7e93db76f6c",
+      "coverage": [
+        "CLI-authored configured image spelling versus local image identity",
+        "CLI-authored case-sensitive SELinux mount relabel choice",
+        "Compose-provider absence of creation-command evidence",
+        "redacted post-image, environment, path, and image operands"
+      ]
+    }
+  ]
+}

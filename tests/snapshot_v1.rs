@@ -377,3 +377,10 @@ async fn snapshots_never_leak_sensitive_or_redacted_values() -> Result<(), Box<d
     }
     Ok(())
 }
+
+#[test]
+fn snapshot_v1_does_not_project_creation_evidence_or_raw_create_command() {
+    let schema = include_str!("../docs/schemas/podman-lens-snapshot-v1.schema.json");
+    assert!(!schema.contains("creation_evidence"));
+    assert!(!schema.contains("CreateCommand"));
+}

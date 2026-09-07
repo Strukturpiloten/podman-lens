@@ -19,3 +19,4 @@ do not let code silently change it.
 | [0012: Bounded runtime intent before rendering](0012-bounded-runtime-intent-before-rendering.md)                           | Accepted |
 | [0013: Typed native observations preserve state and provenance](0013-typed-native-observations.md)                         | Accepted |
 | [0014: Finite input-only Podman anchors remain separate from output targets](0014-finite-input-only-podman-anchors.md)     | Accepted |
+| [0015: Bounded creation-command evidence](0015-bounded-creation-command-evidence.md)                                       | Accepted |

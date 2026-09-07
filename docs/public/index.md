@@ -26,3 +26,10 @@ authorization, output publication, and any later execution decision.
 The exhaustive Rust API is published separately as
 [PodmanLens Rustdoc](https://boxferry.dev/docs/api/podman-lens/). Cross-format conversion belongs
 to [BoxFerry](https://boxferry.dev/docs/).
+
+## Bounded native creation evidence
+
+PodmanLens can report privacy-safe, bounded consistency evidence from a container's recorded native
+creation command. Image-spelling and mount-relabel hints retain independent field states, so an
+unavailable correlation does not erase an unrelated valid hint. It exposes neither the command nor
+its protected arguments; see [diagnostics and privacy](diagnostics-privacy/) for the sharing boundary.

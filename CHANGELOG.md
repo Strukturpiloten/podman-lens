@@ -5,6 +5,10 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Fixed
+
+- Retain bounded, redacted `Config.CreateCommand` image-spelling and SELinux-relabel consistency evidence with independent field states, without exposing raw creation arguments or inferring image/lifecycle history ([#27](https://github.com/Strukturpiloten/podman-lens/issues/27)).
+
 ### Changed
 
 - Standardize repository-local agent roles and model-independent workflow ownership; add

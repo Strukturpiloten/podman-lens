@@ -46,3 +46,9 @@ redacted rather than anonymous.
 
 `artifact::deployment_v1` represents caller-authorized desired output. It never deserializes as an
 inventory and never contains sensitive input references. Review both forms before sharing them.
+
+Bounded creation evidence exposes only closed consistency results and typed mount indices, never
+the command or its arguments. Its image and mount-relabel states are independent; unavailable
+correlation is reported as state rather than by retaining the compared native value. `PLN0050`
+reports a conflict only when the creation evidence and typed inspect evidence are both observed
+and disagree; missing, unavailable, or malformed typed evidence is not a contradiction.

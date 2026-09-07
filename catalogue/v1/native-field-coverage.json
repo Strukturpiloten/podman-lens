@@ -3011,6 +3011,22 @@
       "negative_test": "tests::inventory::known_runtime_projection_fields_do_not_consume_unmodelled_retention"
     },
     {
+      "id": "PLN-FLD-0191",
+      "plane": "input-observation",
+      "resource_kind": "container",
+      "field_path": "$.Config.CreateCommand",
+      "classification": "observation-only",
+      "observation": "inventory::decode_container_creation_evidence",
+      "planner": "not_applicable",
+      "cli_renderer": "not_applicable",
+      "libpod_renderer": "not_applicable",
+      "target_versions": [],
+      "public_contract": "ContainerObservation::creation_evidence",
+      "finding": "PLN0050",
+      "positive_test": "tests::inventory::creation_evidence_is_typed_indexed_and_redacts_command_values",
+      "negative_test": "tests::inventory::typed_mount_relabel_state_only_conflicts_when_observed_and_different"
+    },
+    {
       "id": "PLN-OUT-0001",
       "plane": "output-intent",
       "resource_kind": "container",

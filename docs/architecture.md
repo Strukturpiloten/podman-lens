@@ -82,6 +82,9 @@ Container mount decoding retains a case-sensitive SELinux `z` or `Z` choice as a
 observation. It reads the normalized `Mounts[].Mode` evidence first and may correlate the same
 closed choice from `HostConfig.Binds`; raw bind strings, host paths, and other creation arguments do
 not cross the decoder boundary.
+Bounded `Config.CreateCommand` decoding compares image and relabel operands transiently, exposes only
+closed consistency outcomes, and keeps image-spelling and mount-relabel observation states
+independent.
 
 ## Discovery
 
@@ -139,6 +142,8 @@ caller-authorized desired output and never accepts an observational snapshot as 
 
 ## Decisions
 
-The durable reasons behind these boundaries are recorded in
+The durable reasons behind these boundaries, including the bounded
+[creation-command evidence contract](decisions/0015-bounded-creation-command-evidence.md), are
+recorded in
 [the accepted decisions](decisions/README.md). Change or supersede a decision explicitly when the
 architecture changes.

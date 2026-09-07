@@ -1,6 +1,9 @@
 //! Repository-policy regression tests.
 
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fmt::Write as _, fs, path::Path};
+
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 #[test]
 fn published_package_includes_the_public_contract_and_governance_documents() -> Result<(), std::io::Error> {
@@ -19,6 +22,7 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/examples/**",
         "/catalogue/v1/podman-deployment-rendering.json",
         "/catalogue/v1/native-field-coverage.json",
+        "/fixtures/**",
         "/fixtures/deployment/**",
         "/fixtures/corpus/**",
         "/fixtures/snapshots/**",
@@ -217,6 +221,90 @@ fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
     ] {
         assert!(Path::new(file).is_file(), "missing {file}");
     }
+}
+
+#[test]
+fn native_regression_fixtures_have_fixed_provenance_privacy_license_and_hashes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new("fixtures/native-regressions");
+    let manifest: Value = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
+
+    assert_eq!(manifest["schema_version"], 1);
+    assert_eq!(manifest["evidence_kind"], "sanitized-derived-native-regression");
+    assert_eq!(manifest["license"]["repository_fixture"], "MPL-2.0");
+    assert_eq!(manifest["license"]["upstream_podman"], "Apache-2.0");
+    assert!(
+        manifest["privacy"]["classification"] == "sanitized-derived"
+            && manifest["privacy"]["statement"]
+                .as_str()
+                .is_some_and(|statement| statement.contains("No real endpoint"))
+    );
+
+    let provenance = &manifest["provenance"];
+    assert_eq!(provenance["podman_engine"], "6.1.0");
+    assert_eq!(provenance["release_tag"], "v6.1.0");
+    assert_eq!(provenance["podman_commit"], "cade97a52ebdf9dbf9e81de8009015776837a074");
+    assert_eq!(provenance["source_urls"].as_array().map(Vec::len), Some(1));
+    assert!(
+        provenance["capture_scope"]
+            .as_str()
+            .is_some_and(|scope| scope.contains("no host socket or repository mount"))
+    );
+
+    let artifacts = manifest["artifacts"]
+        .as_array()
+        .ok_or_else(|| std::io::Error::other("native regression manifest artifacts must be an array"))?;
+    assert_eq!(artifacts.len(), 1);
+    let mut listed = BTreeSet::new();
+    for artifact in artifacts {
+        let name = artifact["artifact"]
+            .as_str()
+            .ok_or_else(|| std::io::Error::other("native regression artifact name must be a string"))?;
+        assert!(listed.insert(name.to_owned()), "duplicate fixture {name}");
+        assert!(
+            artifact["coverage"]
+                .as_array()
+                .is_some_and(|coverage| !coverage.is_empty()),
+            "{name} needs focused behavior coverage"
+        );
+        let bytes = fs::read(root.join(name))?;
+        let mut digest = String::new();
+        for byte in Sha256::digest(&bytes) {
+            write!(&mut digest, "{byte:02x}")?;
+        }
+        assert_eq!(artifact["sha256"], digest, "{name} digest");
+
+        let fixture: Value = serde_json::from_slice(&bytes)?;
+        for field in [
+            "podman_engine",
+            "podman_commit",
+            "compose_provider",
+            "outer_image_digest",
+            "capture_scope",
+            "capture_commands",
+        ] {
+            assert_eq!(fixture["provenance"][field], provenance[field], "{name} {field}");
+        }
+        assert!(
+            fixture["provenance"]["sanitization"]
+                .as_str()
+                .is_some_and(|statement| statement.contains("No full inspect response is committed")),
+            "{name} needs an explicit sanitization statement"
+        );
+    }
+
+    let mut present = BTreeSet::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.ends_with(".json") && name != "manifest.json" {
+            present.insert(name.into_owned());
+        }
+    }
+    assert_eq!(listed, present, "native regression fixture manifest coverage");
+
+    Ok(())
 }
 
 #[test]

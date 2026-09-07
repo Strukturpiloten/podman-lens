@@ -4238,3 +4238,44 @@ fn hex_digest(bytes: &[u8]) -> String {
     }
     output
 }
+
+#[tokio::test]
+async fn creation_command_sentinels_never_leak_from_acquisition_debug_or_snapshot()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::fmt::Write as _;
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{
+          "Id":"container-a","Name":"a",
+          "Image":"SENTINEL_CREATE_LOCAL_IMAGE","ImageName":"SENTINEL_CREATE_CONFIGURED_IMAGE",
+          "Mounts":[{"Type":"bind","Source":"/SENTINEL_CREATE_HOST_PATH","Destination":"/data","Mode":"Z","Options":["Z"],"RW":true}],
+          "Config":{"CreateCommand":["podman","create","--env","SENTINEL_CREATE_ENV=SENTINEL_CREATE_ENV_VALUE","--secret","SENTINEL_CREATE_SECRET","--credential","SENTINEL_CREATE_CREDENTIAL","--volume","/SENTINEL_CREATE_HOST_PATH:/data:Z","SENTINEL_CREATE_CONFIGURED_IMAGE","SENTINEL_CREATE_POST_IMAGE"]},
+          "HostConfig":{"Binds":["/SENTINEL_CREATE_HOST_PATH:/data:Z"]}
+        }"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let snapshot = podman_lens::snapshot::v1::inventory(&inventory);
+    let mut debug = format!("{inventory:?}");
+    for section in inventory.sections() {
+        for observation in section.observations() {
+            write!(debug, "{:?}", observation.details())?;
+            write!(debug, "{:?}", observation.header().findings())?;
+        }
+    }
+    let snapshot = serde_json::to_string(&snapshot)?;
+    for sentinel in [
+        "SENTINEL_CREATE_LOCAL_IMAGE",
+        "SENTINEL_CREATE_CONFIGURED_IMAGE",
+        "SENTINEL_CREATE_ENV",
+        "SENTINEL_CREATE_ENV_VALUE",
+        "SENTINEL_CREATE_SECRET",
+        "SENTINEL_CREATE_CREDENTIAL",
+        "SENTINEL_CREATE_HOST_PATH",
+        "SENTINEL_CREATE_POST_IMAGE",
+    ] {
+        assert!(!debug.contains(sentinel), "debug leaked {sentinel}");
+        assert!(!snapshot.contains(sentinel), "snapshot leaked {sentinel}");
+    }
+    Ok(())
+}

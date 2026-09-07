@@ -647,6 +647,94 @@ pub enum ContainerMountSelinuxRelabel {
     Private,
 }
 
+/// A privacy-safe consistency result for the image operand in Podman's recorded
+/// creation command.
+///
+/// The native spelling is compared transiently and is never retained. This is
+/// creation evidence only: it neither proves an image was pulled nor records a
+/// build or other image history.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum AuthoredImageSpellingHint {
+    /// The transient operand matched the configured `ImageName` spelling.
+    MatchesConfiguredImage,
+    /// The transient operand matched the local resolved image identifier.
+    MatchesLocalImageId,
+    /// Both typed image observations were available, and the operand matched
+    /// neither the configured spelling nor the local resolved identifier.
+    Contradictory,
+}
+
+/// A privacy-safe SELinux-relabel result from Podman's recorded creation command.
+///
+/// The index identifies a typed inspect mount. It does not expose a native
+/// command argument, host path, mount source, or mount destination.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum AuthoredMountRelabelHint {
+    /// A command `z` choice agreed with the indexed typed mount.
+    Shared {
+        /// Index of the correlated typed inspect mount.
+        mount_index: usize,
+    },
+    /// A command `Z` choice agreed with the indexed typed mount.
+    Private {
+        /// Index of the correlated typed inspect mount.
+        mount_index: usize,
+    },
+    /// A command relabel choice could not be reconciled with the typed mount.
+    Contradictory {
+        /// Index of the correlated typed inspect mount.
+        mount_index: usize,
+    },
+}
+
+/// Bounded, redacted evidence derived transiently from `CreateCommand`.
+///
+/// No raw command component is retained. In particular, environment values,
+/// secrets, paths, image spellings, and post-image command payloads cannot be
+/// recovered from this value.
+/// Image-spelling and mount-relabel projections retain independent
+/// [`ObservationField`] states.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ContainerCreationEvidence {
+    image: ObservationField<AuthoredImageSpellingHint>,
+    mount_relabels: ObservationField<Vec<AuthoredMountRelabelHint>>,
+}
+
+impl ContainerCreationEvidence {
+    pub(crate) fn new(
+        image: ObservationField<AuthoredImageSpellingHint>,
+        mount_relabels: ObservationField<Vec<AuthoredMountRelabelHint>>,
+    ) -> Self {
+        Self { image, mount_relabels }
+    }
+
+    /// Returns the closed image-spelling consistency result or its independent
+    /// observation state.
+    #[must_use]
+    pub const fn image(&self) -> &ObservationField<AuthoredImageSpellingHint> {
+        &self.image
+    }
+
+    /// Returns closed relabel consistency results by typed inspect-mount index,
+    /// or their independent observation state.
+    #[must_use]
+    pub const fn mount_relabels(&self) -> &ObservationField<Vec<AuthoredMountRelabelHint>> {
+        &self.mount_relabels
+    }
+}
+
+impl fmt::Debug for ContainerCreationEvidence {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ContainerCreationEvidence")
+            .field("image", &self.image)
+            .field("mount_relabels", &self.mount_relabels)
+            .finish()
+    }
+}
+
 impl ContainerMountSource {
     /// Returns the native source spelling. A bind path is local-resolution evidence and must not
     /// be promoted automatically into portable intent.
@@ -1442,6 +1530,7 @@ pub struct ContainerObservation {
     namespaces: ObservationField<NativeNamespaceObservation>,
     resource_controls: ObservationField<NativeResourceControlObservation>,
     networking: ObservationField<NativeNetworkingObservation>,
+    creation_evidence: ObservationField<ContainerCreationEvidence>,
 }
 
 macro_rules! observation_debug {
@@ -1513,6 +1602,7 @@ impl ContainerObservation {
         namespaces: ObservationField<NativeNamespaceObservation>,
         resource_controls: ObservationField<NativeResourceControlObservation>,
         networking: ObservationField<NativeNetworkingObservation>,
+        creation_evidence: ObservationField<ContainerCreationEvidence>,
     ) -> Self {
         Self {
             configured_image,
@@ -1540,6 +1630,7 @@ impl ContainerObservation {
             namespaces,
             resource_controls,
             networking,
+            creation_evidence,
         }
     }
 
@@ -1606,6 +1697,15 @@ impl ContainerObservation {
     #[must_use]
     pub fn mounts(&self) -> &ObservationField<Vec<ContainerMountObservation>> {
         &self.mounts
+    }
+
+    /// Returns bounded, redacted creation-command consistency evidence.
+    ///
+    /// This is never an accessor for Podman's raw `CreateCommand`, nor evidence
+    /// of pull, build, runtime, or lifecycle history.
+    #[must_use]
+    pub fn creation_evidence(&self) -> &ObservationField<ContainerCreationEvidence> {
+        &self.creation_evidence
     }
     /// Returns typed secret grants without secret payload material or their state.
     #[must_use]
@@ -2644,6 +2744,7 @@ fn incomplete_field<T>(state: ResourceObservationState) -> ObservationField<T> {
 fn incomplete_details(kind: ResourceKind, state: ResourceObservationState) -> ResourceDetails {
     match kind {
         ResourceKind::Container => ResourceDetails::Container(ContainerObservation::new(
+            incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),
             incomplete_field(state),

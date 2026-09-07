@@ -9,5 +9,5 @@ Read and follow the repository AGENTS.md before working.
 
 Use primary and official documentation. Distinguish documented behavior from observed
 implementation behavior. Record exact versions, boundaries, ambiguity, evidence gaps, and
-recommended tests. Do not edit repository files.
+recommended tests. Do not edit repository files or perform Git or GitHub writes.
 """

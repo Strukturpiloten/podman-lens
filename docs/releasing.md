@@ -33,6 +33,8 @@ Before merging the generated `release-plz-*` pull request, verify that:
 - `CHANGELOG.md` contains a usable release section for that exact version;
 - breaking changes include migration guidance;
 - the package and compatibility checks pass; and
+- `scripts/check-native-release-contract.sh` passes its offline privacy, provenance, replay,
+  and semantic contracts;
 - no publication credential is present in repository secrets.
 
 The changelog section is a release gate, not optional metadata.
@@ -44,6 +46,6 @@ The changelog section is a release gate, not optional metadata.
 3. Review the complete verification result.
 4. Approve the protected release environment.
 
-The workflow verifies the package, API compatibility, MSRV, dependencies, coverage, checksum,
+The workflow verifies captured-native release evidence, the package, API compatibility, MSRV, dependencies, coverage, checksum,
 attestation, release tag, and draft GitHub release before publishing. crates.io authentication uses
 trusted publishing; do not bootstrap publication with a stored crates.io token.

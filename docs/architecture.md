@@ -86,6 +86,12 @@ Bounded `Config.CreateCommand` decoding compares image and relabel operands tran
 closed consistency outcomes, and keeps image-spelling and mount-relabel observation states
 independent.
 
+## Captured-native release evidence
+
+Privacy-reviewed cassettes and their capture manifest are test-only release evidence. They bind exact replay bytes, independently asserted semantics, one-off capture provenance, and privacy admission without creating a second live runtime matrix. Production library modules do not import these repository fixtures, and callers cannot use them as trusted deserialization or interchange formats. BoxFerry remains the owner of the digest-pinned live runtime matrix.
+
+The boundary is recorded in [ADR 0016](decisions/0016-captured-native-release-evidence.md).
+
 ## Discovery
 
 `discover` is pure after acquisition. A `DiscoveryRequest` selects exact resource identities,

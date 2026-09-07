@@ -62,6 +62,34 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "synthetic": {
+            "const": false
+          }
+        },
+        "required": ["synthetic"]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "required": ["capture"]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "provenance": {
+            "not": {
+              "required": ["capture"]
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "version": {
       "type": "string",
@@ -93,6 +121,68 @@
             "type": "string",
             "pattern": "^https://\\S+$"
           }
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_build",
+        "runtime_image",
+        "capture_manifest_sha256",
+        "runtime_repository",
+        "runtime_revision",
+        "runtime_matrix_cell",
+        "runtime_matrix_sha256",
+        "setup_script_sha256",
+        "request_recorder_source_sha256"
+      ],
+      "properties": {
+        "engine_build": {
+          "$ref": "#/$defs/engine_build"
+        },
+        "runtime_image": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^\\S+@sha256:[0-9a-f]{64}$"
+        },
+        "capture_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "runtime_repository": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "runtime_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "runtime_matrix_cell": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "runtime_matrix_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "setup_script_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "request_recorder_source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "compose_provider_binary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     },
@@ -128,7 +218,7 @@
     "response": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "headers", "body"],
+      "required": ["status", "headers"],
       "properties": {
         "status": {
           "type": "integer",
@@ -154,8 +244,68 @@
             "items": false
           }
         },
-        "body": true
-      }
+        "body": true,
+        "body_text": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["body"],
+          "not": {
+            "required": ["body_text"]
+          }
+        },
+        {
+          "required": ["body_text"],
+          "not": {
+            "required": ["body"]
+          }
+        }
+      ]
+    },
+    "engine_build": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "source_revision"],
+          "properties": {
+            "kind": {
+              "const": "source-build"
+            },
+            "source_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "package_name", "package_revision", "package_artifact_sha256"],
+          "properties": {
+            "kind": {
+              "const": "package"
+            },
+            "package_name": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]*$"
+            },
+            "package_revision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\S+$"
+            },
+            "package_artifact_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
     }
   }
 }

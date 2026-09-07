@@ -28,6 +28,8 @@ jobs:
       - run: cargo ci-policy
       - run: cargo ci-clippy
       - run: cargo ci-test
+      - name: Check captured native release contract
+        run: bash scripts/check-native-release-contract.sh
       - run: cargo ci-doctest
       - env:
           RUSTDOCFLAGS: -D warnings

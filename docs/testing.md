@@ -13,8 +13,8 @@ Run this after the final edit:
 
 It formats tracked files, checks GitHub Actions, compiles all targets and examples, runs policy,
 unit, integration, and doctests, builds Rustdoc with warnings denied, verifies the release package,
-measures coverage, checks the MSRV, audits dependencies, validates documentation links, and checks
-the public API.
+measures coverage, checks the MSRV, audits dependencies, validates documentation links, checks the
+public API, and enforces the offline captured-native release contract.
 
 ## Test layers
 
@@ -27,6 +27,7 @@ the public API.
 | Planning and rendering tests | Target gates, exact CLI and Libpod semantics, and all-or-nothing outcomes |
 | Schema and golden tests      | Exact snapshot and deployment artifacts plus invalid mutations            |
 | Complex cassette tests       | Complete request matching across reviewed versions and simulated contexts |
+| Captured-native tests        | Privacy admission, exact replay, provenance, and semantic regressions     |
 | Repository policy tests      | Governance, package contents, workflows, and documentation contracts      |
 | Rustdoc and guide tests      | Compilable examples, page inventory, claims, and navigation               |
 
@@ -36,7 +37,8 @@ public or end-to-end case when a contract changes.
 ## Fixtures and cassettes
 
 All committed input fixtures are offline, deterministic, provenance-bearing, and synthetic or
-sanitized. They are not exports of live Podman environments.
+privacy-sanitized. Captured-native cassettes derive from reviewed responses, but contain only
+deterministic replacements rather than raw environment data.
 
 The complex cassette schema binds every response to an exact Libpod method and complete path plus
 query. Replay rejects unexpected, repeated, reordered, missing, duplicate, or unconsumed requests.
@@ -48,6 +50,12 @@ manifest and the focused behavior assertion that explains why it exists.
 
 Fixtures, failures, snapshots, and goldens must not contain real endpoints, environment values,
 credentials, secret payloads, protected health commands, or raw sensitive native data.
+
+`podman-lens-cassette-v1` and the native capture manifest are repository test formats. They are not
+public Rust APIs, trusted deserialization APIs, migration interchange formats, or compatibility
+promises. They may be packaged for auditability, but production modules do not import or parse
+them. Their strict schemas, SHA-256 registry, privacy mutations, replay behavior, and semantic
+expectations are enforced by test support and `scripts/check-native-release-contract.sh`.
 
 ## Focused commands
 
@@ -65,6 +73,12 @@ Complex request-aware acquisition:
 cargo test --test cassette_contract
 cargo test --test complex_corpus
 cargo test --test input_corpus corpus_manifest_verifies_fixed_provenance_and_hashes
+```
+
+Captured-native release evidence:
+
+```console
+./scripts/check-native-release-contract.sh
 ```
 
 Public API and repository contracts:
@@ -91,14 +105,15 @@ PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=6.1.0 \
 cargo test --test current_patch_conformance -- --ignored
 ```
 
-The complete live version/context workflow is deferred to
-[GitHub issue #3](https://github.com/Strukturpiloten/podman-lens/issues/3). It will be manually
-dispatched, cover every required cell without tolerated skips, and use isolated runtimes, storage,
-and explicit Unix sockets. Privileged execution must not expose a host Podman socket to untrusted
-code.
+BoxFerry owns the completed digest-pinned live version and root-mode matrix. Its 48 cells passed
+through PodmanLens's production read-only acquisition path without tolerated skips. PodmanLens
+keeps only a bounded ignored Unix-socket entry point for explicit consumer runs and does not
+discover an ambient endpoint. Privileged execution must not expose a host Podman socket to
+untrusted code.
 
-A disposable test harness may eventually provision or apply output for comparison. That does not
-add mutation or execution to the PodmanLens production library.
+The ordinary local, CI, and release gate remains offline. The captured Podman 6.1 rootful cassettes
+anchor native response behavior without creating a second live matrix; expanding that evidence
+requires a new privacy review and immutable provenance.
 
 ## Coverage and compatibility
 
@@ -122,3 +137,16 @@ and the primary agent owns the final complete gate and any explicitly authorized
 
 The shell-runner regression tests target the Linux Dev Container gate. Agent-configuration checks
 remain platform-independent; the macOS portability lane does not require Linux validation tools.
+
+The fuller BoxFerry consumer remains ignored and cannot discover an ambient socket. Invoke it
+only with the explicit fixture socket and one exact reviewed expected version (`5.8.6` or
+`6.1.0`):
+
+```console
+PODMAN_LENS_BOXFERRY_UNIX_SOCKET=/absolute/fixture-podman.sock \
+PODMAN_LENS_BOXFERRY_EXPECTED_VERSION=6.1.0 \
+cargo test --test native_release_contract \
+  boxferry_consumer_replays_only_an_explicit_bounded_unix_service -- --ignored
+```
+
+The ordinary `scripts/check-native-release-contract.sh` gate never runs ignored or live tests.

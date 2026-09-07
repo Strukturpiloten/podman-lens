@@ -1,0 +1,1747 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "libpod-cassette",
+  "scenario_id": "captured-mixed-origin-6.1.0-rootful",
+  "scenario_revision": 1,
+  "engine_version": "6.1.0",
+  "api_version": "6.1.0",
+  "execution_context": "rootful",
+  "synthetic": false,
+  "provenance": {
+    "evidence_kind": "privacy-reviewed-one-off-native-capture",
+    "release_tag": "v6.1.0",
+    "revision": "cade97a52ebdf9dbf9e81de8009015776837a074",
+    "source_urls": [
+      "https://github.com/containers/podman/tree/cade97a52ebdf9dbf9e81de8009015776837a074/pkg/api/handlers/libpod",
+      "https://github.com/Strukturpiloten/boxferry/blob/52b7600afe936b3c688294bd9a7f43e1afa9bf1f/fixtures/conformance/podman-live/matrix.tsv",
+      "https://github.com/docker/compose/releases/tag/v5.5.0"
+    ],
+    "capture": {
+      "engine_build": {
+        "kind": "source-build",
+        "source_revision": "cade97a52ebdf9dbf9e81de8009015776837a074"
+      },
+      "runtime_image": "ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
+      "capture_manifest_sha256": "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2",
+      "runtime_repository": "https://github.com/Strukturpiloten/boxferry",
+      "runtime_revision": "52b7600afe936b3c688294bd9a7f43e1afa9bf1f",
+      "runtime_matrix_cell": "podman-6.1-rootful",
+      "runtime_matrix_sha256": "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25",
+      "setup_script_sha256": "0790eb18744c8683a538c1917fc5a550b70e8a5dfb1f2448110101422dfae977",
+      "request_recorder_source_sha256": "26a1b238826315326057e0d555c385ea5a4617568c8cd4154a5faa9d0ff7fb91",
+      "compose_provider_binary_sha256": "abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6"
+    }
+  },
+  "sanitization": "Captured from a disposable rootful runtime with no host socket or repository mount. Identifiers, names, paths, environment values, timestamps, request references, IPv4, IPv6, MAC and image evidence were deterministically replaced. Response Content-Length was recomputed after sanitization and decoded transfer responses were normalized to Content-Length. SecretData and Authorization objects are rejected.",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/libpod/_ping"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Builder-Version",
+            "1"
+          ],
+          [
+            "Buildkit-Version",
+            ""
+          ],
+          [
+            "Cache-Control",
+            "no-cache"
+          ],
+          [
+            "Docker-Experimental",
+            "true"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Libpod-Buildah-Version",
+            "1.45.0"
+          ],
+          [
+            "Ostype",
+            "linux"
+          ],
+          [
+            "Pragma",
+            "no-cache"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-01"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "2"
+          ],
+          [
+            "Content-Type",
+            "text/plain; charset=utf-8"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body_text": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v4.0.0/libpod/version"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-02"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "1005"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": {
+          "Platform": {
+            "Name": "linux/amd64/fedora-44"
+          },
+          "Components": [
+            {
+              "Name": "Podman Engine",
+              "Version": "6.1.0",
+              "Details": {
+                "APIVersion": "6.1.0",
+                "Arch": "amd64",
+                "BuildTime": "2000-01-01T00:00:00Z",
+                "Experimental": "false",
+                "GitCommit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+                "GoVersion": "go1.26.6-X:nodwarf5",
+                "KernelVersion": "7.2.2-1-default",
+                "MinAPIVersion": "4.0.0",
+                "Os": "linux"
+              }
+            },
+            {
+              "Name": "Conmon",
+              "Version": "conmon version 2.2.1, commit: ",
+              "Details": {
+                "Package": "conmon-2.2.1-2.fc44.x86_64"
+              }
+            },
+            {
+              "Name": "OCI Runtime (crun)",
+              "Version": "crun version 1.28\ncommit: 54f16ffbefcd022bf032af768b5c5ce075c18bfc\nrundir: /run/crun\nspec: 1.0.0\n+SYSTEMD +SELINUX +APPARMOR +CAP +SECCOMP +EBPF +CRIU +LIBKRUN +WASM:wasmedge +JSON_C",
+              "Details": {
+                "Package": "crun-1.28-1.fc44.x86_64"
+              }
+            }
+          ],
+          "Version": "6.1.0",
+          "ApiVersion": "1.44",
+          "MinAPIVersion": "1.24",
+          "GitCommit": "cade97a52ebdf9dbf9e81de8009015776837a074",
+          "GoVersion": "go1.26.6-X:nodwarf5",
+          "Os": "linux",
+          "Arch": "amd64",
+          "KernelVersion": "7.2.2-1-default",
+          "BuildTime": "2000-01-01T00:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/containers/json?all=true&sync=true"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-03"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Connection",
+            "close"
+          ],
+          [
+            "Content-Length",
+            "2748"
+          ]
+        ],
+        "body": [
+          {
+            "AutoRemove": false,
+            "Command": [
+              "fixture-post-image-command"
+            ],
+            "Created": "2000-01-01T00:00:00Z",
+            "CreatedAt": "2000-01-01T00:00:00Z",
+            "CIDFile": "",
+            "Exited": false,
+            "ExitedAt": -62135596800,
+            "ExitCode": 0,
+            "ExposedPorts": null,
+            "Id": "2222222222222222222222222222222222222222222222222222222222222222",
+            "Image": "localhost/fixture-authored:1",
+            "ImageID": "5555555555555555555555555555555555555555555555555555555555555555",
+            "IsInfra": false,
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Mounts": [
+              "/data"
+            ],
+            "Names": [
+              "fixture-cli-authored"
+            ],
+            "Namespaces": {},
+            "Networks": [],
+            "Pid": 0,
+            "Pod": "",
+            "PodName": "",
+            "Ports": null,
+            "Restarts": 0,
+            "Size": null,
+            "StartedAt": 946684800,
+            "State": "created",
+            "Status": ""
+          },
+          {
+            "AutoRemove": false,
+            "Command": [
+              "/bin/false"
+            ],
+            "Created": "2000-01-01T00:00:00Z",
+            "CreatedAt": "2000-01-01T00:00:00Z",
+            "CIDFile": "",
+            "Exited": false,
+            "ExitedAt": -62135596800,
+            "ExitCode": 0,
+            "ExposedPorts": null,
+            "Id": "3333333333333333333333333333333333333333333333333333333333333333",
+            "Image": "docker.io/library/fixture-native-evidence:fixture",
+            "ImageID": "5555555555555555555555555555555555555555555555555555555555555555",
+            "IsInfra": false,
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Mounts": [
+              "/data"
+            ],
+            "Names": [
+              "fixture-cli-tagged"
+            ],
+            "Namespaces": {},
+            "Networks": [],
+            "Pid": 0,
+            "Pod": "",
+            "PodName": "",
+            "Ports": null,
+            "Restarts": 0,
+            "Size": null,
+            "StartedAt": 946684800,
+            "State": "created",
+            "Status": ""
+          },
+          {
+            "AutoRemove": false,
+            "Command": [
+              "fixture-provider-command"
+            ],
+            "Created": "2000-01-01T00:00:00Z",
+            "CreatedAt": "2000-01-01T00:00:00Z",
+            "CIDFile": "",
+            "Exited": false,
+            "ExitedAt": -62135596800,
+            "ExitCode": 0,
+            "ExposedPorts": null,
+            "Id": "1111111111111111111111111111111111111111111111111111111111111111",
+            "Image": "docker.io/library/fixture-native-evidence:fixture",
+            "ImageID": "5555555555555555555555555555555555555555555555555555555555555555",
+            "IsInfra": false,
+            "Labels": {
+              "com.docker.compose.config-hash": "aaf69771b709dc8231529800791569e8b32c9def13ef918d97ca812f5a36eb68",
+              "com.docker.compose.container-number": "1",
+              "com.docker.compose.depends_on": "",
+              "com.docker.compose.image": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+              "com.docker.compose.oneoff": "False",
+              "com.docker.compose.project": "fixture-provider",
+              "com.docker.compose.project.config_files": "/fixture/capture/compose.yaml",
+              "com.docker.compose.project.working_dir": "/fixture/capture",
+              "com.docker.compose.service": "app",
+              "com.docker.compose.version": "5.5.0",
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Mounts": [
+              "/data"
+            ],
+            "Names": [
+              "fixture-provider-app"
+            ],
+            "Namespaces": {},
+            "Networks": [],
+            "Pid": 0,
+            "Pod": "",
+            "PodName": "",
+            "Ports": null,
+            "Restarts": 0,
+            "Size": null,
+            "StartedAt": 946684800,
+            "State": "created",
+            "Status": ""
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/pods/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-04"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "2"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": []
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/networks/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-05"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "329"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": [
+          {
+            "name": "podman",
+            "id": "4444444444444444444444444444444444444444444444444444444444444444",
+            "driver": "bridge",
+            "network_interface": "podman0",
+            "created": "2000-01-01T00:00:00Z",
+            "subnets": [
+              {
+                "subnet": "192.0.2.1/16",
+                "gateway": "192.0.2.2"
+              }
+            ],
+            "ipv6_enabled": false,
+            "internal": false,
+            "dns_enabled": false,
+            "ipam_options": {
+              "driver": "host-local"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/volumes/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-06"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "2"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": []
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/images/json?all=true"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-07"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "919"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": [
+          {
+            "Id": "5555555555555555555555555555555555555555555555555555555555555555",
+            "ParentId": "",
+            "RepoTags": [
+              "docker.io/library/fixture-native-evidence:fixture",
+              "localhost/fixture-authored:1"
+            ],
+            "RepoDigests": [
+              "docker.io/library/fixture-native-evidence@sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+              "localhost/fixture-authored@sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27"
+            ],
+            "Created": 946684800,
+            "Size": 1458,
+            "SharedSize": 0,
+            "VirtualSize": 1458,
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Containers": 3,
+            "Arch": "amd64",
+            "Digest": "sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+            "History": [
+              "localhost/fixture-authored:1",
+              "docker.io/library/fixture-native-evidence:fixture"
+            ],
+            "IsManifestList": false,
+            "Names": [
+              "docker.io/library/fixture-native-evidence:fixture",
+              "localhost/fixture-authored:1"
+            ],
+            "Os": "linux"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/secrets/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-08"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "2"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": []
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/containers/1111111111111111111111111111111111111111111111111111111111111111/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-09"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Connection",
+            "close"
+          ],
+          [
+            "Content-Length",
+            "5617"
+          ]
+        ],
+        "body": {
+          "Id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "Created": "2000-01-01T00:00:00Z",
+          "Path": "/bin/false",
+          "Args": [
+            "fixture-provider-command"
+          ],
+          "State": {
+            "OciVersion": "1.3.0",
+            "Status": "created",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2000-01-01T00:00:00Z",
+            "FinishedAt": "2000-01-01T00:00:00Z",
+            "CheckpointedAt": "0001-01-01T00:00:00Z",
+            "RestoredAt": "0001-01-01T00:00:00Z"
+          },
+          "Image": "5555555555555555555555555555555555555555555555555555555555555555",
+          "ImageDigest": "sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+          "ImageName": "docker.io/library/fixture-native-evidence:fixture",
+          "Rootfs": "",
+          "Pod": "",
+          "ResolvConfPath": "",
+          "HostnamePath": "",
+          "HostsPath": "",
+          "StaticDir": "/fixture/runtime/storage/overlay-containers/1111111111111111111111111111111111111111111111111111111111111111/userdata",
+          "OCIRuntime": "crun",
+          "ConmonPidFile": "/fixture/runtime/run/overlay-containers/1111111111111111111111111111111111111111111111111111111111111111/userdata/conmon.pid",
+          "PidFile": "/fixture/runtime/run/overlay-containers/1111111111111111111111111111111111111111111111111111111111111111/userdata/pidfile",
+          "Name": "fixture-provider-app",
+          "RestartCount": 0,
+          "Driver": "overlay",
+          "MountLabel": "",
+          "ProcessLabel": "",
+          "AppArmorProfile": "",
+          "EffectiveCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "BoundingCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "ExecIDs": [],
+          "GraphDriver": {
+            "Name": "overlay",
+            "Data": {
+              "UpperDir": "/fixture/runtime/storage/overlay/7d0453ec45f6858cd67339e228fe184e6f796d783b27efca939b42b405b2d569/diff",
+              "WorkDir": "/fixture/runtime/storage/overlay/7d0453ec45f6858cd67339e228fe184e6f796d783b27efca939b42b405b2d569/work"
+            }
+          },
+          "Mounts": [
+            {
+              "Type": "bind",
+              "Source": "/fixture/provider-data",
+              "Destination": "/data",
+              "Driver": "",
+              "Mode": "",
+              "Options": [
+                "bind"
+              ],
+              "RW": true,
+              "Propagation": "private"
+            }
+          ],
+          "Dependencies": [],
+          "NetworkSettings": {
+            "EndpointID": "",
+            "Gateway": "",
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "MacAddress": "",
+            "Bridge": "",
+            "SandboxID": "",
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "Ports": {},
+            "SandboxKey": "",
+            "Networks": {
+              "none": {
+                "EndpointID": "",
+                "Gateway": "",
+                "IPAddress": "",
+                "IPPrefixLen": 0,
+                "IPv6Gateway": "",
+                "GlobalIPv6Address": "",
+                "GlobalIPv6PrefixLen": 0,
+                "MacAddress": "",
+                "NetworkID": "none",
+                "DriverOpts": null,
+                "IPAMConfig": null,
+                "Links": null
+              }
+            }
+          },
+          "Namespace": "",
+          "IsInfra": false,
+          "IsService": false,
+          "KubeExitCodePropagation": "invalid",
+          "lockNumber": 2,
+          "Config": {
+            "Hostname": "fixture-runtime-host",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+              "container=redacted",
+              "FIXTURE_CANARY=redacted",
+              "PATH=redacted"
+            ],
+            "Cmd": [
+              "fixture-provider-command"
+            ],
+            "Image": "docker.io/library/fixture-native-evidence:fixture",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": [
+              "/bin/false"
+            ],
+            "OnBuild": null,
+            "Labels": {
+              "com.docker.compose.config-hash": "aaf69771b709dc8231529800791569e8b32c9def13ef918d97ca812f5a36eb68",
+              "com.docker.compose.container-number": "1",
+              "com.docker.compose.depends_on": "",
+              "com.docker.compose.image": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+              "com.docker.compose.oneoff": "False",
+              "com.docker.compose.project": "fixture-provider",
+              "com.docker.compose.project.config_files": "/fixture/capture/compose.yaml",
+              "com.docker.compose.project.working_dir": "/fixture/capture",
+              "com.docker.compose.service": "app",
+              "com.docker.compose.version": "5.5.0",
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Annotations": null,
+            "StopSignal": "SIGTERM",
+            "HealthcheckOnFailureAction": "none",
+            "HealthLogDestination": "local",
+            "HealthcheckMaxLogCount": 5,
+            "HealthcheckMaxLogSize": 500,
+            "Umask": "0000",
+            "Timeout": 0,
+            "StopTimeout": 10,
+            "Passwd": true
+          },
+          "HostConfig": {
+            "Binds": [
+              "/fixture/provider-data:/data:bind,private"
+            ],
+            "CgroupManager": "cgroupfs",
+            "CgroupMode": "host",
+            "ContainerIDFile": "",
+            "LogConfig": {
+              "Type": "k8s-file",
+              "Config": null,
+              "Path": "/fixture/runtime/storage/overlay-containers/1111111111111111111111111111111111111111111111111111111111111111/userdata/ctr.log",
+              "Tag": "",
+              "Size": "-1B"
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+              "Name": "no",
+              "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "AutoRemoveImage": false,
+            "Annotations": null,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "CapAdd": [],
+            "CapDrop": [],
+            "Dns": [],
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": null,
+            "HostsFile": "none",
+            "GroupAdd": null,
+            "IpcMode": "host",
+            "Cgroup": "",
+            "Cgroups": "disabled",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "private",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [],
+            "Tmpfs": {},
+            "UTSMode": "host",
+            "UsernsMode": "",
+            "ShmSize": 65536000,
+            "Runtime": "oci",
+            "ConsoleSize": [
+              0,
+              0
+            ],
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DiskQuota": 0,
+            "KernelMemory": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": false,
+            "PidsLimit": 0,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "CgroupConf": null
+          },
+          "UseImageHosts": false,
+          "UseImageHostname": false
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/containers/2222222222222222222222222222222222222222222222222222222222222222/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-10"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Connection",
+            "close"
+          ],
+          [
+            "Content-Length",
+            "5292"
+          ]
+        ],
+        "body": {
+          "Id": "2222222222222222222222222222222222222222222222222222222222222222",
+          "Created": "2000-01-01T00:00:00Z",
+          "Path": "/bin/false",
+          "Args": [
+            "fixture-post-image-command"
+          ],
+          "State": {
+            "OciVersion": "1.3.0",
+            "Status": "created",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2000-01-01T00:00:00Z",
+            "FinishedAt": "2000-01-01T00:00:00Z",
+            "CheckpointedAt": "0001-01-01T00:00:00Z",
+            "RestoredAt": "0001-01-01T00:00:00Z"
+          },
+          "Image": "5555555555555555555555555555555555555555555555555555555555555555",
+          "ImageDigest": "sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+          "ImageName": "localhost/fixture-authored:1",
+          "Rootfs": "",
+          "Pod": "",
+          "ResolvConfPath": "",
+          "HostnamePath": "",
+          "HostsPath": "",
+          "StaticDir": "/fixture/runtime/storage/overlay-containers/2222222222222222222222222222222222222222222222222222222222222222/userdata",
+          "OCIRuntime": "crun",
+          "ConmonPidFile": "/fixture/runtime/run/overlay-containers/2222222222222222222222222222222222222222222222222222222222222222/userdata/conmon.pid",
+          "PidFile": "/fixture/runtime/run/overlay-containers/2222222222222222222222222222222222222222222222222222222222222222/userdata/pidfile",
+          "Name": "fixture-cli-authored",
+          "RestartCount": 0,
+          "Driver": "overlay",
+          "MountLabel": "",
+          "ProcessLabel": "",
+          "AppArmorProfile": "",
+          "EffectiveCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "BoundingCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "ExecIDs": [],
+          "GraphDriver": {
+            "Name": "overlay",
+            "Data": {
+              "UpperDir": "/fixture/runtime/storage/overlay/2a3f375d7e26fb82631dd134c0df0eb01d2fcf3a02c752cf05a70f237dcc16c5/diff",
+              "WorkDir": "/fixture/runtime/storage/overlay/2a3f375d7e26fb82631dd134c0df0eb01d2fcf3a02c752cf05a70f237dcc16c5/work"
+            }
+          },
+          "Mounts": [
+            {
+              "Type": "bind",
+              "Source": "/fixture/cli-data",
+              "Destination": "/data",
+              "Driver": "",
+              "Mode": "Z",
+              "Options": [
+                "rbind"
+              ],
+              "RW": true,
+              "Propagation": "rprivate"
+            }
+          ],
+          "Dependencies": [],
+          "NetworkSettings": {
+            "EndpointID": "",
+            "Gateway": "",
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "MacAddress": "",
+            "Bridge": "",
+            "SandboxID": "",
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "Ports": {},
+            "SandboxKey": "",
+            "Networks": {
+              "none": {
+                "EndpointID": "",
+                "Gateway": "",
+                "IPAddress": "",
+                "IPPrefixLen": 0,
+                "IPv6Gateway": "",
+                "GlobalIPv6Address": "",
+                "GlobalIPv6PrefixLen": 0,
+                "MacAddress": "",
+                "NetworkID": "none",
+                "DriverOpts": null,
+                "IPAMConfig": null,
+                "Links": null
+              }
+            }
+          },
+          "Namespace": "",
+          "IsInfra": false,
+          "IsService": false,
+          "KubeExitCodePropagation": "invalid",
+          "lockNumber": 0,
+          "Config": {
+            "Hostname": "fixture-runtime-host",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+              "container=redacted",
+              "FIXTURE_CANARY=redacted",
+              "PATH=redacted"
+            ],
+            "Cmd": [
+              "fixture-post-image-command"
+            ],
+            "Image": "localhost/fixture-authored:1",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": [
+              "/bin/false"
+            ],
+            "OnBuild": null,
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Annotations": null,
+            "StopSignal": "SIGTERM",
+            "HealthcheckOnFailureAction": "none",
+            "HealthLogDestination": "local",
+            "HealthcheckMaxLogCount": 5,
+            "HealthcheckMaxLogSize": 500,
+            "CreateCommand": [
+              "podman",
+              "create",
+              "--pull=never",
+              "--name",
+              "fixture-cli-authored",
+              "--network=none",
+              "--volume",
+              "/fixture/cli-data:/data:Z",
+              "--env",
+              "FIXTURE_CANARY=redacted",
+              "--entrypoint",
+              "/bin/false",
+              "localhost/fixture-authored:1",
+              "fixture-post-image-command"
+            ],
+            "Umask": "0022",
+            "Timeout": 0,
+            "StopTimeout": 10,
+            "Passwd": true,
+            "sdNotifyMode": "container"
+          },
+          "HostConfig": {
+            "Binds": [
+              "/fixture/cli-data:/data:Z,rprivate,rbind"
+            ],
+            "CgroupManager": "cgroupfs",
+            "CgroupMode": "host",
+            "ContainerIDFile": "",
+            "LogConfig": {
+              "Type": "k8s-file",
+              "Config": null,
+              "Path": "/fixture/runtime/storage/overlay-containers/2222222222222222222222222222222222222222222222222222222222222222/userdata/ctr.log",
+              "Tag": "",
+              "Size": "-1B"
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+              "Name": "no",
+              "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "AutoRemoveImage": false,
+            "Annotations": null,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "CapAdd": [],
+            "CapDrop": [],
+            "Dns": [],
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": null,
+            "HostsFile": "",
+            "GroupAdd": null,
+            "IpcMode": "host",
+            "Cgroup": "",
+            "Cgroups": "disabled",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "private",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [],
+            "Tmpfs": {},
+            "UTSMode": "host",
+            "UsernsMode": "",
+            "ShmSize": 65536000,
+            "Runtime": "oci",
+            "ConsoleSize": [
+              0,
+              0
+            ],
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DiskQuota": 0,
+            "KernelMemory": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": false,
+            "PidsLimit": 0,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "CgroupConf": null
+          },
+          "UseImageHosts": false,
+          "UseImageHostname": false
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/containers/3333333333333333333333333333333333333333333333333333333333333333/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-11"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Connection",
+            "close"
+          ],
+          [
+            "Content-Length",
+            "5180"
+          ]
+        ],
+        "body": {
+          "Id": "3333333333333333333333333333333333333333333333333333333333333333",
+          "Created": "2000-01-01T00:00:00Z",
+          "Path": "/bin/false",
+          "Args": [],
+          "State": {
+            "OciVersion": "1.3.0",
+            "Status": "created",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2000-01-01T00:00:00Z",
+            "FinishedAt": "2000-01-01T00:00:00Z",
+            "CheckpointedAt": "0001-01-01T00:00:00Z",
+            "RestoredAt": "0001-01-01T00:00:00Z"
+          },
+          "Image": "5555555555555555555555555555555555555555555555555555555555555555",
+          "ImageDigest": "sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+          "ImageName": "docker.io/library/fixture-native-evidence:fixture",
+          "Rootfs": "",
+          "Pod": "",
+          "ResolvConfPath": "",
+          "HostnamePath": "",
+          "HostsPath": "",
+          "StaticDir": "/fixture/runtime/storage/overlay-containers/3333333333333333333333333333333333333333333333333333333333333333/userdata",
+          "OCIRuntime": "crun",
+          "ConmonPidFile": "/fixture/runtime/run/overlay-containers/3333333333333333333333333333333333333333333333333333333333333333/userdata/conmon.pid",
+          "PidFile": "/fixture/runtime/run/overlay-containers/3333333333333333333333333333333333333333333333333333333333333333/userdata/pidfile",
+          "Name": "fixture-cli-tagged",
+          "RestartCount": 0,
+          "Driver": "overlay",
+          "MountLabel": "",
+          "ProcessLabel": "",
+          "AppArmorProfile": "",
+          "EffectiveCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "BoundingCaps": [
+            "CAP_CHOWN",
+            "CAP_DAC_OVERRIDE",
+            "CAP_FOWNER",
+            "CAP_FSETID",
+            "CAP_KILL",
+            "CAP_NET_BIND_SERVICE",
+            "CAP_SETFCAP",
+            "CAP_SETGID",
+            "CAP_SETPCAP",
+            "CAP_SETUID",
+            "CAP_SYS_CHROOT"
+          ],
+          "ExecIDs": [],
+          "GraphDriver": {
+            "Name": "overlay",
+            "Data": {
+              "UpperDir": "/fixture/runtime/storage/overlay/3406acdf58a737096da15e9e6426ff6296a33d7cbdade5914b82c774f1aa06e2/diff",
+              "WorkDir": "/fixture/runtime/storage/overlay/3406acdf58a737096da15e9e6426ff6296a33d7cbdade5914b82c774f1aa06e2/work"
+            }
+          },
+          "Mounts": [
+            {
+              "Type": "bind",
+              "Source": "/fixture/cli-data",
+              "Destination": "/data",
+              "Driver": "",
+              "Mode": "z",
+              "Options": [
+                "rbind"
+              ],
+              "RW": true,
+              "Propagation": "rprivate"
+            }
+          ],
+          "Dependencies": [],
+          "NetworkSettings": {
+            "EndpointID": "",
+            "Gateway": "",
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "MacAddress": "",
+            "Bridge": "",
+            "SandboxID": "",
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "Ports": {},
+            "SandboxKey": "",
+            "Networks": {
+              "none": {
+                "EndpointID": "",
+                "Gateway": "",
+                "IPAddress": "",
+                "IPPrefixLen": 0,
+                "IPv6Gateway": "",
+                "GlobalIPv6Address": "",
+                "GlobalIPv6PrefixLen": 0,
+                "MacAddress": "",
+                "NetworkID": "none",
+                "DriverOpts": null,
+                "IPAMConfig": null,
+                "Links": null
+              }
+            }
+          },
+          "Namespace": "",
+          "IsInfra": false,
+          "IsService": false,
+          "KubeExitCodePropagation": "invalid",
+          "lockNumber": 1,
+          "Config": {
+            "Hostname": "fixture-runtime-host",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+              "PATH=redacted",
+              "container=redacted"
+            ],
+            "Cmd": [
+              "/bin/false"
+            ],
+            "Image": "docker.io/library/fixture-native-evidence:fixture",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            },
+            "Annotations": null,
+            "StopSignal": "SIGTERM",
+            "HealthcheckOnFailureAction": "none",
+            "HealthLogDestination": "local",
+            "HealthcheckMaxLogCount": 5,
+            "HealthcheckMaxLogSize": 500,
+            "CreateCommand": [
+              "podman",
+              "create",
+              "--pull=never",
+              "--name",
+              "fixture-cli-tagged",
+              "--network=none",
+              "--volume",
+              "/fixture/cli-data:/data:z",
+              "docker.io/library/fixture-native-evidence:fixture"
+            ],
+            "Umask": "0022",
+            "Timeout": 0,
+            "StopTimeout": 10,
+            "Passwd": true,
+            "sdNotifyMode": "container"
+          },
+          "HostConfig": {
+            "Binds": [
+              "/fixture/cli-data:/data:z,rprivate,rbind"
+            ],
+            "CgroupManager": "cgroupfs",
+            "CgroupMode": "host",
+            "ContainerIDFile": "",
+            "LogConfig": {
+              "Type": "k8s-file",
+              "Config": null,
+              "Path": "/fixture/runtime/storage/overlay-containers/3333333333333333333333333333333333333333333333333333333333333333/userdata/ctr.log",
+              "Tag": "",
+              "Size": "-1B"
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+              "Name": "no",
+              "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "AutoRemoveImage": false,
+            "Annotations": null,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "CapAdd": [],
+            "CapDrop": [],
+            "Dns": [],
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": null,
+            "HostsFile": "",
+            "GroupAdd": null,
+            "IpcMode": "host",
+            "Cgroup": "",
+            "Cgroups": "disabled",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "private",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [],
+            "Tmpfs": {},
+            "UTSMode": "host",
+            "UsernsMode": "",
+            "ShmSize": 65536000,
+            "Runtime": "oci",
+            "ConsoleSize": [
+              0,
+              0
+            ],
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DiskQuota": 0,
+            "KernelMemory": 0,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": false,
+            "PidsLimit": 0,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "CgroupConf": null
+          },
+          "UseImageHosts": false,
+          "UseImageHostname": false
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/networks/4444444444444444444444444444444444444444444444444444444444444444/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-12"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "343"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": {
+          "name": "podman",
+          "id": "4444444444444444444444444444444444444444444444444444444444444444",
+          "driver": "bridge",
+          "network_interface": "podman0",
+          "created": "2000-01-01T00:00:00Z",
+          "subnets": [
+            {
+              "subnet": "192.0.2.1/16",
+              "gateway": "192.0.2.2"
+            }
+          ],
+          "ipv6_enabled": false,
+          "internal": false,
+          "dns_enabled": false,
+          "ipam_options": {
+            "driver": "host-local"
+          },
+          "containers": {}
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v6.1.0/libpod/images/5555555555555555555555555555555555555555555555555555555555555555/json"
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "Api-Version",
+            "1.44"
+          ],
+          [
+            "Content-Type",
+            "application/json"
+          ],
+          [
+            "Libpod-Api-Version",
+            "6.1.0"
+          ],
+          [
+            "Server",
+            "Libpod/6.1.0 (linux)"
+          ],
+          [
+            "X-Reference-Id",
+            "fixture-reference-mixed-origin-13"
+          ],
+          [
+            "Date",
+            "Sat, 01 Jan 2000 00:00:00 GMT"
+          ],
+          [
+            "Content-Length",
+            "1678"
+          ],
+          [
+            "Connection",
+            "close"
+          ]
+        ],
+        "body": {
+          "Id": "5555555555555555555555555555555555555555555555555555555555555555",
+          "Digest": "sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+          "RepoTags": [
+            "docker.io/library/fixture-native-evidence:fixture",
+            "localhost/fixture-authored:1"
+          ],
+          "RepoDigests": [
+            "docker.io/library/fixture-native-evidence@sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27",
+            "localhost/fixture-authored@sha256:8dcad0e239892e6e30f0ca1bf073bb91437e388b7db844687aa8954b94474b27"
+          ],
+          "Parent": "",
+          "Comment": "",
+          "Created": "2000-01-01T00:00:00Z",
+          "Config": {
+            "Env": [
+              "PATH=redacted"
+            ],
+            "Cmd": [
+              "/bin/false"
+            ],
+            "WorkingDir": "/",
+            "Labels": {
+              "io.buildah.version": "1.45.0",
+              "org.strukturpiloten.fixture": "podman27-native-evidence"
+            }
+          },
+          "Version": "",
+          "Author": "",
+          "Architecture": "amd64",
+          "Os": "linux",
+          "Size": 1458,
+          "VirtualSize": 1458,
+          "GraphDriver": {
+            "Name": "overlay",
+            "Data": {
+              "UpperDir": "/fixture/runtime/storage/overlay/diff",
+              "WorkDir": "/fixture/runtime/storage/overlay/work"
+            }
+          },
+          "RootFS": {
+            "Type": "layers",
+            "Layers": []
+          },
+          "Labels": {
+            "io.buildah.version": "1.45.0",
+            "org.strukturpiloten.fixture": "podman27-native-evidence"
+          },
+          "Annotations": {
+            "org.opencontainers.image.base.digest": "",
+            "org.opencontainers.image.base.name": "",
+            "org.opencontainers.image.created": "2000-01-01T00:00:00Z"
+          },
+          "ManifestType": "application/vnd.oci.image.manifest.v1+json",
+          "User": "",
+          "History": [
+            {
+              "created": "2000-01-01T00:00:00Z",
+              "created_by": "/bin/sh -c #(nop) LABEL org.strukturpiloten.fixture=podman27-native-evidence",
+              "empty_layer": true
+            },
+            {
+              "created": "2000-01-01T00:00:00Z",
+              "created_by": "/bin/sh -c #(nop) CMD [\"/bin/false\"]",
+              "empty_layer": true
+            }
+          ],
+          "NamesHistory": [
+            "localhost/fixture-authored:1",
+            "docker.io/library/fixture-native-evidence:fixture"
+          ]
+        }
+      }
+    }
+  ]
+}

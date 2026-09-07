@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "privacy-reviewed-one-off-native-capture",
+  "capture": {
+    "owner": "PodmanLens",
+    "id": "native-regression-one-off-6.1.0-rootful",
+    "maintenance": "one-off fixture admission; not a second live matrix"
+  },
+  "engine": {
+    "version": "6.1.0",
+    "api_version": "6.1.0",
+    "root_mode": "rootful",
+    "build_kind": "source-build",
+    "source_revision": "cade97a52ebdf9dbf9e81de8009015776837a074"
+  },
+  "reused_boxferry_runtime": {
+    "repository": "https://github.com/Strukturpiloten/boxferry",
+    "revision": "52b7600afe936b3c688294bd9a7f43e1afa9bf1f",
+    "matrix_cell": "podman-6.1-rootful",
+    "matrix_sha256": "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25",
+    "image": "ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c"
+  },
+  "compose_provider": {
+    "version": "5.5.0",
+    "binary_sha256": "abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6",
+    "source_url": "https://github.com/docker/compose/releases/tag/v5.5.0"
+  },
+  "capture_tools": {
+    "setup_script_sha256": "0790eb18744c8683a538c1917fc5a550b70e8a5dfb1f2448110101422dfae977",
+    "request_recorder_source_sha256": "26a1b238826315326057e0d555c385ea5a4617568c8cd4154a5faa9d0ff7fb91",
+    "request_recorder_binary_sha256": "0ae531821e3f4f3ad358631bcc1ac06c85e04a7b373523b326319c63f4bd761b",
+    "sanitizer_sha256": "32a498875c5afca1d33f0d2e49bf246a4fca123c786f6ee39b5f8d46fdd54213",
+    "availability_note": "The SHA-256 identifies a destroyed raw one-off capture input; it is provenance evidence, not a claim that the one-off procedure is maintained or reproducible.",
+    "admission_filter_source_sha256": "df5eeb257de90bf1e449b029af085d2c253f933ada9ff3c6570b711303a00360"
+  },
+  "privacy": {
+    "classification": "sanitized-captured-native-regression",
+    "statement": "Captured from a disposable rootful runtime with no host socket or repository mount. Identifiers, names, paths, environment values, timestamps, request references, IPv4, IPv6, MAC and image evidence were deterministically replaced. Response Content-Length was recomputed after sanitization and decoded transfer responses were normalized to Content-Length. SecretData and Authorization objects are rejected."
+  },
+  "sessions": [
+    {
+      "id": "cli-only",
+      "origins": [
+        "podman-cli"
+      ],
+      "requests": [
+        {
+          "sequence": 1,
+          "method": "GET",
+          "path": "/libpod/_ping",
+          "status": 200,
+          "raw_headers_sha256": "864134b4bd2ec05449c7cfd7f9b25aa20ea60b08ce9c7f8142309f1a76885058",
+          "raw_body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3"
+        },
+        {
+          "sequence": 2,
+          "method": "GET",
+          "path": "/v4.0.0/libpod/version",
+          "status": 200,
+          "raw_headers_sha256": "0ce5536e3a37a62975eeafec7a9615414e61d5471d1fd2b3e6721991284b0b1e",
+          "raw_body_sha256": "f3e76afb6c6fd5b36fd95048f27c8418b8e2db89991d61b248bac5ca4a2217f9"
+        },
+        {
+          "sequence": 3,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/json?all=true&sync=true",
+          "status": 200,
+          "raw_headers_sha256": "2816c47a10ef72427389e871ce49415ca48d79b43943b201db84f7a44c0dab48",
+          "raw_body_sha256": "1dbbd9463b4aeaede55ab90379ed487e4e5b24f1ccb2fab49d7b1ad6e18dcc06"
+        },
+        {
+          "sequence": 4,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/pods/json",
+          "status": 200,
+          "raw_headers_sha256": "d9602ace0e7a9880c21d3680b0c9fa2ea36ba8d5d56f3966e12f18c44e69de82",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 5,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/networks/json",
+          "status": 200,
+          "raw_headers_sha256": "badae2eb4591973b2279185dd6151dfd9e995f02518ce3161531007fc9f7e951",
+          "raw_body_sha256": "0f1b0bb3e6569591976f968cbddbb2a1f202454082373336bbdc5329cd5511dc"
+        },
+        {
+          "sequence": 6,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/volumes/json",
+          "status": 200,
+          "raw_headers_sha256": "9b7739cac1fff59e10fa7de7cd77d8a529a13e8f79f4f8ce2d9463b1f6d73376",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 7,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/images/json?all=true",
+          "status": 200,
+          "raw_headers_sha256": "af2c33427fbf35244edbb4e4abd0921d0249c68e249e16bb8a56e31a9d493094",
+          "raw_body_sha256": "a91ec4711aa4dfe51b52dff0091b3b841b9c33d04e79de48fd789f0809bb6853"
+        },
+        {
+          "sequence": 8,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/secrets/json",
+          "status": 200,
+          "raw_headers_sha256": "5bccde2f2f744ab1eef47471a6f92fa472bd7cac7cdec3ba828b812bab7e2c70",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 9,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/2222222222222222222222222222222222222222222222222222222222222222/json",
+          "status": 200,
+          "raw_headers_sha256": "a37a202e27227070b517fc7234b66e86a4342a3dae53265278d710111441a7bb",
+          "raw_body_sha256": "8e727ff35564f26498746f54c9405d2e9764608aac8216ee1c8c5cd79c2651b7"
+        },
+        {
+          "sequence": 10,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/3333333333333333333333333333333333333333333333333333333333333333/json",
+          "status": 200,
+          "raw_headers_sha256": "75485e9cd821997e3e5fc980a05b9e70e16edc22f51a27f7d8c863355a0d8560",
+          "raw_body_sha256": "f7f95df22a4f5fee63520a96f66669bf2d6eefe1f0b7e2a6d5ce0ed6d1572718"
+        },
+        {
+          "sequence": 11,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/networks/4444444444444444444444444444444444444444444444444444444444444444/json",
+          "status": 200,
+          "raw_headers_sha256": "1e7bfa968143b7cc07a2423c1fc029759b99d221c23658d825f2cdf6b81b2f70",
+          "raw_body_sha256": "4047a052d594de646dc012271efffab1ca43eac438f673943b5eb842228272f5"
+        },
+        {
+          "sequence": 12,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/images/5555555555555555555555555555555555555555555555555555555555555555/json",
+          "status": 200,
+          "raw_headers_sha256": "ea677fcd876ca197a0d618488c9ee396d03c68de2694dec0bbfb3ffa69572671",
+          "raw_body_sha256": "c8c8ee2b2813cabf314e896493bfdbb8e2729abe0b5ee3b04b499a81d05b6f6f"
+        }
+      ]
+    },
+    {
+      "id": "mixed-origin",
+      "origins": [
+        "podman-cli",
+        "docker-compose-provider"
+      ],
+      "requests": [
+        {
+          "sequence": 1,
+          "method": "GET",
+          "path": "/libpod/_ping",
+          "status": 200,
+          "raw_headers_sha256": "c0d6bc618025cfdf639a83a1abe096220d4c040cc6f1378045b86f9201a9d101",
+          "raw_body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3"
+        },
+        {
+          "sequence": 2,
+          "method": "GET",
+          "path": "/v4.0.0/libpod/version",
+          "status": 200,
+          "raw_headers_sha256": "c53ca51eb2fa051e4a05a4fcbe3d76c4ef5c2e349a4ee72677557837923a9af8",
+          "raw_body_sha256": "f3e76afb6c6fd5b36fd95048f27c8418b8e2db89991d61b248bac5ca4a2217f9"
+        },
+        {
+          "sequence": 3,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/json?all=true&sync=true",
+          "status": 200,
+          "raw_headers_sha256": "ad038844c35586cc2b407962537ec6e329fb6dba7ad503c1a4b836022a488daf",
+          "raw_body_sha256": "fc38554db5af8dd8b02e3ffb05a882cbf1a74f3adc8778629e34afdabf281eb0"
+        },
+        {
+          "sequence": 4,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/pods/json",
+          "status": 200,
+          "raw_headers_sha256": "c3bf6897471a40915c5d9c1f5c3c217e3537b4568a29138ff59e98fc0b89e0b3",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 5,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/networks/json",
+          "status": 200,
+          "raw_headers_sha256": "7ff44e1cb278ee2c864041b110a006648d5b9893308559af255d9870eed35cb0",
+          "raw_body_sha256": "0f1b0bb3e6569591976f968cbddbb2a1f202454082373336bbdc5329cd5511dc"
+        },
+        {
+          "sequence": 6,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/volumes/json",
+          "status": 200,
+          "raw_headers_sha256": "7c8905e164f46f90087d21202e1ccb78ebe78ee6864396619de34e57b123a9eb",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 7,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/images/json?all=true",
+          "status": 200,
+          "raw_headers_sha256": "77f94bb4f718b69f1272fd8b0d555bd4b7f3ed095bc08e61302bdeb9dcb015f6",
+          "raw_body_sha256": "0d7a473accd910575769737513d2ab424e6b14996fe7ecfd7cd278592c1d8806"
+        },
+        {
+          "sequence": 8,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/secrets/json",
+          "status": 200,
+          "raw_headers_sha256": "0b172ebae945ba60b0c17bc3154c109b794ad0db36153b79d064a9be2304f7fb",
+          "raw_body_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "sequence": 9,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/1111111111111111111111111111111111111111111111111111111111111111/json",
+          "status": 200,
+          "raw_headers_sha256": "22d1e84edcb52e158c035a28bdf5fce4d2c2fd06bcbf9f6d40db5b33b4d6c0b1",
+          "raw_body_sha256": "314c6a56488c70cec1cbcb2c983900509e3dd8fde1c100ad23abebcf80436456"
+        },
+        {
+          "sequence": 10,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/2222222222222222222222222222222222222222222222222222222222222222/json",
+          "status": 200,
+          "raw_headers_sha256": "0f2ab000347d654c59cd3ffbcdd3f2966815b6507db641314b732d6e711c0dd0",
+          "raw_body_sha256": "8e727ff35564f26498746f54c9405d2e9764608aac8216ee1c8c5cd79c2651b7"
+        },
+        {
+          "sequence": 11,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/containers/3333333333333333333333333333333333333333333333333333333333333333/json",
+          "status": 200,
+          "raw_headers_sha256": "facfb09def5055b4934b57225414f7b8c156b1dd3e2f2efc4deb50bf34edf803",
+          "raw_body_sha256": "f7f95df22a4f5fee63520a96f66669bf2d6eefe1f0b7e2a6d5ce0ed6d1572718"
+        },
+        {
+          "sequence": 12,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/networks/4444444444444444444444444444444444444444444444444444444444444444/json",
+          "status": 200,
+          "raw_headers_sha256": "8ac2bf424bc65b519651f9727a8c1d6dc022e3e72d5bec749c250fa07283361a",
+          "raw_body_sha256": "4047a052d594de646dc012271efffab1ca43eac438f673943b5eb842228272f5"
+        },
+        {
+          "sequence": 13,
+          "method": "GET",
+          "path": "/v6.1.0/libpod/images/5555555555555555555555555555555555555555555555555555555555555555/json",
+          "status": 200,
+          "raw_headers_sha256": "6e6869199e92ff4a0a7fb6c224bd3889781c4728da6ec43be8899143836fb583",
+          "raw_body_sha256": "c8c8ee2b2813cabf314e896493bfdbb8e2729abe0b5ee3b04b499a81d05b6f6f"
+        }
+      ]
+    }
+  ]
+}

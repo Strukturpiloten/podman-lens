@@ -250,8 +250,9 @@ fn compatibility_guide_tracks_catalogue_and_renderer_gates() -> Result<(), Box<d
     }
     assert!(!image_rendering("5.5.0")?.is_success());
     assert!(image_rendering("5.6.0")?.is_success());
-    assert!(guide.contains("GitHub issue #3"));
-    assert!(guide.contains("manual-only"));
+    assert!(guide.contains("completed digest-pinned live rootful/rootless matrix"));
+    assert!(guide.contains("All 48 cells passed"));
+    assert!(guide.contains("two captured native Podman 6.1 rootful"));
     Ok(())
 }
 

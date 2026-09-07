@@ -6,3 +6,6 @@
 
 # serde_json owns the exact deployment-plan-v1 golden representation.
 /fixtures/deployment/deployment-plan-v1.json
+
+# Capture admission owns the exact native regression evidence bytes.
+/fixtures/native-regressions/

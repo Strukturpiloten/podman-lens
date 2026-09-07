@@ -224,89 +224,195 @@ fn offline_input_corpus_has_a_manifest_and_every_fixed_fixture_family() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn native_regression_fixtures_have_fixed_provenance_privacy_license_and_hashes()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new("fixtures/native-regressions");
     let manifest: Value = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
 
     assert_eq!(manifest["schema_version"], 1);
-    assert_eq!(manifest["evidence_kind"], "sanitized-derived-native-regression");
+    assert_eq!(manifest["evidence_kind"], "sanitized-native-regression-registry");
+    assert_eq!(manifest["test_only"], true);
     assert_eq!(manifest["license"]["repository_fixture"], "MPL-2.0");
     assert_eq!(manifest["license"]["upstream_podman"], "Apache-2.0");
+    assert_eq!(manifest["license"]["upstream_compose"], "Apache-2.0");
+    assert_eq!(manifest["privacy"]["classification"], "sanitized-captured-and-derived");
     assert!(
-        manifest["privacy"]["classification"] == "sanitized-derived"
-            && manifest["privacy"]["statement"]
-                .as_str()
-                .is_some_and(|statement| statement.contains("No real endpoint"))
+        manifest["privacy"]["statement"]
+            .as_str()
+            .is_some_and(|statement| statement.contains("No real endpoint") && statement.contains("capture directory"))
     );
 
     let provenance = &manifest["provenance"];
     assert_eq!(provenance["podman_engine"], "6.1.0");
     assert_eq!(provenance["release_tag"], "v6.1.0");
     assert_eq!(provenance["podman_commit"], "cade97a52ebdf9dbf9e81de8009015776837a074");
-    assert_eq!(provenance["source_urls"].as_array().map(Vec::len), Some(1));
+    assert_eq!(provenance["source_urls"].as_array().map(Vec::len), Some(3));
+    assert_eq!(provenance["compose_provider"], "5.5.0");
+    assert_eq!(
+        provenance["compose_provider_binary_sha256"],
+        "abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6"
+    );
+    assert_eq!(
+        provenance["runtime_repository"],
+        "https://github.com/Strukturpiloten/boxferry"
+    );
+    assert_eq!(
+        provenance["runtime_revision"],
+        "52b7600afe936b3c688294bd9a7f43e1afa9bf1f"
+    );
+    assert_eq!(provenance["runtime_matrix_cell"], "podman-6.1-rootful");
+    assert_eq!(
+        provenance["runtime_matrix_sha256"],
+        "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25"
+    );
+    assert_eq!(
+        provenance["runtime_image"],
+        "ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c"
+    );
     assert!(
         provenance["capture_scope"]
             .as_str()
             .is_some_and(|scope| scope.contains("no host socket or repository mount"))
     );
+    assert_eq!(
+        provenance["capture_contract"],
+        "one-off captured regression evidence; BoxFerry remains the maintained live matrix"
+    );
 
+    let expected = [
+        (
+            "creation-evidence-6.1.0.json",
+            "focused-derived-native-observation",
+            "84c6e4b8ab644661259bccf08ddfcf3cac949da01917bdbcc381a7e93db76f6c",
+            false,
+        ),
+        (
+            "capture-manifest-6.1.0-rootful.json",
+            "capture-manifest",
+            "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2",
+            false,
+        ),
+        (
+            "captured-cli-only-6.1.0-rootful.cassette.json",
+            "libpod-cassette",
+            "98e003a18ec79864862bf524e004b5d9a1c90f93acae4b4a9f5215901b6beb35",
+            true,
+        ),
+        (
+            "captured-mixed-origin-6.1.0-rootful.cassette.json",
+            "libpod-cassette",
+            "4fff2585def69669f0cff9f8cd5b2f6275a8774ddaa6840f16ec8930523355cd",
+            true,
+        ),
+    ];
     let artifacts = manifest["artifacts"]
         .as_array()
-        .ok_or_else(|| std::io::Error::other("native regression manifest artifacts must be an array"))?;
-    assert_eq!(artifacts.len(), 1);
+        .ok_or_else(|| std::io::Error::other("native artifacts must be an array"))?;
+    assert_eq!(artifacts.len(), expected.len());
     let mut listed = BTreeSet::new();
-    for artifact in artifacts {
-        let name = artifact["artifact"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::other("native regression artifact name must be a string"))?;
-        assert!(listed.insert(name.to_owned()), "duplicate fixture {name}");
+    for (name, kind, expected_hash, linked) in expected {
+        let artifact = artifacts
+            .iter()
+            .find(|artifact| artifact["artifact"] == name)
+            .ok_or_else(|| std::io::Error::other(format!("missing native artifact {name}")))?;
+        assert_eq!(artifact["kind"], kind);
+        assert_eq!(artifact["sha256"], expected_hash);
         assert!(
             artifact["coverage"]
                 .as_array()
-                .is_some_and(|coverage| !coverage.is_empty()),
-            "{name} needs focused behavior coverage"
+                .is_some_and(|coverage| !coverage.is_empty())
         );
+        if linked {
+            assert_eq!(
+                artifact["capture_manifest_sha256"],
+                "92020331b1ae8f6817536c9fba3fc2780e57df5e0358694e7d625ab95800f7e2"
+            );
+        } else {
+            assert!(artifact.get("capture_manifest_sha256").is_none());
+        }
         let bytes = fs::read(root.join(name))?;
         let mut digest = String::new();
-        for byte in Sha256::digest(&bytes) {
+        for byte in Sha256::digest(bytes) {
             write!(&mut digest, "{byte:02x}")?;
         }
-        assert_eq!(artifact["sha256"], digest, "{name} digest");
+        assert_eq!(digest, expected_hash, "{name} digest");
+        assert!(listed.insert(name.to_owned()));
+    }
+    let present = fs::read_dir(root)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<BTreeSet<_>, _>>()?
+        .into_iter()
+        .filter(|name| {
+            Path::new(name)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+                && name != "manifest.json"
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        listed, present,
+        "native fixture registry must cover every JSON artifact"
+    );
 
-        let fixture: Value = serde_json::from_slice(&bytes)?;
-        for field in [
-            "podman_engine",
-            "podman_commit",
-            "compose_provider",
-            "outer_image_digest",
-            "capture_scope",
-            "capture_commands",
-        ] {
-            assert_eq!(fixture["provenance"][field], provenance[field], "{name} {field}");
-        }
+    let gate = fs::read_to_string("scripts/check-native-release-contract.sh")?;
+    for required in [
+        "cargo test --locked",
+        "--test cassette_contract",
+        "--test native_release_contract",
+    ] {
+        assert!(gate.contains(required), "native gate misses {required}");
+    }
+    assert!(!gate.contains("--ignored"), "ordinary native gate must stay offline");
+    for consumer in [
+        "scripts/check-all.sh",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+    ] {
         assert!(
-            fixture["provenance"]["sanitization"]
-                .as_str()
-                .is_some_and(|statement| statement.contains("No full inspect response is committed")),
-            "{name} needs an explicit sanitization statement"
+            fs::read_to_string(consumer)?.contains("scripts/check-native-release-contract.sh"),
+            "{consumer} must invoke the named native gate"
         );
     }
 
-    let mut present = BTreeSet::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.ends_with(".json") && name != "manifest.json" {
-            present.insert(name.into_owned());
+    let mut directories = vec![Path::new("src").to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                directories.push(entry.path());
+            } else if entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"))
+            {
+                let source = fs::read_to_string(entry.path())?;
+                for forbidden in [
+                    "capture-manifest-6.1.0-rootful.json",
+                    "captured-cli-only-6.1.0-rootful.cassette.json",
+                    "captured-mixed-origin-6.1.0-rootful.cassette.json",
+                ] {
+                    assert!(!source.contains(forbidden), "production source imports {forbidden}");
+                }
+            }
         }
     }
-    assert_eq!(listed, present, "native regression fixture manifest coverage");
-
+    for (document, required) in [
+        ("docs/decisions/README.md", "0016-captured-native-release-evidence.md"),
+        ("docs/testing.md", "scripts/check-native-release-contract.sh"),
+        ("docs/architecture.md", "test-only"),
+        ("docs/api-stability.md", "capture manifest"),
+        ("docs/project-structure.md", "fixtures/native-regressions"),
+        ("docs/releasing.md", "check-native-release-contract.sh"),
+        ("docs/public/compatibility/index.md", "captured native"),
+    ] {
+        assert!(
+            fs::read_to_string(document)?.contains(required),
+            "{document} must document {required}"
+        );
+    }
     Ok(())
 }
-
 #[test]
 fn request_aware_complex_corpus_has_its_schema_tests_and_complete_version_context_matrix() {
     for file in [

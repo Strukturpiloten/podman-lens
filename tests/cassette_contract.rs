@@ -1,6 +1,6 @@
 //! Focused contract coverage for request-aware offline Libpod cassettes.
 
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, clippy::too_many_lines)]
 
 mod support;
 
@@ -88,6 +88,7 @@ async fn valid_cassette_parses_and_replays_exact_requests_in_order() -> Result<(
         "cade97a52ebdf9dbf9e81de8009015776837a074"
     );
     assert_eq!(cassette.provenance().source_urls().len(), 1);
+    assert!(cassette.provenance().capture().is_none());
     assert!(cassette.sanitization().contains("Synthetic"));
     assert_eq!(cassette.interaction_count(), 2);
 
@@ -255,5 +256,253 @@ fn duplicate_request_keys_are_rejected_for_mutation_and_transport_construction()
         Err(CassetteError::InteractionAmbiguous { method, path })
             if method == "GET" && path == "/libpod/_ping"
     ));
+    Ok(())
+}
+
+#[test]
+fn captured_cassettes_require_complete_bounded_capture_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let capture = json!({
+        "engine_build": {
+            "kind": "source-build",
+            "source_revision": "cade97a52ebdf9dbf9e81de8009015776837a074"
+        },
+        "runtime_image": "ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c",
+        "capture_manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "runtime_repository": "https://github.com/Strukturpiloten/boxferry",
+        "runtime_revision": "52b7600afe936b3c688294bd9a7f43e1afa9bf1f",
+        "runtime_matrix_cell": "podman-6.1-rootful",
+        "runtime_matrix_sha256": "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25",
+        "setup_script_sha256": "0790eb18744c8683a538c1917fc5a550b70e8a5dfb1f2448110101422dfae977",
+        "request_recorder_source_sha256": "26a1b238826315326057e0d555c385ea5a4617568c8cd4154a5faa9d0ff7fb91",
+        "compose_provider_binary_sha256": "abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6"
+    });
+    let mut value = cassette_value();
+    value["synthetic"] = json!(false);
+    value["provenance"]["capture"] = capture.clone();
+    value["interactions"][0]["response"]["headers"] = json!([["x-reference-id", "fixture-reference-contract-01"]]);
+
+    let parsed = cassette(&value)?;
+    let observed = parsed.provenance().capture().ok_or("captured provenance")?;
+    assert_eq!(
+        observed.engine_build().source_revision(),
+        Some("cade97a52ebdf9dbf9e81de8009015776837a074")
+    );
+    assert!(observed.runtime_image().contains("@sha256:"));
+    assert_eq!(
+        observed.capture_manifest_sha256(),
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    );
+    assert_eq!(
+        observed.runtime_repository(),
+        "https://github.com/Strukturpiloten/boxferry"
+    );
+    assert_eq!(observed.runtime_revision(), "52b7600afe936b3c688294bd9a7f43e1afa9bf1f");
+    assert_eq!(observed.runtime_matrix_cell(), "podman-6.1-rootful");
+    assert_eq!(
+        observed.runtime_matrix_sha256(),
+        "1ed306f4b368c229bca927697156e2314b922c2ec728c55c2820c69a712bad25"
+    );
+    assert_eq!(
+        observed.setup_script_sha256(),
+        "0790eb18744c8683a538c1917fc5a550b70e8a5dfb1f2448110101422dfae977"
+    );
+    assert_eq!(
+        observed.request_recorder_source_sha256(),
+        "26a1b238826315326057e0d555c385ea5a4617568c8cd4154a5faa9d0ff7fb91"
+    );
+    assert_eq!(
+        observed.compose_provider_binary_sha256(),
+        Some("abdf6ec2a49e5cb1f021f142d55a7494c823b11fa6f950237301a1cb70b5e5c6")
+    );
+
+    let mut without_compose = value.clone();
+    without_compose["provenance"]["capture"]
+        .as_object_mut()
+        .expect("capture provenance object")
+        .remove("compose_provider_binary_sha256");
+    assert!(cassette(&without_compose).is_ok());
+
+    let mut malformed_compose = value.clone();
+    malformed_compose["provenance"]["capture"]["compose_provider_binary_sha256"] = json!("not-a-digest");
+    assert!(matches!(
+        cassette(&malformed_compose),
+        Err(CassetteError::SchemaViolation)
+    ));
+
+    let mut missing_capture = cassette_value();
+    missing_capture["synthetic"] = json!(false);
+    assert!(matches!(
+        cassette(&missing_capture),
+        Err(CassetteError::SchemaViolation)
+    ));
+
+    let mut contradictory = cassette_value();
+    contradictory["provenance"]["capture"] = capture.clone();
+    assert!(matches!(cassette(&contradictory), Err(CassetteError::SchemaViolation)));
+
+    for field in [
+        "engine_build",
+        "runtime_image",
+        "capture_manifest_sha256",
+        "runtime_repository",
+        "runtime_revision",
+        "runtime_matrix_cell",
+        "runtime_matrix_sha256",
+        "setup_script_sha256",
+        "request_recorder_source_sha256",
+    ] {
+        let mut incomplete = value.clone();
+        incomplete["provenance"]["capture"]
+            .as_object_mut()
+            .expect("capture provenance object")
+            .remove(field);
+        assert!(matches!(cassette(&incomplete), Err(CassetteError::SchemaViolation)));
+    }
+
+    for invalid in [
+        json!("ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0"),
+        json!("ghcr.io/strukturpiloten/podman@sha256:not-a-digest"),
+    ] {
+        let mut malformed = value.clone();
+        malformed["provenance"]["capture"]["runtime_image"] = invalid;
+        assert!(matches!(cassette(&malformed), Err(CassetteError::SchemaViolation)));
+    }
+
+    let mut malformed_build = value.clone();
+    malformed_build["provenance"]["capture"]["engine_build"]["source_revision"] = json!("v6.1.0");
+    assert!(matches!(
+        cassette(&malformed_build),
+        Err(CassetteError::SchemaViolation)
+    ));
+
+    let mut exact_package = value;
+    exact_package["provenance"]["capture"]["engine_build"] = json!({
+        "kind": "package",
+        "package_name": "podman",
+        "package_revision": "6.1.0-1.x86_64",
+        "package_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    });
+    assert!(cassette(&exact_package).is_ok());
+    exact_package["provenance"]["capture"]["engine_build"]
+        .as_object_mut()
+        .expect("package provenance object")
+        .remove("package_artifact_sha256");
+    assert!(matches!(cassette(&exact_package), Err(CassetteError::SchemaViolation)));
+    Ok(())
+}
+
+#[tokio::test]
+async fn raw_text_response_replays_exact_bytes_and_is_mutually_exclusive_with_json_body()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut value = cassette_value();
+    let response = &mut value["interactions"][0]["response"];
+    response.as_object_mut().expect("response object").remove("body");
+    response["body_text"] = json!("OK");
+
+    let transport = CassetteTransport::try_new(cassette(&value)?)?;
+    let replayed = transport.send(&get("/libpod/_ping")?).await?;
+    assert_eq!(replayed.body(), b"OK");
+
+    let mut both = value.clone();
+    both["interactions"][0]["response"]["body"] = Value::Null;
+    assert!(matches!(cassette(&both), Err(CassetteError::SchemaViolation)));
+
+    let mut neither = value;
+    neither["interactions"][0]["response"]
+        .as_object_mut()
+        .expect("response object")
+        .remove("body_text");
+    assert!(matches!(cassette(&neither), Err(CassetteError::SchemaViolation)));
+    Ok(())
+}
+
+#[test]
+fn captured_privacy_admission_rejects_raw_private_mutations() -> Result<(), Box<dyn std::error::Error>> {
+    let captured: Value = serde_json::from_slice(include_bytes!(
+        "../fixtures/native-regressions/captured-mixed-origin-6.1.0-rootful.cassette.json"
+    ))?;
+    let cases = [
+        (vec!["body", "Platform", "Name"], json!("/home/example/private")),
+        (vec!["body", "Platform", "Name"], json!("PASSWORD=raw-secret")),
+        (vec!["body", "Platform", "Authorization"], json!("Bearer raw-token")),
+        (vec!["body", "Platform", "Name"], json!("10.0.0.4")),
+        (vec!["body", "Platform", "Name"], json!("aa:bb:cc:dd:ee:ff")),
+        (vec!["body", "Platform", "Hostname"], json!("6fea848a36ae")),
+    ];
+    for (path, mutation) in cases {
+        let mut value = captured.clone();
+        let mut target = &mut value["interactions"][1]["response"];
+        for segment in path {
+            target = &mut target[segment];
+        }
+        *target = mutation;
+        assert!(matches!(
+            Cassette::from_slice(&serde_json::to_vec(&value)?),
+            Err(CassetteError::PrivacyViolation)
+        ));
+    }
+
+    let mut raw_reference = captured;
+    raw_reference["interactions"][0]["response"]["headers"][0] =
+        json!(["X-Reference-Id", "8d25216c-44c1-4fcb-bb0b-19d0acb88f03"]);
+    assert!(matches!(
+        Cassette::from_slice(&serde_json::to_vec(&raw_reference)?),
+        Err(CassetteError::PrivacyViolation)
+    ));
+    Ok(())
+}
+
+#[test]
+fn captured_privacy_admission_covers_paths_dates_timestamps_and_reference_shape()
+-> Result<(), Box<dyn std::error::Error>> {
+    let captured: Value = serde_json::from_slice(include_bytes!(
+        "../fixtures/native-regressions/captured-mixed-origin-6.1.0-rootful.cassette.json"
+    ))?;
+    let assert_rejected = |value: &Value| {
+        assert!(matches!(
+            Cassette::from_slice(&serde_json::to_vec(value).expect("serialize privacy mutation")),
+            Err(CassetteError::PrivacyViolation)
+        ));
+    };
+
+    for path in [
+        "/var/lib/containers/storage",
+        "/run/containers/storage",
+        "/capture-input/native.json",
+        "/capture-socket/podman.sock",
+    ] {
+        let mut value = captured.clone();
+        value["interactions"][0]["request"]["path"] = json!(path);
+        assert_rejected(&value);
+    }
+
+    let mut hostname = captured.clone();
+    hostname["interactions"][1]["response"]["body"]["Platform"]["Hostname"] = json!("abcdef");
+    assert_rejected(&hostname);
+
+    let mut timestamp = captured.clone();
+    timestamp["interactions"][1]["response"]["body"]["Components"][0]["Details"]["BuildTime"] =
+        json!(1_725_000_000_u64);
+    assert_rejected(&timestamp);
+
+    let mut raw_date = captured.clone();
+    let headers = raw_date["interactions"][0]["response"]["headers"]
+        .as_array_mut()
+        .expect("headers");
+    headers
+        .iter_mut()
+        .find(|header| header[0] == "Date")
+        .expect("Date header")[1] = json!("Mon, 07 Sep 2026 12:34:56 GMT");
+    assert_rejected(&raw_date);
+
+    let mut almost_reference = captured;
+    let headers = almost_reference["interactions"][0]["response"]["headers"]
+        .as_array_mut()
+        .expect("headers");
+    headers
+        .iter_mut()
+        .find(|header| header[0] == "X-Reference-Id")
+        .expect("reference header")[1] = json!("fixture-reference-mixed-origin-01-extra");
+    assert_rejected(&almost_reference);
     Ok(())
 }

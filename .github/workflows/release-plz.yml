@@ -51,7 +51,7 @@ jobs:
         run: |
           echo 'GitHub could not create the release-plz App token. Grant the organization App Contents and Pull requests read/write permissions, then approve the installation.' >&2
           exit 1
-      - uses: release-plz/action@aec534bbd8631793b9b3b8f1ee6cd886c322e17f # v0.5.133
+      - uses: release-plz/action@503fe65046e8810d4844f6b3aa12ab599a3549d7 # v0.5.134
         with:
           command: release-pr
           # renovate: datasource=crate depName=release-plz

@@ -82,6 +82,22 @@ fn consume_typed_observation(source: &ResourceObservation) {
                     .map(podman_lens::ObservedValue::value),
                 networking.host_entries(),
                 networking.networks().observed().map(podman_lens::ObservedValue::value),
+                if let Some(attachments) = networking.network_attachments().observed() {
+                    for attachment in attachments.value() {
+                        let _ = attachment.network().reference();
+                        if let Some(aliases) = attachment.aliases().observed() {
+                            for alias in aliases.value() {
+                                let _ = alias.spelling();
+                                let _ = alias.field_path();
+                                let _alias_kind_description = match alias.kind() {
+                                    podman_lens::NativeNetworkAliasKind::EffectiveCandidate => "effective",
+                                    podman_lens::NativeNetworkAliasKind::RuntimeContainerId => "runtime-id",
+                                    _ => "future",
+                                };
+                            }
+                        }
+                    }
+                },
                 networking.network_options().observed().map(|value| value.value().len()),
                 networking
                     .no_manage_resolv_conf()
@@ -414,7 +430,7 @@ fn external_consumer_can_inspect_the_strict_two_plane_coverage_ledger() -> Resul
             && entry.classification() == NativeFieldCoverageClassification::UnknownIncomplete
             && entry.public_contract() == "ObservationHeader::unmodelled_completeness"
     }));
-    assert_eq!(entries.len(), 239);
+    assert_eq!(entries.len(), 240);
     assert!(entries.iter().any(|entry| {
         entry.id() == "PLN-FLD-0142"
             && entry.plane() == NativeFieldCoveragePlane::InputObservation

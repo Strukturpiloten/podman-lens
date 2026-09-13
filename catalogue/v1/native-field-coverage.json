@@ -3027,6 +3027,22 @@
       "negative_test": "tests::inventory::typed_mount_relabel_state_only_conflicts_when_observed_and_different"
     },
     {
+      "id": "PLN-FLD-0192",
+      "plane": "input-observation",
+      "resource_kind": "container",
+      "field_path": "$.NetworkSettings.Networks.*.Aliases",
+      "classification": "observation-only",
+      "observation": "inventory::decode_container_network_attachments",
+      "planner": "not_applicable",
+      "cli_renderer": "not_applicable",
+      "libpod_renderer": "not_applicable",
+      "target_versions": [],
+      "public_contract": "NativeNetworkingObservation::network_attachments",
+      "finding": "PLN0017",
+      "positive_test": "tests::inventory::container_network_aliases_are_effective_attachment_evidence_without_promoting_runtime_ids",
+      "negative_test": "tests::inventory::container_network_aliases_are_effective_attachment_evidence_without_promoting_runtime_ids"
+    },
+    {
       "id": "PLN-OUT-0001",
       "plane": "output-intent",
       "resource_kind": "container",

@@ -586,6 +586,101 @@ pub struct NativeResourceReference {
     field_path: String,
 }
 
+/// One native alias reported for a container network attachment.
+///
+/// The spelling is native runtime evidence. Callers must explicitly authorize
+/// any mapping of an [`EffectiveCandidate`](NativeNetworkAliasKind::EffectiveCandidate)
+/// into declared output intent.
+#[derive(Clone, Eq, PartialEq)]
+pub struct NativeNetworkAliasObservation {
+    spelling: String,
+    field_path: String,
+    kind: NativeNetworkAliasKind,
+}
+
+impl fmt::Debug for NativeNetworkAliasObservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("NativeNetworkAliasObservation")
+            .field("spelling", &"[redacted]")
+            .field("field_path", &"[redacted]")
+            .field("kind", &self.kind)
+            .finish()
+    }
+}
+
+impl NativeNetworkAliasObservation {
+    pub(crate) fn new(spelling: String, field_path: String, kind: NativeNetworkAliasKind) -> Self {
+        Self {
+            spelling,
+            field_path,
+            kind,
+        }
+    }
+
+    /// Returns the exact native alias spelling.
+    #[must_use]
+    pub fn spelling(&self) -> &str {
+        &self.spelling
+    }
+
+    /// Returns the exact native field path which supplied this alias.
+    #[must_use]
+    pub fn field_path(&self) -> &str {
+        &self.field_path
+    }
+
+    /// Returns whether Podman reported a runtime container-ID alias or an
+    /// effective candidate which requires downstream authorization.
+    #[must_use]
+    pub const fn kind(&self) -> NativeNetworkAliasKind {
+        self.kind
+    }
+}
+
+/// Closed classification of a native network-alias spelling.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NativeNetworkAliasKind {
+    /// A native effective alias which a downstream adapter may map only after
+    /// an explicit portable-intent decision.
+    EffectiveCandidate,
+    /// Podman added the full or 12-character container ID at runtime.
+    RuntimeContainerId,
+}
+
+/// One named container-network attachment with independently fallible alias
+/// evidence.
+///
+/// A malformed `Aliases` member does not invalidate the attachment name or
+/// its native network relationship.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeNetworkAttachmentObservation {
+    network: NativeResourceReference,
+    aliases: ObservationField<Vec<NativeNetworkAliasObservation>>,
+}
+
+impl NativeNetworkAttachmentObservation {
+    pub(crate) fn new(
+        network: NativeResourceReference,
+        aliases: ObservationField<Vec<NativeNetworkAliasObservation>>,
+    ) -> Self {
+        Self { network, aliases }
+    }
+
+    /// Returns the attached native network and its exact source path.
+    #[must_use]
+    pub const fn network(&self) -> &NativeResourceReference {
+        &self.network
+    }
+
+    /// Returns effective alias evidence for this attachment.
+    #[must_use]
+    pub const fn aliases(&self) -> &ObservationField<Vec<NativeNetworkAliasObservation>> {
+        &self.aliases
+    }
+}
+
 impl NativeResourceReference {
     pub(crate) fn new(reference: String, field_path: String) -> Self {
         Self { reference, field_path }
@@ -1917,6 +2012,7 @@ pub struct NativeNetworkingObservation {
     dns_options: ObservationField<Vec<String>>,
     host_entries: ObservationField<NativeOpaqueNetworkOptions>,
     networks: ObservationField<Vec<NativeResourceReference>>,
+    network_attachments: ObservationField<Vec<NativeNetworkAttachmentObservation>>,
     network_options: ObservationField<NativeOpaqueNetworkOptions>,
     no_manage_resolv_conf: ObservationField<bool>,
     no_manage_hosts: ObservationField<bool>,
@@ -1935,6 +2031,7 @@ impl NativeNetworkingObservation {
         dns_options: ObservationField<Vec<String>>,
         host_entries: ObservationField<NativeOpaqueNetworkOptions>,
         networks: ObservationField<Vec<NativeResourceReference>>,
+        network_attachments: ObservationField<Vec<NativeNetworkAttachmentObservation>>,
         network_options: ObservationField<NativeOpaqueNetworkOptions>,
         no_manage_resolv_conf: ObservationField<bool>,
         no_manage_hosts: ObservationField<bool>,
@@ -1950,6 +2047,7 @@ impl NativeNetworkingObservation {
             dns_options,
             host_entries,
             networks,
+            network_attachments,
             network_options,
             no_manage_resolv_conf,
             no_manage_hosts,
@@ -1999,6 +2097,18 @@ impl NativeNetworkingObservation {
     #[must_use]
     pub fn networks(&self) -> &ObservationField<Vec<NativeResourceReference>> {
         &self.networks
+    }
+    /// Returns per-network attachment evidence, including independently
+    /// fallible effective alias observations.
+    ///
+    /// This additive accessor leaves [`Self::networks`] source-compatible for
+    /// callers that only need native network relationships. Alias evidence is
+    /// intentionally omitted entirely from the frozen, always-redacted
+    /// [`crate::snapshot::v1`] schema; callers requiring it must use this
+    /// typed observation API and explicitly authorize any portable mapping.
+    #[must_use]
+    pub fn network_attachments(&self) -> &ObservationField<Vec<NativeNetworkAttachmentObservation>> {
+        &self.network_attachments
     }
     /// Returns opaque network-option evidence without key/value semantics.
     #[must_use]

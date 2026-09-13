@@ -14,7 +14,8 @@ use crate::observation::{
     ContainerObservation, ContainerSecretGrantObservation, ContainerSecretReference, ImageObservation,
     ImageObservationFields, Labels, NativeCapability, NativeHealthCheckObservation, NativeHealthCommand,
     NativeHealthFailureAction, NativeIpcNamespaceMode, NativeLogDriver, NativeLoggingObservation, NativeNamespaceMode,
-    NativeNamespaceObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
+    NativeNamespaceObservation, NativeNetworkAliasKind, NativeNetworkAliasObservation,
+    NativeNetworkAttachmentObservation, NativeNetworkCidr, NativeNetworkLeaseRange, NativeNetworkRouteObservation,
     NativeNetworkRouteType, NativeNetworkSubnetObservation, NativeNetworkingObservation, NativeOpaqueNetworkOptions,
     NativeOpaqueSecurityOptions, NativePortBindingObservation, NativePortProtocol, NativeRelationship,
     NativeResourceControlObservation, NativeResourceReference, NativeRestartPolicyName, NativeRestartPolicyObservation,
@@ -1496,7 +1497,7 @@ fn decode_container(
         ResourceKind::Pod,
         &mut relationships,
     ));
-    let container_networks = if matches!(pod_membership, ObservationField::Absent) {
+    let container_networks = if pod_membership.observed().is_none() {
         decode_container_networks(object, &identity, &mut relationships, &mut findings)
     } else {
         ContainerNetworksDecoded {
@@ -1505,10 +1506,16 @@ fn decode_container(
         }
     };
     relationship_decoding.merge(container_networks.relationships);
+    let network_attachments = if pod_membership.observed().is_none() {
+        decode_container_network_attachments(object, &identity, &mut findings)
+    } else {
+        ObservationField::NotApplicable
+    };
     let container_networking = decode_container_networking(
         object,
         &pod_membership,
         container_networks.field,
+        network_attachments,
         &identity,
         &mut findings,
     );
@@ -4052,6 +4059,106 @@ fn decode_container_networks(
     }
 }
 
+fn decode_container_network_attachments(
+    object: &Map<String, Value>,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativeNetworkAttachmentObservation>> {
+    let Some(settings) = object.get("NetworkSettings") else {
+        return ObservationField::Absent;
+    };
+    if settings.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(settings) = settings.as_object() else {
+        return ObservationField::Malformed;
+    };
+    let Some(networks) = settings.get("Networks") else {
+        return ObservationField::Absent;
+    };
+    if networks.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(networks) = networks.as_object() else {
+        return ObservationField::Malformed;
+    };
+
+    let mut attachments = Vec::with_capacity(networks.len());
+    for (name, details) in networks {
+        if name.is_empty() || (!details.is_object() && !details.is_null()) {
+            return ObservationField::Malformed;
+        }
+        let path = format!("$.NetworkSettings.Networks.{name}");
+        let aliases = if details.is_null() {
+            // Podman supplied the attachment name but no per-network details,
+            // so preserve the relationship while making alias evidence
+            // explicitly unavailable rather than silently absent.
+            ObservationField::Unavailable
+        } else {
+            details.as_object().map_or(ObservationField::Absent, |details| {
+                decode_container_network_aliases(details, &path, identity, findings)
+            })
+        };
+        attachments.push(NativeNetworkAttachmentObservation::new(
+            NativeResourceReference::new(name.clone(), path),
+            aliases,
+        ));
+    }
+    ObservationField::Observed(ObservedValue::new(attachments, ObservationOrigin::Effective))
+}
+
+fn decode_container_network_aliases(
+    details: &Map<String, Value>,
+    attachment_path: &str,
+    identity: &ResourceIdentity,
+    findings: &mut Vec<InventoryFinding>,
+) -> ObservationField<Vec<NativeNetworkAliasObservation>> {
+    let path = format!("{attachment_path}.Aliases");
+    let Some(value) = details.get("Aliases") else {
+        return ObservationField::Absent;
+    };
+    if value.is_null() {
+        return ObservationField::Absent;
+    }
+    let Some(values) = value.as_array() else {
+        findings.push(InventoryFinding::field(
+            DiagnosticCode::ResourceMalformed,
+            identity.clone(),
+            path,
+        ));
+        return ObservationField::Malformed;
+    };
+
+    let mut aliases = Vec::with_capacity(values.len());
+    for (index, value) in values.iter().enumerate() {
+        let Some(spelling) = value.as_str().filter(|value| !value.is_empty()) else {
+            findings.push(InventoryFinding::field(
+                DiagnosticCode::ResourceMalformed,
+                identity.clone(),
+                format!("{path}[{index}]"),
+            ));
+            return ObservationField::Malformed;
+        };
+        let kind = if is_runtime_container_id_alias(spelling, identity.id()) {
+            NativeNetworkAliasKind::RuntimeContainerId
+        } else {
+            NativeNetworkAliasKind::EffectiveCandidate
+        };
+        aliases.push(NativeNetworkAliasObservation::new(
+            spelling.to_owned(),
+            format!("{path}[{index}]"),
+            kind,
+        ));
+    }
+    ObservationField::Observed(ObservedValue::new(aliases, ObservationOrigin::Effective))
+}
+
+fn is_runtime_container_id_alias(alias: &str, container_id: &str) -> bool {
+    container_id.len() == 64
+        && container_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && (alias == container_id || alias == &container_id[..12])
+}
+
 struct ContainerMountDecoded {
     field: ObservationField<Vec<ContainerMountObservation>>,
     relationships: RelationshipDecoding,
@@ -4934,6 +5041,7 @@ fn decode_container_networking(
     object: &Map<String, Value>,
     pod_membership: &ObservationField<NativeResourceReference>,
     networks: ObservationField<Vec<NativeResourceReference>>,
+    network_attachments: ObservationField<Vec<NativeNetworkAttachmentObservation>>,
     identity: &ResourceIdentity,
     findings: &mut Vec<InventoryFinding>,
 ) -> ObservationField<NativeNetworkingObservation> {
@@ -5078,6 +5186,7 @@ fn decode_container_networking(
             dns_options,
             host_entries,
             networks,
+            network_attachments,
             ObservationField::NotApplicable,
             no_manage_resolv_conf,
             no_manage_hosts,
@@ -5240,6 +5349,7 @@ fn decode_native_networking(
                 dns_options,
                 host_entries,
                 networks,
+                ObservationField::NotApplicable,
                 network_options,
                 no_manage_resolv_conf,
                 no_manage_hosts,
@@ -6006,7 +6116,9 @@ fn unknown_nested_fields(
                     // Network attachment details are an open, runtime-specific map. Retain one
                     // redacted structural marker per attachment instead of consuming the entire
                     // unknown-field budget on every effective address and gateway member.
-                    if details.as_object().is_some_and(|members| !members.is_empty())
+                    if details
+                        .as_object()
+                        .is_some_and(|members| members.keys().any(|member| member != "Aliases"))
                         && !fields.push(|| format!("$.NetworkSettings.Networks.{name}"), details)
                     {
                         break;

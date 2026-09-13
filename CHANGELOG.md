@@ -5,6 +5,13 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Added
+
+- Expose bounded per-network native alias observations with explicit effective provenance and
+  runtime container-ID classification. Alias spellings, state, and counts remain omitted from the
+  frozen snapshot v1 schema and are available only through the typed API
+  ([#69](https://github.com/Strukturpiloten/podman-lens/issues/69)).
+
 ## [0.2.3](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.2...v0.2.3) - 2026-09-07
 
 ### Fixed

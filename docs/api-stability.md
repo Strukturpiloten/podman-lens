@@ -47,7 +47,10 @@ never silently rewritten. Exact golden files and negative schema mutations prote
 the schema alone cannot express.
 
 Snapshots remain always redacted. Deployment artifacts contain only public desired values
-explicitly authorized by the caller and never sensitive input references.
+explicitly authorized by the caller and never sensitive input references. The frozen `snapshot::v1`
+shape omits native network attachment aliases entirely, including their state and count. Their exact
+spelling, field path, and runtime-ID classification are available only from the typed observation
+API, where downstream mapping remains an explicit authorization.
 
 ## Version and catalogue changes
 

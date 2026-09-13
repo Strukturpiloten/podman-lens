@@ -126,6 +126,30 @@ async fn secret_driver_is_typed_not_unsupported_in_inventory_snapshots() -> Resu
 }
 
 #[tokio::test]
+async fn snapshot_v1_omits_native_network_alias_spellings() -> Result<(), Box<dyn std::error::Error>> {
+    let mut responses = fixture_responses()?;
+    responses[8] = LibpodResponse::new(
+        200,
+        LibpodHeaders::default(),
+        serde_json::to_vec(&json!({
+            "Id": "container-a",
+            "Name": "a",
+            "HostConfig": {},
+            "NetworkSettings": {
+                "Networks": {
+                    "edge": {"Aliases": ["realtime-dev.supabase-realtime"]}
+                }
+            }
+        }))?,
+    )?;
+    let inventory = acquire_inventory(&FixtureTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let serialized = serde_json::to_string(&v1::inventory(&inventory))?;
+    assert!(!serialized.contains("realtime-dev.supabase-realtime"));
+    assert!(!serialized.contains("network_attachments"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn graph_snapshot_matches_the_versioned_golden_json() -> Result<(), Box<dyn std::error::Error>> {
     let mut request = DiscoveryRequest::new();
     request.add_root(ResourceSelector::exact(ResourceKind::Container, "a")?);

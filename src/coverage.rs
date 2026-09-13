@@ -1975,6 +1975,19 @@ const EXPECTED_INPUT_ENTRIES: &[ExpectedInputEntry] = &[
         "tests::inventory::creation_evidence_is_typed_indexed_and_redacts_command_values",
         "tests::inventory::typed_mount_relabel_state_only_conflicts_when_observed_and_different"
     ),
+    expected!(
+        "PLN-FLD-0192",
+        "container",
+        "$.NetworkSettings.Networks.*.Aliases",
+        "observation-only",
+        "inventory::decode_container_network_attachments",
+        "not_applicable",
+        "not_applicable",
+        "NativeNetworkingObservation::network_attachments",
+        "PLN0017",
+        "tests::inventory::container_network_aliases_are_effective_attachment_evidence_without_promoting_runtime_ids",
+        "tests::inventory::container_network_aliases_are_effective_attachment_evidence_without_promoting_runtime_ids"
+    ),
 ];
 
 const ALL_REVIEWED_TARGETS: &[&str] = &["5.4.0", "5.5.0", "5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"];

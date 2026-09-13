@@ -1162,6 +1162,253 @@ async fn unpodded_network_settings_preserve_effective_attachment_names_and_rejec
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // Each alias field state is an independent native boundary.
+async fn container_network_aliases_are_effective_attachment_evidence_without_promoting_runtime_ids()
+-> Result<(), Box<dyn std::error::Error>> {
+    let container_id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let other_container_id = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[2] = json(format!(
+        r#"[{{"Id":"{container_id}","Names":["api"]}},{{"Id":"container-z","Names":["z"]}}]"#,
+    ))?;
+    responses[8] = json(format!(
+        r#"{{"Id":"{container_id}","Name":"api","HostConfig":{{}},"NetworkSettings":{{"Networks":{{"edge":{{"Aliases":["{container_id}","0123456789ab","{other_container_id}","fedcba987654","realtime-dev.supabase-realtime"]}}}}}}}}"#,
+    ))?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode container".into());
+    };
+    let networking = container.networking().observed().ok_or("networking")?.value();
+    assert_eq!(
+        networking.networks().observed().map(podman_lens::ObservedValue::origin),
+        Some(ObservationOrigin::Effective)
+    );
+    let attachments = networking
+        .network_attachments()
+        .observed()
+        .ok_or("network attachments")?;
+    assert_eq!(attachments.origin(), ObservationOrigin::Effective);
+    let aliases = attachments.value()[0].aliases().observed().ok_or("aliases")?;
+    assert_eq!(aliases.origin(), ObservationOrigin::Effective);
+    assert_eq!(aliases.value()[0].spelling(), container_id);
+    assert_eq!(
+        aliases.value()[0].field_path(),
+        "$.NetworkSettings.Networks.edge.Aliases[0]"
+    );
+    assert_eq!(
+        aliases.value()[0].kind(),
+        podman_lens::NativeNetworkAliasKind::RuntimeContainerId
+    );
+    assert_eq!(aliases.value()[1].spelling(), "0123456789ab");
+    assert_eq!(
+        aliases.value()[1].kind(),
+        podman_lens::NativeNetworkAliasKind::RuntimeContainerId
+    );
+    assert_eq!(aliases.value()[2].spelling(), other_container_id);
+    assert_eq!(
+        aliases.value()[2].kind(),
+        podman_lens::NativeNetworkAliasKind::EffectiveCandidate
+    );
+    assert_eq!(aliases.value()[3].spelling(), "fedcba987654");
+    assert_eq!(
+        aliases.value()[3].kind(),
+        podman_lens::NativeNetworkAliasKind::EffectiveCandidate
+    );
+    assert_eq!(aliases.value()[4].spelling(), "realtime-dev.supabase-realtime");
+    assert_eq!(
+        aliases.value()[4].kind(),
+        podman_lens::NativeNetworkAliasKind::EffectiveCandidate
+    );
+    let debug = format!("{:?}", aliases.value()[4]);
+    assert!(!debug.contains("realtime-dev.supabase-realtime"));
+    assert!(!debug.contains("$.NetworkSettings.Networks.edge.Aliases[4]"));
+    assert!(
+        !inventory
+            .section(ResourceKind::Container)
+            .ok_or("containers")?
+            .observations()[0]
+            .header()
+            .unmodelled_fields()
+            .iter()
+            .any(|field| field.path() == "$.NetworkSettings.Networks.edge")
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"api","HostConfig":{},"NetworkSettings":{"Networks":{"edge":{"Aliases":["portable"],"EndpointID":"opaque-runtime-value"}}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must decode container".into());
+    };
+    assert_eq!(
+        container
+            .networking()
+            .observed()
+            .ok_or("networking")?
+            .value()
+            .network_attachments()
+            .observed()
+            .ok_or("attachments")?
+            .value()[0]
+            .aliases()
+            .observed()
+            .ok_or("aliases")?
+            .value()[0]
+            .spelling(),
+        "portable"
+    );
+    assert!(
+        observation
+            .header()
+            .unmodelled_fields()
+            .iter()
+            .any(|field| field.path() == "$.NetworkSettings.Networks.edge")
+    );
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"api","HostConfig":{},"NetworkSettings":{"Networks":{"absent":{},"null":{"Aliases":null},"empty":{"Aliases":[]},"unavailable":null}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode container".into());
+    };
+    let attachments = container
+        .networking()
+        .observed()
+        .ok_or("networking")?
+        .value()
+        .network_attachments()
+        .observed()
+        .ok_or("attachments")?;
+    let absent = attachments
+        .value()
+        .iter()
+        .find(|attachment| attachment.network().reference() == "absent")
+        .ok_or("absent attachment")?;
+    let null = attachments
+        .value()
+        .iter()
+        .find(|attachment| attachment.network().reference() == "null")
+        .ok_or("null attachment")?;
+    let empty = attachments
+        .value()
+        .iter()
+        .find(|attachment| attachment.network().reference() == "empty")
+        .ok_or("empty attachment")?;
+    let unavailable = attachments
+        .value()
+        .iter()
+        .find(|attachment| attachment.network().reference() == "unavailable")
+        .ok_or("unavailable attachment")?;
+    assert!(matches!(absent.aliases(), ObservationField::Absent));
+    assert!(matches!(null.aliases(), ObservationField::Absent));
+    assert!(matches!(unavailable.aliases(), ObservationField::Unavailable));
+    let empty_aliases = empty.aliases().observed().ok_or("empty aliases")?;
+    assert_eq!(empty_aliases.origin(), ObservationOrigin::Effective);
+    assert!(empty_aliases.value().is_empty());
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"api","HostConfig":{},"NetworkSettings":{"Networks":{"edge":{"Aliases":["portable",false]}}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must decode container".into());
+    };
+    let networking = container
+        .networking()
+        .observed()
+        .ok_or("networking must remain usable")?
+        .value();
+    assert_eq!(
+        networking
+            .networks()
+            .observed()
+            .map(|value| value.value()[0].reference()),
+        Some("edge")
+    );
+    assert!(matches!(
+        networking
+            .network_attachments()
+            .observed()
+            .ok_or("attachments")?
+            .value()[0]
+            .aliases(),
+        ObservationField::Malformed
+    ));
+    assert!(observation.findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::ResourceMalformed
+            && finding.field_path() == Some("$.NetworkSettings.Networks.edge.Aliases[1]")
+    }));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"api","Pod":"pod-1","HostConfig":{},"NetworkSettings":{"Networks":{"edge":{"Aliases":["portable"]}}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let ResourceDetails::Container(container) = inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0]
+        .details()
+    else {
+        return Err("fixture must decode container".into());
+    };
+    assert!(matches!(container.networking(), ObservationField::NotApplicable));
+
+    let mut responses = fixture_responses("6.1.0")?;
+    responses[8] = json(
+        r#"{"Id":"container-a","Name":"api","Pod":false,"HostConfig":{},"NetworkSettings":{"Networks":{"edge":{"Aliases":["portable"]}}}}"#,
+    )?;
+    let inventory = acquire_inventory(&RecordingTransport::new(responses), AcquisitionOptions::redacted()).await?;
+    let observation = &inventory
+        .section(ResourceKind::Container)
+        .ok_or("containers")?
+        .observations()[0];
+    let ResourceDetails::Container(container) = observation.details() else {
+        return Err("fixture must decode container".into());
+    };
+    assert!(matches!(container.pod_membership(), ObservationField::Malformed));
+    let attachments = container
+        .networking()
+        .observed()
+        .ok_or("malformed pod must not discard attachment evidence")?
+        .value()
+        .network_attachments()
+        .observed()
+        .ok_or("attachments")?;
+    assert_eq!(attachments.value()[0].network().reference(), "edge");
+    assert_eq!(
+        attachments.value()[0].aliases().observed().ok_or("aliases")?.value()[0].spelling(),
+        "portable"
+    );
+    assert!(observation.findings().iter().any(|finding| {
+        finding.code() == DiagnosticCode::ResourceMalformed && finding.field_path() == Some("$.Pod")
+    }));
+    Ok(())
+}
+
+#[tokio::test]
 async fn unpodded_port_bindings_are_validated_without_a_new_network_namespace_gate()
 -> Result<(), Box<dyn std::error::Error>> {
     for create_net_ns in ["", r#""CreateNetNS":false,"#] {

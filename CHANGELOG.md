@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.3...v0.2.4) - 2026-09-13
+
 ### Added
 
 - Expose bounded per-network native alias observations with explicit effective provenance and

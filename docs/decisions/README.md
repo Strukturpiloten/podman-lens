@@ -21,3 +21,4 @@ do not let code silently change it.
 | [0014: Finite input-only Podman anchors remain separate from output targets](0014-finite-input-only-podman-anchors.md)     | Accepted |
 | [0015: Bounded creation-command evidence](0015-bounded-creation-command-evidence.md)                                       | Accepted |
 | [0016: Captured native evidence is a test-only release contract](0016-captured-native-release-evidence.md)                 | Accepted |
+| [0017: Isolated native service conformance gates release](0017-isolated-native-release-conformance.md)                     | Accepted |

@@ -1,0 +1,188 @@
+---
+name: Native Podman conformance
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-podman-conformance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-api:
+    name: Native Libpod acquisition API (${{ matrix.id }})
+    if: github.repository == 'Strukturpiloten/podman-lens'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: podman-6.1-rootful
+            root_mode: rootful
+            service_privileged: true
+            service_uid: 0
+            # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful
+            image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c
+          - id: podman-6.1-rootless
+            root_mode: rootless
+            service_privileged: false
+            service_uid: 1000
+            # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless
+            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require the trusted default-branch candidate
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" ]] || {
+            echo "The privileged rootful service is restricted to the default branch." >&2
+            exit 1
+          }
+          git fetch --no-tags origin "refs/heads/${DEFAULT_BRANCH}"
+          [[ "$(git rev-parse "origin/${DEFAULT_BRANCH}")" == "${GITHUB_SHA}" ]] || {
+            echo "The checked-out candidate is not the current trusted default-branch ref." >&2
+            exit 1
+          }
+      - name: Create an isolated disposable Podman service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          socket="${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}/podman.sock"
+          service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
+          image="${{ matrix.image }}"
+          docker pull --quiet "${image}"
+          service_uid='${{ matrix.service_uid }}'
+          [[ "${service_uid}" =~ ^[0-9]+$ ]]
+          socket_directory="$(dirname "${socket}")"
+          install -d -m 0770 "${socket_directory}"
+          sudo chown "${service_uid}:$(id --group)" "${socket_directory}"
+          runtime_args=()
+          if [[ '${{ matrix.service_privileged }}' == 'true' ]]; then
+            runtime_args=(--privileged)
+          else
+            runtime_args=(
+              --device /dev/fuse
+              --security-opt label=disable
+              --security-opt apparmor=unconfined
+            )
+          fi
+          docker run --detach "${runtime_args[@]}" --name "${service_name}" \
+            --volume "${socket_directory}:/podman-lens:Z" \
+            "${image}" /bin/sh -ceu '
+              trap "exit 0" INT TERM
+              rm -f /podman-lens/podman.sock /podman-lens/start-api
+              while ! test -e /podman-lens/start-api; do sleep 1; done
+              exec podman system service --time=0 unix:///podman-lens/podman.sock
+            '
+          actual_service_uid="$(docker exec "${service_name}" id -u)"
+          [[ "${actual_service_uid}" == "${service_uid}" ]] || {
+            echo "Native image service UID did not match the reviewed matrix contract." >&2
+            exit 1
+          }
+          tag="${image%%@*}"
+          expected_version="${tag##*:v}"
+          [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          actual_rootless="$(docker exec "${service_name}" podman info --format '{{.Host.Security.Rootless}}')"
+          case "${actual_rootless}" in
+            true) actual_root_mode=rootless ;;
+            false) actual_root_mode=rootful ;;
+            *) echo "Podman did not report a boolean root-mode identity." >&2; exit 1 ;;
+          esac
+          [[ "${actual_root_mode}" == '${{ matrix.root_mode }}' ]] || {
+            echo "Native image root-mode contract did not match the observed service." >&2
+            exit 1
+          }
+          {
+            printf 'PODMAN_LENS_NATIVE_SERVICE=%s\n' "${service_name}"
+            printf 'PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=%s\n' "${socket}"
+            printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=%s\n' "${expected_version}"
+            printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=%s\n' "${actual_root_mode}"
+          } >> "${GITHUB_ENV}"
+      - name: Provision bounded sanitized native resources
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          service="${PODMAN_LENS_NATIVE_SERVICE}"
+          image="${{ matrix.image }}"
+          timeout --signal=TERM --kill-after=30s 5m docker exec "${service}" \
+            podman pull --quiet "${image}"
+          docker exec "${service}" podman network create --label podman-lens.conformance=network podman-lens-native-network
+          docker exec "${service}" podman volume create --label podman-lens.conformance=volume podman-lens-native-volume
+          printf '%s' 'bounded-fixture-value' | docker exec --interactive "${service}" \
+            podman secret create --label podman-lens.conformance=secret podman-lens-native-secret -
+          docker exec "${service}" podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod
+          docker exec "${service}" podman create --name podman-lens-native-container \
+            --label podman-lens.conformance=container \
+            --network podman-lens-native-network \
+            --volume podman-lens-native-volume:/bounded:Z \
+            "${image}"
+          docker exec "${service}" touch /podman-lens/start-api
+          socket="${PODMAN_LENS_CONFORMANCE_UNIX_SOCKET}"
+          for _ in {1..30}; do
+            [[ -S "${socket}" ]] && break
+            sleep 1
+          done
+          [[ -S "${socket}" ]]
+          # Transfer only the run-scoped socket after the serialized CLI setup has completed.
+          sudo chmod 0600 "${socket}"
+          sudo chown "$(id --user):$(id --group)" "${socket}"
+      - name: Run exact-candidate read-only Libpod acquisition conformance
+        id: conformance
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout --signal=TERM --kill-after=30s 10m \
+            cargo test --locked --test current_patch_conformance --test native_service_conformance -- --ignored
+      - name: Record current-run native evidence
+        id: evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact="podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}"
+          jq --null-input \
+            --arg candidate "${GITHUB_SHA}" \
+            --arg run_id "${GITHUB_RUN_ID}" \
+            --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg task native-api \
+            --arg cell "${{ matrix.id }}" \
+            --arg root_mode "${{ matrix.root_mode }}" \
+            --arg expected_version "${PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION}" \
+            --arg image "${{ matrix.image }}" \
+            --arg outcome "${{ steps.conformance.outcome }}" \
+            --arg socket_scope "isolated-disposable-service" \
+            '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task, cell: $cell, root_mode: $root_mode, expected_version: $expected_version, image: $image, outcome: $outcome, socket_scope: $socket_scope}' \
+            > "${RUNNER_TEMP}/native-podman-evidence.json"
+          printf 'candidate=%s\nartifact=%s\n' "${GITHUB_SHA}" "${artifact}" >> "${GITHUB_OUTPUT}"
+      - name: Upload bounded native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.evidence.outputs.artifact }}
+          path: ${{ runner.temp }}/native-podman-evidence.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+      - name: Fail closed when native conformance did not succeed
+        if: steps.conformance.outcome != 'success'
+        shell: bash
+        run: exit 1
+      - name: Remove the disposable native service
+        if: always()
+        shell: bash
+        run: docker rm --force --volumes "${PODMAN_LENS_NATIVE_SERVICE:-podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}"

@@ -12,11 +12,23 @@ This file applies to the whole PodmanLens repository.
 | Tests or fixtures                      | `docs/testing.md`                                                   |
 | File ownership                         | `docs/project-structure.md`                                         |
 | Dependency change                      | `docs/dependency-policy.md`                                         |
-| Release work                           | `docs/releasing.md` and `CHANGELOG.md`                              |
+| Release or workflow work               | `docs/releasing.md`, `docs/dependency-policy.md`, `CHANGELOG.md`    |
 | Public guide                           | `docs/public/index.md` and `tests/public_guides.rs`                 |
 
 Read the accepted decision records that affect the task. An architectural change must update or
 supersede the relevant decision in the same change.
+
+## Workflow and version ownership
+
+- When shared CI or release behavior changes, audit reusable callers and equivalent tasks in
+  BoxFerry, ComposeLens, and QuadletLens so the repositories keep the same contract intentionally.
+- Every fixed action, runner, tool, runtime image, version, and digest must have Renovate ownership
+  or an explicit documented manual owner. Update `.github/renovate.json` and executable repository
+  policy tests in the same change.
+- Keep one canonical current value. Tests and prose validate its structure and coupling instead of
+  duplicating a version or digest that Renovate would leave stale.
+- Release validation must bind evidence to the exact candidate, current run, and current run attempt, fail closed, and
+  keep validation-only runs unable to publish.
 
 ## Scope
 

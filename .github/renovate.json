@@ -42,6 +42,17 @@
     },
     {
       "customType": "regex",
+      "description": "Update the native Podman release and immutable manifest together",
+      "managerFilePatterns": ["/^\\.github/workflows/native-podman-conformance\\.yml$/"],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=(?<depName>ghcr\\.io/strukturpiloten/podman-6\\.1-(?:rootful|rootless))\\n[ \\t]*image:\\s+[^:]+:(?<currentValue>v[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "# renovate: datasource=docker depName={{{depName}}}\n            image: {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
       "description": "Update the Dev Container base release and digest together",
       "managerFilePatterns": ["/^\\.devcontainer/Dockerfile$/"],
       "matchStrings": [
@@ -85,7 +96,11 @@
       "matchDepTypes": ["devDependencies"],
       "groupName": "Node development tools"
     },
-    { "matchManagers": ["github-actions"], "matchDepTypes": ["action"], "pinDigests": true },
+    {
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action"],
+      "pinDigests": true
+    },
     {
       "matchManagers": ["github-actions"],
       "matchDepTypes": ["action"],
@@ -128,7 +143,6 @@
       "matchPackageNames": ["yoke-derive"],
       "allowedVersions": "!/^(0\\.8\\.3)$/"
     },
-
     {
       "description": "Require manual review for Dev Container features",
       "matchManagers": ["devcontainer"],
@@ -137,7 +151,19 @@
       "groupName": "Dev Container",
       "automerge": false
     },
-    { "matchManagers": ["rust-toolchain"], "groupName": "Rust toolchain" },
+    {
+      "description": "Require review for native conformance runtime pins",
+      "matchFileNames": [".github/workflows/native-podman-conformance.yml"],
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "prBodyNotes": [
+        "Review the Podman support boundary, image provenance, version, digest, service UID, and rootless launch contract before accepting this signal."
+      ]
+    },
+    {
+      "matchManagers": ["rust-toolchain"],
+      "groupName": "Rust toolchain"
+    },
     {
       "description": "Require checksum review for downloaded file-quality tools",
       "matchFileNames": ["scripts/install-file-tools.sh"],

@@ -121,16 +121,19 @@ socket to the ignored tests, and uploads SHA/run/attempt/task-bound evidence. Re
 worker; an unavailable, failed, timed-out, cancelled, or skipped worker blocks publication. It
 provisions a bounded sanitized resource set before bodyless-GET acquisition checks containers,
 pods, networks, volumes, images, and secret metadata; it captures no service payload and resets
-the temporary store. Both reviewed images run inside a privileged disposable outer Docker
-boundary because hosted Docker otherwise denies nested Podman re-execution. Outer privilege does
-not select the inner mode: the workflow independently requires UID 1000 and
-`Host.Security.Rootless=true` for the rootless image, and UID 0 plus
-`Host.Security.Rootless=false` for the rootful image. Only exact digest-pinned images on the
-trusted current default branch enter that isolated, no-secret boundary, and rootless retains its
-reviewed FUSE and SELinux/AppArmor/seccomp arguments. Provisioning completes before the API starts;
-only its run-scoped socket is handed back to the runner after creation. Setup failures still upload
-compact evidence because expected-version provenance is derived directly from the reviewed
-immutable matrix image.
+the temporary store. Both reviewed images run through a rootful host-Podman launcher with isolated
+per-cell root, runroot, temporary, file-lock, and socket state. Common service arguments provide
+`/dev/fuse` and `label=disable`; the rootful image alone uses a privileged outer container, while
+the reviewed source-built rootless image stays unprivileged and adds only
+`apparmor=unconfined`. The workflow independently requires UID 1000 and
+`Host.Security.Rootless=true` for rootless, and UID 0 plus `Host.Security.Rootless=false` for
+rootful. Only exact digest-pinned images on the trusted current default branch enter that
+no-secret boundary. Provisioning completes before the API starts; only the run-scoped socket
+directory is mounted into the service. Setup failures still upload compact evidence because
+expected-version provenance is derived directly from the reviewed immutable matrix image. Cleanup
+removes the service, image, and isolated launcher state.
+The host launcher comes from the `ubuntu-24.04` runner package repository and is infrastructure,
+not the version under conformance. Renovate owns the versioned, digest-pinned inner images.
 
 ## Coverage and compatibility
 

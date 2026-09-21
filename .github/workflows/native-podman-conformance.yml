@@ -25,13 +25,13 @@ jobs:
             root_mode: rootful
             service_uid: 0
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful
-            image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c
+            image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:d5c695e0e224b3296753db967bb40faf5005d770c7589c2261ad8b0b159472fa
           - id: podman-6.1-rootless
             state_key: rl
             root_mode: rootless
             service_uid: 1000
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless
-            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e
+            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:5fe9b8068a8e40de1189b23434ba3e2b84ff4e3b576fe2a844e25582ad6b181e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

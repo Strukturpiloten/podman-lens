@@ -122,9 +122,12 @@ worker; an unavailable, failed, timed-out, cancelled, or skipped worker blocks p
 provisions a bounded sanitized resource set before bodyless-GET acquisition checks containers,
 pods, networks, volumes, images, and secret metadata; it captures no service payload and resets
 the temporary store. The rootless image runs without Docker privilege under its reviewed,
-runtime-verified numeric service UID and only the image contract's FUSE and SELinux/AppArmor
-exceptions. Provisioning completes before the API starts; only its run-scoped socket is handed
-back to the runner after creation.
+runtime-verified numeric service UID and only the image contract's FUSE and
+SELinux/AppArmor/seccomp exceptions. The Docker seccomp exception permits the unprivileged clone
+needed for rootless Podman's user namespace; the cell remains non-privileged. Provisioning
+completes before the API starts; only its run-scoped socket is handed back to the runner after
+creation. Setup failures still upload compact evidence because expected-version provenance is
+derived directly from the reviewed immutable matrix image.
 
 ## Coverage and compatibility
 

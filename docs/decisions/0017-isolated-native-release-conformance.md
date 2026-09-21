@@ -23,11 +23,15 @@ Before the production read-only acquisition test, the worker provisions a bounde
 container, pod, network, volume, image, and secret-metadata set in that disposable service. The
 worker uploads a compact evidence JSON whose stable artifact name includes candidate SHA, run
 ID, run attempt, and task. Release selects and validates that exact attempt, so a retry cannot
-reuse stale earlier-attempt evidence. Its rootless
-cell follows the reviewed image contract without Docker privilege, using only FUSE and the
-required SELinux/AppArmor exceptions. Each image's reviewed numeric service UID is verified inside
-the running container. Resource provisioning finishes before the API service starts, avoiding
-concurrent CLI/API access to nested Podman storage; the socket is then handed off to the runner.
+reuse stale earlier-attempt evidence. Its rootless cell follows the reviewed image contract without
+Docker privilege, using only FUSE and the required SELinux/AppArmor/seccomp exceptions. The Docker
+seccomp exception permits rootless Podman to create its unprivileged user namespace on the hosted
+runner. Each image's reviewed numeric service UID is verified inside the running container.
+Failure evidence derives the reviewed version from the immutable matrix image rather than
+successful-service environment, so a setup failure still uploads bounded
+candidate/run/attempt/cell evidence. Resource provisioning finishes before the API service starts,
+avoiding concurrent CLI/API access to nested Podman storage; the socket is then handed off to the
+runner.
 Release requires
 the worker result to be successful before the sole publication-permission job is eligible; failure,
 timeout, cancellation, missing evidence, or a skipped worker is fail-closed. `validation_only`

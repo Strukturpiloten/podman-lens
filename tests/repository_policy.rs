@@ -534,6 +534,51 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
     Ok(())
 }
 
+fn assert_rootless_runtime_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
+    let rootless_args = native
+        .split_once("          else\n            runtime_args=(\n")
+        .and_then(|(_, rest)| rest.split_once("            )\n          fi"))
+        .map(|(arguments, _)| arguments)
+        .ok_or_else(|| policy_error("rootless Docker argument boundary is missing"))?;
+    for required in [
+        "--device /dev/fuse",
+        "--security-opt label=disable",
+        "--security-opt apparmor=unconfined",
+        "--security-opt seccomp=unconfined",
+    ] {
+        assert!(
+            rootless_args.contains(required),
+            "rootless Docker arguments are missing {required}"
+        );
+    }
+    assert!(
+        !rootless_args.contains("--privileged"),
+        "the rootless service must remain non-privileged"
+    );
+
+    let evidence = native
+        .split_once("      - name: Record current-run native evidence\n")
+        .and_then(|(_, rest)| rest.split_once("      - name: Upload bounded native evidence\n"))
+        .map(|(evidence, _)| evidence)
+        .ok_or_else(|| policy_error("native evidence step boundary is missing"))?;
+    for required in [
+        "image=\"${{ matrix.image }}\"",
+        "expected_version=\"${tag##*:v}\"",
+        "--arg expected_version \"${expected_version}\"",
+        "--arg image \"${image}\"",
+    ] {
+        assert!(
+            evidence.contains(required),
+            "failure evidence must retain immutable image provenance: {required}"
+        );
+    }
+    assert!(
+        !evidence.contains("PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION"),
+        "failure evidence must not depend on successful service setup"
+    );
+    Ok(())
+}
+
 #[test]
 fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
     let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
@@ -554,6 +599,7 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         "--device /dev/fuse",
         "--security-opt label=disable",
         "--security-opt apparmor=unconfined",
+        "--security-opt seccomp=unconfined",
         "while ! test -e /podman-lens/start-api",
         "docker exec \"${service}\" touch /podman-lens/start-api",
         "docker rm --force --volumes",
@@ -575,6 +621,7 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         provision < start_api,
         "nested CLI provisioning must finish before the API service starts"
     );
+    assert_rootless_runtime_and_failure_evidence(&native)?;
     let images = native
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("image: "))

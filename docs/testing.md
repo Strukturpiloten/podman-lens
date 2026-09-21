@@ -94,7 +94,7 @@ Set `PODMAN_LENS_SEMVER_CHECK=1` to run the same repository-owned published-API 
 the CI API job. It requires a reachable release tag and the published crate baseline; the initial
 contract path continues to use `tests/public_api.rs`.
 
-## Live conformance
+## Native conformance
 
 The ignored current-patch test permits only the fixed read-only acquisition probe. It requires an
 explicit socket and exact expected version:
@@ -102,10 +102,11 @@ explicit socket and exact expected version:
 ```console
 PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=/absolute/podman.sock \
 PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=6.1.0 \
-cargo test --test current_patch_conformance -- --ignored
+PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=rootless \
+cargo test --test current_patch_conformance --test native_service_conformance -- --ignored
 ```
 
-BoxFerry owns the completed digest-pinned live version and root-mode matrix. Its 48 cells passed
+BoxFerry owns the broader completed digest-pinned live version and root-mode matrix. Its 48 cells passed
 through PodmanLens's production read-only acquisition path without tolerated skips. PodmanLens
 keeps only a bounded ignored Unix-socket entry point for explicit consumer runs and does not
 discover an ambient endpoint. Privileged execution must not expose a host Podman socket to
@@ -114,6 +115,16 @@ untrusted code.
 The ordinary local, CI, and release gate remains offline. The captured Podman 6.1 rootful cassettes
 anchor native response behavior without creating a second live matrix; expanding that evidence
 requires a new privacy review and immutable provenance.
+
+`Native Podman conformance` creates a fresh disposable Podman service, passes only its run-scoped
+socket to the ignored tests, and uploads SHA/run/attempt/task-bound evidence. Release calls that reusable
+worker; an unavailable, failed, timed-out, cancelled, or skipped worker blocks publication. It
+provisions a bounded sanitized resource set before bodyless-GET acquisition checks containers,
+pods, networks, volumes, images, and secret metadata; it captures no service payload and resets
+the temporary store. The rootless image runs without Docker privilege under its reviewed,
+runtime-verified numeric service UID and only the image contract's FUSE and SELinux/AppArmor
+exceptions. Provisioning completes before the API starts; only its run-scoped socket is handed
+back to the runner after creation.
 
 ## Coverage and compatibility
 

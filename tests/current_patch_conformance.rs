@@ -5,6 +5,7 @@
 use podman_lens::{
     ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts, TransportLimits, UnixConnection, probe_libpod_service,
 };
+use semver::Version;
 
 /// Checks the two fixed GET probe requests against a selected current reviewed patch.
 ///
@@ -12,7 +13,7 @@ use podman_lens::{
 /// `cargo test --test current_patch_conformance -- --ignored` and provide both variables:
 ///
 /// - `PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=/absolute/podman.sock`
-/// - `PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=5.8.6` or `6.1.0`
+/// - `PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=<reviewed stable patch>`
 #[tokio::test]
 #[ignore = "requires an explicit local Podman Unix socket and reviewed exact expected version"]
 async fn current_reviewed_patch_probes_read_only_service() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,13 +26,14 @@ async fn current_reviewed_patch_probes_read_only_service() -> Result<(), Box<dyn
     let expected = std::env::var("PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION").map_err(|_| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION must be exactly 5.8.6 or 6.1.0",
+            "PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION must be an exact stable patch",
         )
     })?;
-    if !matches!(expected.as_str(), "5.8.6" | "6.1.0") {
+    let parsed = Version::parse(&expected)?;
+    if !parsed.pre.is_empty() || !parsed.build.is_empty() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION must be exactly 5.8.6 or 6.1.0",
+            "PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION must be an exact stable patch",
         )
         .into());
     }

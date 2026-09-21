@@ -1,7 +1,9 @@
 # Release process
 
 release-plz proposes crate versions and changelog updates. The protected `Release` workflow is
-the only publisher, tagger, attestation producer, and GitHub release creator.
+the only publisher, tagger, attestation producer, and GitHub release creator. Its
+`validation_only` dispatch runs the identical validation path but cannot enter the publication job
+or receive its publication permissions.
 
 ## Prepare a release-worthy change
 
@@ -35,6 +37,8 @@ Before merging the generated `release-plz-*` pull request, verify that:
 - the package and compatibility checks pass; and
 - `scripts/check-native-release-contract.sh` passes its offline privacy, provenance, replay,
   and semantic contracts;
+- the reusable `Native Podman conformance` worker passed for the exact candidate SHA, current
+  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact; and
 - no publication credential is present in repository secrets.
 
 The changelog section is a release gate, not optional metadata.

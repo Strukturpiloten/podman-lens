@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, fmt::Write as _, fs, path::Path};
 
+use semver::Version;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -44,6 +45,7 @@ fn complete_repository_yaml_documents_start_with_a_marker() -> Result<(), std::i
         ".github/workflows/documentation-links.yml",
         ".github/workflows/release-plz.yml",
         ".github/workflows/release.yml",
+        ".github/workflows/native-podman-conformance.yml",
     ];
 
     for file in yaml_files {
@@ -364,11 +366,7 @@ fn native_regression_fixtures_have_fixed_provenance_privacy_license_and_hashes()
         assert!(gate.contains(required), "native gate misses {required}");
     }
     assert!(!gate.contains("--ignored"), "ordinary native gate must stay offline");
-    for consumer in [
-        "scripts/check-all.sh",
-        ".github/workflows/ci.yml",
-        ".github/workflows/release.yml",
-    ] {
+    for consumer in ["scripts/check-all.sh", ".github/workflows/ci.yml"] {
         assert!(
             fs::read_to_string(consumer)?.contains("scripts/check-native-release-contract.sh"),
             "{consumer} must invoke the named native gate"
@@ -455,11 +453,16 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
     }
 
     let release = fs::read_to_string(".github/workflows/release.yml")?;
+    let ci = fs::read_to_string(".github/workflows/ci.yml")?;
     for required in [
         "cargo llvm-cov",
         "cargo-deny-action@",
         "bash scripts/check-public-api.sh",
         "lycheeverse/lychee-action@",
+    ] {
+        assert!(ci.contains(required), "CI workflow is missing {required}");
+    }
+    for required in [
         "actions/attest@",
         "crates-io-auth-action@",
         "Create or verify annotated release tag",
@@ -469,6 +472,236 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
         assert!(release.contains(required), "release workflow is missing {required}");
     }
 
+    Ok(())
+}
+
+#[test]
+fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::io::Error> {
+    let release = fs::read_to_string(".github/workflows/release.yml")?;
+    for required in [
+        "validation_only",
+        "release-metadata",
+        "native-conformance",
+        "needs.release-gate.result == 'success'",
+        "needs: [deterministic, release-metadata, native-conformance, semver]",
+    ] {
+        assert!(release.contains(required), "release workflow is missing {required}");
+    }
+    for forbidden in [
+        "  validate:\n",
+        "podman-lens-disabled",
+        "Retain this disabled historical",
+    ] {
+        assert!(
+            !release.contains(forbidden),
+            "release workflow retains dead validation configuration: {forbidden}"
+        );
+    }
+    let (_, metadata_and_later) = release
+        .split_once("\n  release-metadata:\n")
+        .ok_or_else(|| policy_error("release metadata job boundary is missing"))?;
+    let (metadata, _) = metadata_and_later
+        .split_once("\n  native-conformance:\n")
+        .ok_or_else(|| policy_error("native conformance job boundary is missing"))?;
+    for required in [
+        "ref: ${{ github.sha }}",
+        "persist-credentials: false",
+        "bash scripts/check-release-metadata.sh",
+        "bash scripts/extract-release-notes.sh",
+    ] {
+        assert!(
+            metadata.contains(required),
+            "release metadata job is missing {required}"
+        );
+    }
+    for forbidden in [
+        "setup-node",
+        "install-file-tools",
+        "check-files.sh",
+        "lychee-action",
+        "cargo fmt",
+        "cargo ci-",
+        "cargo llvm-cov",
+        "cargo-deny",
+        "rustup component",
+        "rustup toolchain",
+    ] {
+        assert!(
+            !metadata.contains(forbidden),
+            "release metadata must not repeat heavy validation: {forbidden}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
+    let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
+    for required in [
+        "workflow_call:",
+        "workflow_dispatch:",
+        "ref: ${{ github.sha }}",
+        "podman system service",
+        "PODMAN_LENS_CONFORMANCE_UNIX_SOCKET",
+        "native_service_conformance",
+        "podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}",
+        "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
+        "overwrite: true",
+        "steps.conformance.outcome != 'success'",
+        "service_privileged: false",
+        "service_uid: 0",
+        "service_uid: 1000",
+        "--device /dev/fuse",
+        "--security-opt label=disable",
+        "--security-opt apparmor=unconfined",
+        "while ! test -e /podman-lens/start-api",
+        "docker exec \"${service}\" touch /podman-lens/start-api",
+        "docker rm --force --volumes",
+        "actions/upload-artifact@",
+        "datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful",
+    ] {
+        assert!(
+            native.contains(required),
+            "native conformance workflow is missing {required}"
+        );
+    }
+    let provision = native
+        .find("podman secret create")
+        .ok_or_else(|| policy_error("native resources must be provisioned"))?;
+    let start_api = native
+        .find("docker exec \"${service}\" touch /podman-lens/start-api")
+        .ok_or_else(|| policy_error("native API start handshake must be explicit"))?;
+    assert!(
+        provision < start_api,
+        "nested CLI provisioning must finish before the API service starts"
+    );
+    let images = native
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("image: "))
+        .collect::<Vec<_>>();
+    assert_eq!(images.len(), 2, "native matrix must declare two runtime images");
+    let expected_image_names = BTreeSet::from([
+        "ghcr.io/strukturpiloten/podman-6.1-rootful",
+        "ghcr.io/strukturpiloten/podman-6.1-rootless",
+    ]);
+    let mut observed_image_names = BTreeSet::new();
+    for image in images {
+        let (name, version_and_digest) = image
+            .split_once(":v")
+            .ok_or_else(|| policy_error(format!("native image must have a v-prefixed tag: {image}")))?;
+        assert!(
+            expected_image_names.contains(name),
+            "native image has an unreviewed repository: {name}"
+        );
+        assert!(
+            observed_image_names.insert(name),
+            "native image repository appears more than once: {name}"
+        );
+        let (version, digest) = version_and_digest
+            .split_once("@sha256:")
+            .ok_or_else(|| policy_error(format!("native image must have a SHA-256 digest: {image}")))?;
+        let version = Version::parse(version)
+            .map_err(|error| policy_error(format!("native image must use a semantic version ({version}): {error}")))?;
+        assert!(
+            version.pre.is_empty() && version.build.is_empty(),
+            "native image must use a stable semantic version: {version}"
+        );
+        assert!(
+            digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "native image must use a complete SHA-256 digest"
+        );
+    }
+    assert_eq!(observed_image_names, expected_image_names);
+
+    Ok(())
+}
+
+#[test]
+fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(), std::io::Error> {
+    let release = fs::read_to_string(".github/workflows/release.yml")?;
+    for required in [
+        "podman-lens-native-api-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-podman-6.1-*",
+        "\"${GITHUB_RUN_ID}\" \"${GITHUB_RUN_ATTEMPT}\"",
+    ] {
+        assert!(
+            release.contains(required),
+            "release must select and validate the current native evidence attempt: {required}"
+        );
+    }
+    let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)
+        .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
+    let managers = renovate["customManagers"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?
+        .iter()
+        .filter(|manager| manager["description"] == "Update the native Podman release and immutable manifest together")
+        .collect::<Vec<_>>();
+    assert_eq!(managers.len(), 1, "native runtime image needs one Renovate owner");
+    let manager = managers[0];
+    assert!(manager["matchStrings"][0].as_str().is_some_and(|pattern| {
+        pattern.contains("(?<currentValue>v") && pattern.contains("currentDigest>sha256:[a-f0-9]{64}")
+    }));
+    assert_eq!(manager["datasourceTemplate"], "docker");
+    assert_eq!(manager["versioningTemplate"], "docker");
+    let replacement = manager["autoReplaceStringTemplate"]
+        .as_str()
+        .ok_or_else(|| policy_error("native image manager needs a replacement template"))?;
+    assert!(replacement.contains(":{{{newValue}}}@{{{newDigest}}}"));
+    assert!(replacement.contains('\n'));
+    assert!(!replacement.contains(r"\n"));
+    let rendered = replacement
+        .replace("{{{depName}}}", "ghcr.io/strukturpiloten/podman-6.1-rootless")
+        .replace("{{{newValue}}}", "v6.1.99")
+        .replace("{{{newDigest}}}", &format!("sha256:{}", "a".repeat(64)));
+    assert_eq!(rendered.lines().count(), 2);
+    assert!(rendered.lines().next().is_some_and(|line| {
+        line == "# renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless"
+    }));
+    assert!(rendered.lines().nth(1).is_some_and(|line| {
+        line == format!(
+            "            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.99@sha256:{}",
+            "a".repeat(64)
+        )
+    }));
+    let review_rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
+        .iter()
+        .filter(|rule| rule["description"] == "Require review for native conformance runtime pins")
+        .collect::<Vec<_>>();
+    assert_eq!(review_rules.len(), 1);
+    assert_eq!(
+        review_rules[0]["matchFileNames"],
+        serde_json::json!([".github/workflows/native-podman-conformance.yml"])
+    );
+    assert_eq!(review_rules[0]["dependencyDashboardApproval"], true);
+    assert_eq!(review_rules[0]["automerge"], false);
+    assert!(
+        !release.contains("expected_rootful") && !release.contains("expected_rootless"),
+        "release validation must consume candidate-bound evidence instead of duplicating Renovate-owned image pins"
+    );
+
+    let (_, publish) = release
+        .split_once("\n  publish:\n")
+        .ok_or_else(|| policy_error("release publish job boundary is missing"))?;
+    for forbidden in [
+        "cargo fmt",
+        "cargo ci-check",
+        "cargo ci-clippy",
+        "cargo ci-test",
+        "check-native-release-contract",
+        "native_service_conformance",
+        "podman system service",
+        "cargo llvm-cov",
+        "cargo-deny",
+        "rustup component",
+        "rustup toolchain",
+    ] {
+        assert!(
+            !publish.contains(forbidden),
+            "credentialed publish job must not rerun {forbidden}"
+        );
+    }
     Ok(())
 }
 
@@ -546,7 +779,6 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
         r#""podman-lens""#,
         r#""quadlet-lens""#,
         "Hold the known Rust-1.85-incompatible yoke-derive release",
-        r#""matchPackageNames": ["yoke-derive"]"#,
         r#""allowedVersions": "!/^(0\\.8\\.3)$/""#,
     ] {
         assert!(
@@ -554,10 +786,15 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
             "Renovate configuration is missing {required}"
         );
     }
+    let yoke_rule = package_rules
+        .iter()
+        .find(|rule| rule["description"] == "Hold the known Rust-1.85-incompatible yoke-derive release")
+        .ok_or_else(|| policy_error("Renovate yoke-derive compatibility rule is missing"))?;
+    assert_eq!(yoke_rule["matchPackageNames"], serde_json::json!(["yoke-derive"]));
     assert_eq!(
         configuration.matches(r#""automerge": false"#).count(),
-        2,
-        "Dev Container features and checksum-pinned tools must remain manual"
+        3,
+        "Dev Container features, native runtimes, and checksum-pinned tools must remain manual"
     );
     Ok(())
 }

@@ -540,6 +540,10 @@ fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str)
         "sudo apt-get install --yes --no-install-recommends podman",
         "CONTAINERS_CONF_OVERRIDE",
         "lock_type = \"file\"",
+        "state_key: rf",
+        "state_key: rl",
+        "state_directory=\"/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}\"",
+        "[[ \"${#runroot_directory}\" -le 50 ]]",
         "host_podman=(sudo env \"CONTAINERS_CONF_OVERRIDE=${containers_conf}\" podman --root",
         "--runroot",
         "--tmpdir",
@@ -558,6 +562,40 @@ fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str)
         assert!(
             native.contains(required),
             "isolated host Podman workflow is missing {required}"
+        );
+    }
+    let short_state = "state_directory=\"/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}\"";
+    assert_eq!(
+        native.matches(short_state).count(),
+        2,
+        "setup and cleanup must independently derive the bounded state directory"
+    );
+    for validated in [
+        "[[ \"${state_key}\" =~ ^(rf|rl)$ ]]",
+        "[[ \"${GITHUB_RUN_ID}\" =~ ^[0-9]+$ ]]",
+        "[[ \"${GITHUB_RUN_ATTEMPT}\" =~ ^[0-9]+$ ]]",
+    ] {
+        assert_eq!(
+            native.matches(validated).count(),
+            2,
+            "setup and cleanup must independently enforce {validated}"
+        );
+    }
+    let cleanup = native
+        .split_once("      - name: Remove disposable native service, image, and state\n")
+        .map(|(_, cleanup)| cleanup)
+        .ok_or_else(|| policy_error("isolated native cleanup step is missing"))?;
+    for forbidden in [
+        "PODMAN_LENS_NATIVE_STATE_DIRECTORY",
+        "PODMAN_LENS_NATIVE_ROOT_DIRECTORY",
+        "PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY",
+        "PODMAN_LENS_NATIVE_TMP_DIRECTORY",
+        "PODMAN_LENS_NATIVE_CONTAINERS_CONF",
+        "PODMAN_LENS_NATIVE_SERVICE",
+    ] {
+        assert!(
+            !cleanup.contains(forbidden),
+            "cleanup removal targets must not trust {forbidden}"
         );
     }
     assert!(

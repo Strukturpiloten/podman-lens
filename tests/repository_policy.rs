@@ -525,6 +525,9 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
         r#""compose-lens""#,
         r#""podman-lens""#,
         r#""quadlet-lens""#,
+        "Hold the known Rust-1.85-incompatible yoke-derive release",
+        r#""matchPackageNames": ["yoke-derive"]"#,
+        r#""allowedVersions": "!/^(0\\.8\\.3)$/""#,
     ] {
         assert!(
             configuration.contains(required),
@@ -536,6 +539,27 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
         2,
         "Dev Container features and checksum-pinned tools must remain manual"
     );
+    Ok(())
+}
+
+#[test]
+fn lockfile_maintenance_keeps_the_schema_test_graph_on_the_declared_msrv() -> Result<(), std::io::Error> {
+    let manifest = fs::read_to_string("Cargo.toml")?;
+    let lockfile = fs::read_to_string("Cargo.lock")?;
+
+    assert!(
+        manifest.contains("yoke-derive = \"=0.8.2\""),
+        "the temporary direct constraint must prevent lock maintenance from selecting yoke-derive 0.8.3"
+    );
+    assert!(
+        lockfile.contains("name = \"yoke-derive\"\nversion = \"0.8.2\""),
+        "Cargo.lock must retain the Rust-1.85-compatible yoke-derive resolution"
+    );
+    assert!(
+        !lockfile.contains("name = \"yoke-derive\"\nversion = \"0.8.3\""),
+        "Cargo.lock must not select yoke-derive 0.8.3 until upstream restores Rust 1.85 compatibility"
+    );
+
     Ok(())
 }
 

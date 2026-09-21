@@ -106,6 +106,13 @@
       "minimumReleaseAge": "0 days"
     },
     {
+      "description": "Hold the known Rust-1.85-incompatible yoke-derive release",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["yoke-derive"],
+      "allowedVersions": "!/^(0\\.8\\.3)$/"
+    },
+
+    {
       "matchManagers": ["devcontainer"],
       "matchDepTypes": ["feature"],
       "pinDigests": false,

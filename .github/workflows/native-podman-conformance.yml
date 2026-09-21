@@ -53,7 +53,7 @@ jobs:
           set -Eeuo pipefail
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends podman
-      - name: Start isolated native Podman service
+      - name: Start and provision isolated native Podman service
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -71,7 +71,9 @@ jobs:
           service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
           image='${{ matrix.image }}'
           service_uid='${{ matrix.service_uid }}'
+          root_mode="${{ matrix.root_mode }}"
           [[ "${service_uid}" =~ ^[0-9]+$ ]]
+          [[ "${root_mode}" =~ ^(rootful|rootless)$ ]]
           [[ "${#runroot_directory}" -le 50 ]] || { echo 'Podman runroot exceeds its 50-character limit.' >&2; exit 1; }
           install -d -m 0700 "${state_directory}" "${root_directory}" "${runroot_directory}" "${tmp_directory}"
           install -d -m 0770 "${socket_directory}"
@@ -80,51 +82,105 @@ jobs:
           host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${root_directory}" --runroot "${runroot_directory}" --tmpdir "${tmp_directory}")
           "${host_podman[@]}" pull --quiet "${image}"
           runtime_args=(--device /dev/fuse --security-opt label=disable)
-          if [[ '${{ matrix.root_mode }}' == 'rootful' ]]; then
+          if [[ "${root_mode}" == rootful ]]; then
             runtime_args+=(--privileged)
           else
             runtime_args+=(--security-opt apparmor=unconfined)
           fi
+          # The nested shell, not this launcher shell, expands the single-quoted program.
+          # shellcheck disable=SC2016
           "${host_podman[@]}" run --detach --name "${service_name}" "${runtime_args[@]}" --volume "${socket_directory}:/podman-lens:Z" "${image}" /bin/sh -ceu '
-            trap "exit 0" INT TERM
-            rm -f /podman-lens/podman.sock /podman-lens/start-api
-            while ! test -e /podman-lens/start-api; do sleep 1; done
+            status=/podman-lens/setup.status
+            trap "exit 143" INT TERM
+            trap "code=\$?; printf \"%s\n\" \"\${code}\" > \"\${status}.tmp\"; mv -f \"\${status}.tmp\" \"\${status}\"" EXIT
+            rm -f /podman-lens/podman.sock /podman-lens/start-api \
+              /podman-lens/setup.status /podman-lens/setup.status.tmp \
+              /podman-lens/service-uid /podman-lens/service-uid.tmp \
+              /podman-lens/root-mode /podman-lens/root-mode.tmp
+            actual_service_uid="$(id -u)"
+            actual_rootless="$(podman info --format "{{.Host.Security.Rootless}}")"
+            case "${actual_rootless}" in
+              true) actual_root_mode=rootless ;;
+              false) actual_root_mode=rootful ;;
+              *) echo "Podman did not report boolean root-mode identity." >&2; exit 1 ;;
+            esac
+            expected_service_uid=$1
+            expected_root_mode=$2
+            image=$3
+            test "${actual_service_uid}" = "${expected_service_uid}"
+            test "${actual_root_mode}" = "${expected_root_mode}"
+            podman pull --quiet "${image}" >/dev/null
+            podman network create --label podman-lens.conformance=network podman-lens-native-network >/dev/null
+            podman volume create --label podman-lens.conformance=volume podman-lens-native-volume >/dev/null
+            printf "%s" bounded-fixture-value | podman secret create --label podman-lens.conformance=secret podman-lens-native-secret - >/dev/null
+            podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod >/dev/null
+            podman create --name podman-lens-native-container --label podman-lens.conformance=container --network podman-lens-native-network --volume podman-lens-native-volume:/bounded:Z "${image}" >/dev/null
+            printf "%s\n" "${actual_service_uid}" > /podman-lens/service-uid.tmp
+            mv -f /podman-lens/service-uid.tmp /podman-lens/service-uid
+            printf "%s\n" "${actual_root_mode}" > /podman-lens/root-mode.tmp
+            mv -f /podman-lens/root-mode.tmp /podman-lens/root-mode
+            printf "0\n" > "${status}.tmp"
+            mv -f "${status}.tmp" "${status}"
+            trap - EXIT
+            trap "exit 143" INT TERM
+            while ! test -d /podman-lens/start-api; do sleep 1; done
             exec podman system service --time=0 unix:///podman-lens/podman.sock
-          '
-          actual_service_uid="$("${host_podman[@]}" exec "${service_name}" id -u)"
-          [[ "${actual_service_uid}" == "${service_uid}" ]] || { echo 'Native image service UID did not match reviewed matrix contract.' >&2; exit 1; }
+          ' -- "${service_uid}" "${root_mode}" "${image}"
+          status_file="${socket_directory}/setup.status"
+          setup_deadline=$((SECONDS + 300))
+          while (( SECONDS < setup_deadline )); do
+            [[ -f "${status_file}" && ! -L "${status_file}" ]] && break
+            remaining_seconds=$((setup_deadline - SECONDS))
+            (( remaining_seconds > 0 )) || break
+            running="$(timeout --foreground --signal=TERM --kill-after=1s "${remaining_seconds}s" "${host_podman[@]}" inspect --format '{{.State.Running}}' "${service_name}" 2>/dev/null || true)"
+            [[ "${running}" == true ]] || break
+            sleep 1
+          done
+          fail_setup() {
+            "${host_podman[@]}" logs --tail 50 "${service_name}" >&2 || true
+            echo "$1" >&2
+            exit 1
+          }
+          if [[ ! -f "${status_file}" || -L "${status_file}" ]]; then
+            fail_setup 'Native image setup did not report a regular status file.'
+          fi
+          status_bytes="$(stat --format=%s -- "${status_file}")"
+          [[ "${status_bytes}" =~ ^[0-9]+$ && "${status_bytes}" -le 4 ]] || fail_setup 'Native image setup status exceeded its byte bound.'
+          status_lines="$(wc -l < "${status_file}")"
+          [[ "${status_lines}" == 1 ]] || fail_setup 'Native image setup did not report one bounded status line.'
+          IFS= read -r setup_status < "${status_file}"
+          if [[ ! "${setup_status}" =~ ^[0-9]+$ || "${setup_status}" != 0 ]]; then
+            fail_setup 'Native image setup failed before API startup.'
+          fi
+          for identity_file in service-uid root-mode; do
+            path="${socket_directory}/${identity_file}"
+            [[ -f "${path}" && ! -L "${path}" ]] || fail_setup "Native image identity file is not regular: ${identity_file}."
+            case "${identity_file}" in service-uid) max_bytes=11 ;; root-mode) max_bytes=9 ;; esac
+            identity_bytes="$(stat --format=%s -- "${path}")"
+            [[ "${identity_bytes}" =~ ^[0-9]+$ && "${identity_bytes}" -le "${max_bytes}" ]] || fail_setup "Native image identity file exceeded its byte bound: ${identity_file}."
+            identity_lines="$(wc -l < "${path}")"
+            [[ "${identity_lines}" == 1 ]] || fail_setup "Native image identity file is not one line: ${identity_file}."
+          done
+          IFS= read -r actual_service_uid < "${socket_directory}/service-uid"
+          IFS= read -r actual_root_mode < "${socket_directory}/root-mode"
+          [[ "${actual_service_uid}" =~ ^[0-9]+$ && "${actual_service_uid}" == "${service_uid}" ]] || { echo 'Native image service UID did not match reviewed matrix contract.' >&2; exit 1; }
+          [[ "${actual_root_mode}" =~ ^(rootful|rootless)$ && "${actual_root_mode}" == "${root_mode}" ]] || { echo 'Native image root-mode contract did not match observed service.' >&2; exit 1; }
           tag="${image%%@*}"; expected_version="${tag##*:v}"
           [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          actual_rootless="$("${host_podman[@]}" exec "${service_name}" podman info --format '{{.Host.Security.Rootless}}')"
-          case "${actual_rootless}" in true) actual_root_mode=rootless ;; false) actual_root_mode=rootful ;; *) echo 'Podman did not report boolean root-mode identity.' >&2; exit 1 ;; esac
-          [[ "${actual_root_mode}" == '${{ matrix.root_mode }}' ]] || { echo 'Native image root-mode contract did not match observed service.' >&2; exit 1; }
           {
-            printf 'PODMAN_LENS_NATIVE_SERVICE=%s\n' "${service_name}"
-            printf 'PODMAN_LENS_NATIVE_STATE_DIRECTORY=%s\n' "${state_directory}"
-            printf 'PODMAN_LENS_NATIVE_ROOT_DIRECTORY=%s\n' "${root_directory}"
-            printf 'PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY=%s\n' "${runroot_directory}"
-            printf 'PODMAN_LENS_NATIVE_TMP_DIRECTORY=%s\n' "${tmp_directory}"
-            printf 'PODMAN_LENS_NATIVE_CONTAINERS_CONF=%s\n' "${containers_conf}"
             printf 'PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=%s\n' "${socket}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=%s\n' "${expected_version}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=%s\n' "${actual_root_mode}"
           } >> "${GITHUB_ENV}"
-      - name: Provision bounded sanitized native resources
+      - name: Start API after bounded sanitized provisioning
         shell: bash
         run: |
           set -Eeuo pipefail
-          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${PODMAN_LENS_NATIVE_CONTAINERS_CONF}" podman --root "${PODMAN_LENS_NATIVE_ROOT_DIRECTORY}" --runroot "${PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY}" --tmpdir "${PODMAN_LENS_NATIVE_TMP_DIRECTORY}")
-          service="${PODMAN_LENS_NATIVE_SERVICE}"; image='${{ matrix.image }}'
-          timeout --signal=TERM --kill-after=30s 5m "${host_podman[@]}" exec "${service}" podman pull --quiet "${image}"
-          "${host_podman[@]}" exec "${service}" podman network create --label podman-lens.conformance=network podman-lens-native-network
-          "${host_podman[@]}" exec "${service}" podman volume create --label podman-lens.conformance=volume podman-lens-native-volume
-          printf '%s' 'bounded-fixture-value' | "${host_podman[@]}" exec --interactive "${service}" podman secret create --label podman-lens.conformance=secret podman-lens-native-secret -
-          "${host_podman[@]}" exec "${service}" podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod
-          "${host_podman[@]}" exec "${service}" podman create --name podman-lens-native-container --label podman-lens.conformance=container --network podman-lens-native-network --volume podman-lens-native-volume:/bounded:Z "${image}"
-          "${host_podman[@]}" exec "${service}" touch /podman-lens/start-api
           socket="${PODMAN_LENS_CONFORMANCE_UNIX_SOCKET}"
-          for _ in {1..30}; do [[ -S "${socket}" ]] && break; sleep 1; done
-          [[ -S "${socket}" ]] || { echo 'Native service did not create its run-scoped socket.' >&2; exit 1; }
+          socket_directory="$(dirname -- "${socket}")"
+          mkdir "${socket_directory}/start-api"
+          for _ in {1..30}; do [[ -S "${socket}" && ! -L "${socket}" ]] && break; sleep 1; done
+          [[ -S "${socket}" && ! -L "${socket}" ]] || { echo 'Native service did not create its run-scoped socket.' >&2; exit 1; }
           sudo chmod 0600 "${socket}"; sudo chown "$(id --user):$(id --group)" "${socket}"
       - name: Run exact-candidate read-only acquisition conformance
         id: conformance

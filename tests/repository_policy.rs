@@ -553,7 +553,7 @@ fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str)
         "runtime_args+=(--privileged)",
         "runtime_args+=(--security-opt apparmor=unconfined)",
         "--volume \"${socket_directory}:/podman-lens:Z\"",
-        "podman info --format '{{.Host.Security.Rootless}}'",
+        "podman info --format \"{{.Host.Security.Rootless}}\"",
         "sudo chmod 0600 \"${socket}\"",
         "sudo chown \"$(id --user):$(id --group)\" \"${socket}\"",
         "image rm --force",
@@ -653,16 +653,33 @@ fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::
         );
     }
     for required in [
-        "actual_service_uid=\"$(\"${host_podman[@]}\" exec \"${service_name}\" id -u)\"",
-        "[[ \"${actual_service_uid}\" == \"${service_uid}\" ]]",
-        "podman info --format '{{.Host.Security.Rootless}}'",
-        "[[ \"${actual_root_mode}\" == '${{ matrix.root_mode }}' ]]",
+        "root_mode=\"${{ matrix.root_mode }}\"",
+        "[[ \"${root_mode}\" =~ ^(rootful|rootless)$ ]]",
+        "if [[ \"${root_mode}\" == rootful ]]",
+        "actual_service_uid=\"$(id -u)\"",
+        "actual_rootless=\"$(podman info --format \"{{.Host.Security.Rootless}}\")\"",
+        "expected_service_uid=$1",
+        "expected_root_mode=$2",
+        "test \"${actual_service_uid}\" = \"${expected_service_uid}\"",
+        "test \"${actual_root_mode}\" = \"${expected_root_mode}\"",
+        "printf \"%s\\n\" \"${actual_service_uid}\" > /podman-lens/service-uid.tmp",
+        "mv -f /podman-lens/service-uid.tmp /podman-lens/service-uid",
+        "printf \"%s\\n\" \"${actual_root_mode}\" > /podman-lens/root-mode.tmp",
+        "mv -f /podman-lens/root-mode.tmp /podman-lens/root-mode",
+        "IFS= read -r actual_service_uid < \"${socket_directory}/service-uid\"",
+        "IFS= read -r actual_root_mode < \"${socket_directory}/root-mode\"",
+        "[[ \"${actual_service_uid}\" =~ ^[0-9]+$ && \"${actual_service_uid}\" == \"${service_uid}\" ]]",
+        "[[ \"${actual_root_mode}\" =~ ^(rootful|rootless)$ && \"${actual_root_mode}\" == \"${root_mode}\" ]]",
     ] {
         assert!(
             native.contains(required),
             "inner rootless identity verification is missing {required}"
         );
     }
+    assert!(
+        !native.contains("${host_podman[@]}\" exec") && !native.contains("${host_podman[@]} exec"),
+        "host-side Podman exec must not enter the nested rootless service"
+    );
     let evidence = native
         .split_once("      - name: Record current-run native evidence\n")
         .and_then(|(_, rest)| rest.split_once("      - name: Upload bounded native evidence\n"))
@@ -686,48 +703,62 @@ fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::
     Ok(())
 }
 
-#[test]
-fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
-    let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
-    for required in [
-        "workflow_call:",
-        "workflow_dispatch:",
-        "ref: ${{ github.sha }}",
-        "podman system service",
-        "PODMAN_LENS_CONFORMANCE_UNIX_SOCKET",
-        "native_service_conformance",
-        "podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}",
-        "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
-        "overwrite: true",
-        "steps.conformance.outcome != 'success'",
-        "runtime_args+=(--privileged)",
-        "service_uid: 0",
-        "service_uid: 1000",
-        "--device /dev/fuse",
-        "--security-opt label=disable",
-        "--security-opt apparmor=unconfined",
-        "while ! test -e /podman-lens/start-api",
-        "host_podman[@]}\" exec \"${service}\" touch /podman-lens/start-api",
-        "Remove disposable native service, image, and state",
-        "actions/upload-artifact@",
-        "datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful",
-    ] {
-        assert!(
-            native.contains(required),
-            "native conformance workflow is missing {required}"
-        );
-    }
-    let provision = native
-        .find("podman secret create")
-        .ok_or_else(|| policy_error("native resources must be provisioned"))?;
-    let start_api = native
-        .find("host_podman[@]}\" exec \"${service}\" touch /podman-lens/start-api")
-        .ok_or_else(|| policy_error("native API start handshake must be explicit"))?;
-    assert!(
-        provision < start_api,
-        "nested CLI provisioning must finish before the API service starts"
-    );
-    assert_isolated_host_podman_inner_rootless_and_failure_evidence(&native)?;
+const NATIVE_CONFORMANCE_REQUIRED: &[&str] = &[
+    "workflow_call:",
+    "workflow_dispatch:",
+    "ref: ${{ github.sha }}",
+    "podman system service",
+    "PODMAN_LENS_CONFORMANCE_UNIX_SOCKET",
+    "native_service_conformance",
+    "podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}",
+    "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
+    "overwrite: true",
+    "steps.conformance.outcome != 'success'",
+    "runtime_args+=(--privileged)",
+    "service_uid: 0",
+    "service_uid: 1000",
+    "--device /dev/fuse",
+    "--security-opt label=disable",
+    "--security-opt apparmor=unconfined",
+    "status=/podman-lens/setup.status",
+    "trap \"code=\\$?; printf \\\"%s\\n\\\" \\\"\\${code}\\\" > \\\"\\${status}.tmp\\\"; mv -f \\\"\\${status}.tmp\\\" \\\"\\${status}\\\"\" EXIT",
+    "mv -f \"${status}.tmp\" \"${status}\"",
+    "printf \"0\\n\" > \"${status}.tmp\"",
+    "setup_deadline=$((SECONDS + 300))",
+    "while (( SECONDS < setup_deadline ))",
+    "remaining_seconds=$((setup_deadline - SECONDS))",
+    "timeout --foreground --signal=TERM --kill-after=1s \"${remaining_seconds}s\"",
+    "inspect --format '{{.State.Running}}'",
+    "logs --tail 50",
+    "[[ -f \"${status_file}\" && ! -L \"${status_file}\" ]]",
+    "if [[ ! -f \"${status_file}\" || -L \"${status_file}\" ]]",
+    "status_bytes=\"$(stat --format=%s -- \"${status_file}\")\"",
+    "[[ \"${status_bytes}\" =~ ^[0-9]+$ && \"${status_bytes}\" -le 4 ]]",
+    "status_lines=\"$(wc -l < \"${status_file}\")\"",
+    "[[ \"${status_lines}\" == 1 ]]",
+    "[[ ! \"${setup_status}\" =~ ^[0-9]+$ || \"${setup_status}\" != 0 ]]",
+    "podman pull --quiet \"${image}\" >/dev/null",
+    "podman network create --label podman-lens.conformance=network podman-lens-native-network >/dev/null",
+    "podman volume create --label podman-lens.conformance=volume podman-lens-native-volume >/dev/null",
+    "podman secret create --label podman-lens.conformance=secret podman-lens-native-secret - >/dev/null",
+    "podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod >/dev/null",
+    "--volume podman-lens-native-volume:/bounded:Z \"${image}\" >/dev/null",
+    "for identity_file in service-uid root-mode",
+    "[[ -f \"${path}\" && ! -L \"${path}\" ]]",
+    "case \"${identity_file}\" in service-uid) max_bytes=11 ;; root-mode) max_bytes=9 ;; esac",
+    "identity_bytes=\"$(stat --format=%s -- \"${path}\")\"",
+    "[[ \"${identity_bytes}\" =~ ^[0-9]+$ && \"${identity_bytes}\" -le \"${max_bytes}\" ]]",
+    "identity_lines=\"$(wc -l < \"${path}\")\"",
+    "while ! test -d /podman-lens/start-api",
+    "mkdir \"${socket_directory}/start-api\"",
+    "for _ in {1..30}",
+    "[[ -S \"${socket}\" && ! -L \"${socket}\" ]]",
+    "Remove disposable native service, image, and state",
+    "actions/upload-artifact@",
+    "datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful",
+];
+
+fn assert_reviewed_native_images(native: &str) -> Result<(), std::io::Error> {
     let images = native
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("image: "))
@@ -765,6 +796,94 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         );
     }
     assert_eq!(observed_image_names, expected_image_names);
+    Ok(())
+}
+
+#[test]
+fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
+    let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
+    for &required in NATIVE_CONFORMANCE_REQUIRED {
+        assert!(
+            native.contains(required),
+            "native conformance workflow is missing {required}"
+        );
+    }
+    let identity = native
+        .find("actual_service_uid=\"$(id -u)\"")
+        .ok_or_else(|| policy_error("initial-process identity check is missing"))?;
+    let pull = native
+        .find("podman pull --quiet \"${image}\"")
+        .ok_or_else(|| policy_error("native image pull is missing"))?;
+    let provision = native
+        .find("podman create --name podman-lens-native-container")
+        .ok_or_else(|| policy_error("native resources must be provisioned"))?;
+    let identity_publish = native
+        .find("mv -f /podman-lens/root-mode.tmp /podman-lens/root-mode")
+        .ok_or_else(|| policy_error("atomic identity publication is missing"))?;
+    let setup_success = native
+        .find("printf \"0\\n\" > \"${status}.tmp\"")
+        .ok_or_else(|| policy_error("successful setup status is missing"))?;
+    let inner_start_gate = native
+        .find("while ! test -d /podman-lens/start-api")
+        .ok_or_else(|| policy_error("native API wait gate is missing"))?;
+    let api_service = native
+        .find("exec podman system service")
+        .ok_or_else(|| policy_error("native API service start is missing"))?;
+    let host_status = native
+        .find("IFS= read -r setup_status < \"${status_file}\"")
+        .ok_or_else(|| policy_error("host setup-status validation is missing"))?;
+    let status_guard = native
+        .find("if [[ ! -f \"${status_file}\" || -L \"${status_file}\" ]]")
+        .ok_or_else(|| policy_error("setup-status file guard is missing"))?;
+    let status_size = native
+        .find("status_bytes=\"$(stat --format=%s -- \"${status_file}\")\"")
+        .ok_or_else(|| policy_error("setup-status byte bound is missing"))?;
+    let status_lines = native
+        .find("status_lines=\"$(wc -l < \"${status_file}\")\"")
+        .ok_or_else(|| policy_error("setup-status line bound is missing"))?;
+    let identity_guard = native
+        .find("[[ -f \"${path}\" && ! -L \"${path}\" ]]")
+        .ok_or_else(|| policy_error("identity-file guard is missing"))?;
+    let identity_size = native
+        .find("identity_bytes=\"$(stat --format=%s -- \"${path}\")\"")
+        .ok_or_else(|| policy_error("identity-file byte bound is missing"))?;
+    let identity_lines = native
+        .find("identity_lines=\"$(wc -l < \"${path}\")\"")
+        .ok_or_else(|| policy_error("identity-file line bound is missing"))?;
+    let identity_read = native
+        .find("IFS= read -r actual_service_uid < \"${socket_directory}/service-uid\"")
+        .ok_or_else(|| policy_error("identity-file read is missing"))?;
+    let identity_compare = native
+        .find("[[ \"${actual_root_mode}\" =~ ^(rootful|rootless)$ && \"${actual_root_mode}\" == \"${root_mode}\" ]]")
+        .ok_or_else(|| policy_error("host identity comparison is missing"))?;
+    let start_api = native
+        .find("mkdir \"${socket_directory}/start-api\"")
+        .ok_or_else(|| policy_error("native API start handshake must be explicit"))?;
+    assert!(
+        identity < pull && pull < provision && provision < identity_publish && identity_publish < setup_success,
+        "initial-process identity must precede provisioning and successful setup status"
+    );
+    assert!(
+        setup_success < inner_start_gate && inner_start_gate < api_service,
+        "successful provisioning must precede the gated API service"
+    );
+    assert!(
+        host_status < identity_guard && identity_compare < start_api,
+        "the host must validate setup status and exact identity before opening the API start gate"
+    );
+    assert!(
+        status_guard < status_size && status_size < status_lines && status_lines < host_status,
+        "the host must validate setup-status type and bounds before reading it"
+    );
+    assert!(
+        identity_guard < identity_size
+            && identity_size < identity_lines
+            && identity_lines < identity_read
+            && identity_read < identity_compare,
+        "the host must validate identity-file type and bounds before reading it"
+    );
+    assert_isolated_host_podman_inner_rootless_and_failure_evidence(&native)?;
+    assert_reviewed_native_images(&native)?;
 
     Ok(())
 }

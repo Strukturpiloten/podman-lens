@@ -128,10 +128,18 @@ the reviewed source-built rootless image stays unprivileged and adds only
 `apparmor=unconfined`. The workflow independently requires UID 1000 and
 `Host.Security.Rootless=true` for rootless, and UID 0 plus `Host.Security.Rootless=false` for
 rootful. Only exact digest-pinned images on the trusted current default branch enter that
-no-secret boundary. Provisioning completes before the API starts; only the run-scoped socket
-directory is mounted into the service. Setup failures still upload compact evidence because
-expected-version provenance is derived directly from the reviewed immutable matrix image. Cleanup
-removes the service, image, and isolated launcher state.
+no-secret boundary. The rootless image's identity checks and all bounded resource provisioning
+execute beneath the outer container's initial OCI process. Host-side `podman exec` is forbidden
+because hosted runners can deny rootless Podman's re-exec while the same commands work from the
+initial process. Provisioning completes before the API starts; only the run-scoped socket directory
+is mounted into the service. The initial process publishes atomic, byte-bounded status and identity
+files. The host uses a five-minute polling deadline, checks service liveness, rejects symlinks and
+malformed values, and then creates a directory start gate. The initial process replaces itself with
+the API service only after that gate, and the host gives its run-scoped socket 30 seconds to become
+ready.
+Setup failures still upload compact evidence because expected-version provenance is derived
+directly from the reviewed immutable matrix image. Cleanup removes the service, image, and isolated
+launcher state.
 The state root includes the run ID, run attempt, and a reviewed two-letter matrix key under `/tmp`,
 keeping each cell isolated while respecting host Podman's 50-character runroot limit. Cleanup
 validates those components and independently recomputes the exact removal target.

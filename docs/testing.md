@@ -121,13 +121,16 @@ socket to the ignored tests, and uploads SHA/run/attempt/task-bound evidence. Re
 worker; an unavailable, failed, timed-out, cancelled, or skipped worker blocks publication. It
 provisions a bounded sanitized resource set before bodyless-GET acquisition checks containers,
 pods, networks, volumes, images, and secret metadata; it captures no service payload and resets
-the temporary store. The rootless image runs without Docker privilege under its reviewed,
-runtime-verified numeric service UID and only the image contract's FUSE and
-SELinux/AppArmor/seccomp exceptions. The Docker seccomp exception permits the unprivileged clone
-needed for rootless Podman's user namespace; the cell remains non-privileged. Provisioning
-completes before the API starts; only its run-scoped socket is handed back to the runner after
-creation. Setup failures still upload compact evidence because expected-version provenance is
-derived directly from the reviewed immutable matrix image.
+the temporary store. Both reviewed images run inside a privileged disposable outer Docker
+boundary because hosted Docker otherwise denies nested Podman re-execution. Outer privilege does
+not select the inner mode: the workflow independently requires UID 1000 and
+`Host.Security.Rootless=true` for the rootless image, and UID 0 plus
+`Host.Security.Rootless=false` for the rootful image. Only exact digest-pinned images on the
+trusted current default branch enter that isolated, no-secret boundary, and rootless retains its
+reviewed FUSE and SELinux/AppArmor/seccomp arguments. Provisioning completes before the API starts;
+only its run-scoped socket is handed back to the runner after creation. Setup failures still upload
+compact evidence because expected-version provenance is derived directly from the reviewed
+immutable matrix image.
 
 ## Coverage and compatibility
 

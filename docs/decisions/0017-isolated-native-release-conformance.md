@@ -23,10 +23,13 @@ Before the production read-only acquisition test, the worker provisions a bounde
 container, pod, network, volume, image, and secret-metadata set in that disposable service. The
 worker uploads a compact evidence JSON whose stable artifact name includes candidate SHA, run
 ID, run attempt, and task. Release selects and validates that exact attempt, so a retry cannot
-reuse stale earlier-attempt evidence. Its rootless cell follows the reviewed image contract without
-Docker privilege, using only FUSE and the required SELinux/AppArmor/seccomp exceptions. The Docker
-seccomp exception permits rootless Podman to create its unprivileged user namespace on the hosted
-runner. Each image's reviewed numeric service UID is verified inside the running container.
+reuse stale earlier-attempt evidence. Both cells use a privileged disposable outer Docker boundary
+because the hosted Docker runtime otherwise denies nested Podman re-execution. That outer privilege
+is limited to exact digest-pinned images from the trusted current default branch, receives no
+repository secrets, and is removed after the cell. It does not determine inner Podman identity. The
+rootless image must still start as reviewed UID 1000 and `Host.Security.Rootless` must report
+`true`; the rootful image must start as UID 0 and report `false`. The rootless cell retains the
+reviewed FUSE and SELinux/AppArmor/seccomp arguments required by the image contract.
 Failure evidence derives the reviewed version from the immutable matrix image rather than
 successful-service environment, so a setup failure still uploads bounded
 candidate/run/attempt/cell evidence. Resource provisioning finishes before the API service starts,

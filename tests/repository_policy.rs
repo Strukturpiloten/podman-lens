@@ -534,9 +534,12 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
     Ok(())
 }
 
-fn assert_rootless_runtime_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
+fn assert_outer_privilege_inner_rootless_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
+    let privileged = native
+        .find("          runtime_args=(--privileged)\n")
+        .ok_or_else(|| policy_error("trusted outer Docker privilege boundary is missing"))?;
     let rootless_args = native
-        .split_once("          else\n            runtime_args=(\n")
+        .split_once("          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then\n            runtime_args+=(\n")
         .and_then(|(_, rest)| rest.split_once("            )\n          fi"))
         .map(|(arguments, _)| arguments)
         .ok_or_else(|| policy_error("rootless Docker argument boundary is missing"))?;
@@ -551,9 +554,43 @@ fn assert_rootless_runtime_and_failure_evidence(native: &str) -> Result<(), std:
             "rootless Docker arguments are missing {required}"
         );
     }
+    let rootless_condition = native
+        .find("          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then\n")
+        .ok_or_else(|| policy_error("rootless Docker condition is missing"))?;
     assert!(
-        !rootless_args.contains("--privileged"),
-        "the rootless service must remain non-privileged"
+        privileged < rootless_condition,
+        "the trusted outer privilege boundary must apply before rootless-specific arguments"
+    );
+    let rootless_cell = native
+        .split_once("          - id: podman-6.1-rootless\n")
+        .and_then(|(_, rest)| rest.split_once("    steps:\n"))
+        .map(|(cell, _)| cell)
+        .ok_or_else(|| policy_error("rootless matrix cell boundary is missing"))?;
+    for required in [
+        "root_mode: rootless",
+        "service_uid: 1000",
+        "image: ghcr.io/strukturpiloten/podman-6.1-rootless:v",
+        "@sha256:",
+    ] {
+        assert!(
+            rootless_cell.contains(required),
+            "rootless matrix identity is missing {required}"
+        );
+    }
+    for required in [
+        "actual_service_uid=\"$(docker exec \"${service_name}\" id -u)\"",
+        "[[ \"${actual_service_uid}\" == \"${service_uid}\" ]]",
+        "podman info --format '{{.Host.Security.Rootless}}'",
+        "[[ \"${actual_root_mode}\" == '${{ matrix.root_mode }}' ]]",
+    ] {
+        assert!(
+            native.contains(required),
+            "inner rootless identity verification is missing {required}"
+        );
+    }
+    assert!(
+        !native.contains("secrets."),
+        "native privileged boundary must not receive repository secrets"
     );
 
     let evidence = native
@@ -593,7 +630,7 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
         "overwrite: true",
         "steps.conformance.outcome != 'success'",
-        "service_privileged: false",
+        "runtime_args=(--privileged)",
         "service_uid: 0",
         "service_uid: 1000",
         "--device /dev/fuse",
@@ -621,7 +658,7 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         provision < start_api,
         "nested CLI provisioning must finish before the API service starts"
     );
-    assert_rootless_runtime_and_failure_evidence(&native)?;
+    assert_outer_privilege_inner_rootless_and_failure_evidence(&native)?;
     let images = native
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("image: "))

@@ -26,13 +26,11 @@ jobs:
         include:
           - id: podman-6.1-rootful
             root_mode: rootful
-            service_privileged: true
             service_uid: 0
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful
             image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c
           - id: podman-6.1-rootless
             root_mode: rootless
-            service_privileged: false
             service_uid: 1000
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless
             image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e
@@ -70,11 +68,11 @@ jobs:
           socket_directory="$(dirname "${socket}")"
           install -d -m 0770 "${socket_directory}"
           sudo chown "${service_uid}:$(id --group)" "${socket_directory}"
-          runtime_args=()
-          if [[ '${{ matrix.service_privileged }}' == 'true' ]]; then
-            runtime_args=(--privileged)
-          else
-            runtime_args=(
+          # The immutable, default-branch-only service image is the complete privileged boundary.
+          # Inner UID and Podman root mode are verified independently below.
+          runtime_args=(--privileged)
+          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then
+            runtime_args+=(
               --device /dev/fuse
               --security-opt label=disable
               --security-opt apparmor=unconfined

@@ -78,6 +78,7 @@ jobs:
               --device /dev/fuse
               --security-opt label=disable
               --security-opt apparmor=unconfined
+              --security-opt seccomp=unconfined
             )
           fi
           docker run --detach "${runtime_args[@]}" --name "${service_name}" \
@@ -155,6 +156,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           artifact="podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}"
+          image="${{ matrix.image }}"
+          tag="${image%%@*}"
+          expected_version="${tag##*:v}"
+          [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           jq --null-input \
             --arg candidate "${GITHUB_SHA}" \
             --arg run_id "${GITHUB_RUN_ID}" \
@@ -162,8 +167,8 @@ jobs:
             --arg task native-api \
             --arg cell "${{ matrix.id }}" \
             --arg root_mode "${{ matrix.root_mode }}" \
-            --arg expected_version "${PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION}" \
-            --arg image "${{ matrix.image }}" \
+            --arg expected_version "${expected_version}" \
+            --arg image "${image}" \
             --arg outcome "${{ steps.conformance.outcome }}" \
             --arg socket_scope "isolated-disposable-service" \
             '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task, cell: $cell, root_mode: $root_mode, expected_version: $expected_version, image: $image, outcome: $outcome, socket_scope: $socket_scope}' \
@@ -179,7 +184,7 @@ jobs:
           overwrite: true
           retention-days: 7
       - name: Fail closed when native conformance did not succeed
-        if: steps.conformance.outcome != 'success'
+        if: always() && steps.conformance.outcome != 'success'
         shell: bash
         run: exit 1
       - name: Remove the disposable native service

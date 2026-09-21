@@ -63,6 +63,15 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "cli/cli"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the immutable Strukturpiloten shared-policy commit",
+      "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "autoReplaceStringTemplate": "{{{indentation}}}# renovate: datasource=github-digest depName={{{depName}}} currentValue={{{newValue}}}\n{{{indentation}}}ref: {{{newDigest}}}"
     }
   ],
   "packageRules": [
@@ -91,6 +100,14 @@
       "platformAutomerge": false
     },
     {
+      "description": "Automerge green-gated lock-file maintenance",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false,
+      "minimumReleaseAge": "0 days"
+    },
+    {
       "description": "Do not delay BoxFerry and Lens releases",
       "matchPackageNames": [
         "boxferry",
@@ -113,6 +130,7 @@
     },
 
     {
+      "description": "Require manual review for Dev Container features",
       "matchManagers": ["devcontainer"],
       "matchDepTypes": ["feature"],
       "pinDigests": false,

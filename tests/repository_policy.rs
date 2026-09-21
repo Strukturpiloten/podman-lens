@@ -516,6 +516,26 @@ fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::
 #[test]
 fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std::io::Error> {
     let configuration = fs::read_to_string(".github/renovate.json")?;
+    let renovate: Value = serde_json::from_str(&configuration)
+        .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
+    assert_eq!(
+        renovate["minimumReleaseAge"], "3 days",
+        "Renovate must retain the three-day minimum release age"
+    );
+    let package_rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
+    let lock_maintenance = package_rules
+        .iter()
+        .find(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
+        .ok_or_else(|| policy_error("Renovate lock-file maintenance rule is missing"))?;
+    assert_eq!(
+        lock_maintenance["matchUpdateTypes"],
+        serde_json::json!(["lockFileMaintenance"])
+    );
+    assert_eq!(lock_maintenance["automerge"], true);
+    assert_eq!(lock_maintenance["automergeType"], "pr");
+    assert_eq!(lock_maintenance["platformAutomerge"], false);
     for required in [
         "Automerge tested non-major dependency updates",
         "Do not delay BoxFerry and Lens releases",
@@ -540,6 +560,230 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
         "Dev Container features and checksum-pinned tools must remain manual"
     );
     Ok(())
+}
+
+#[test]
+fn lockfile_release_age_guard_is_immutable_and_complete() -> Result<(), std::io::Error> {
+    let configuration = fs::read_to_string(".github/renovate.json")?;
+    let renovate: Value = serde_json::from_str(&configuration)
+        .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
+    assert_eq!(renovate["minimumReleaseAge"], "3 days");
+    let rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
+
+    let (non_major_index, lock_index) = verify_automerge_rules(rules)?;
+    verify_manual_rule(
+        rules,
+        "Require checksum review for downloaded file-quality tools",
+        non_major_index,
+        lock_index,
+    )?;
+    verify_manual_rule(
+        rules,
+        "Require manual review for Dev Container features",
+        non_major_index,
+        lock_index,
+    )?;
+    verify_shared_policy_manager(&renovate)?;
+    verify_lockfile_guard_workflow()?;
+    Ok(())
+}
+
+fn verify_automerge_rules(rules: &[Value]) -> Result<(usize, usize), std::io::Error> {
+    let non_major_index = rules
+        .iter()
+        .position(|rule| rule["description"] == "Automerge tested non-major dependency updates")
+        .ok_or_else(|| policy_error("generic non-major automerge rule is missing"))?;
+    let non_major = &rules[non_major_index];
+    assert_eq!(
+        non_major["matchUpdateTypes"],
+        serde_json::json!(["minor", "patch", "pin", "digest", "pinDigest"]),
+        "generic automerge must cover exactly the safe non-major categories"
+    );
+    assert_eq!(non_major["automerge"], true);
+    assert_eq!(non_major["automergeType"], "pr");
+    assert_eq!(non_major["platformAutomerge"], false);
+
+    let lock = rules
+        .iter()
+        .find(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
+        .ok_or_else(|| policy_error("lock-file maintenance automerge rule is missing"))?;
+    assert_eq!(
+        rules
+            .iter()
+            .filter(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
+            .count(),
+        1,
+        "lock-file maintenance needs exactly one rule"
+    );
+    let lock_index = rules
+        .iter()
+        .position(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
+        .ok_or_else(|| policy_error("lock-file maintenance automerge rule was found above"))?;
+    assert_eq!(lock["matchUpdateTypes"], serde_json::json!(["lockFileMaintenance"]));
+    assert_eq!(lock["automerge"], true);
+    assert_eq!(lock["automergeType"], "pr");
+    assert_eq!(lock["platformAutomerge"], false);
+    assert_eq!(
+        lock["minimumReleaseAge"], "0 days",
+        "the shared guard, rather than Renovate synthetic metadata, owns lockfile age evidence"
+    );
+
+    Ok((non_major_index, lock_index))
+}
+
+fn verify_manual_rule(
+    rules: &[Value],
+    description: &str,
+    non_major_index: usize,
+    lock_index: usize,
+) -> Result<(), std::io::Error> {
+    let (index, rule) = rules
+        .iter()
+        .enumerate()
+        .find(|(_, rule)| rule["description"] == description)
+        .ok_or_else(|| policy_error(format!("manual Renovate rule is missing: {description}")))?;
+    assert!(
+        index > non_major_index && index > lock_index,
+        "manual rule {description} must follow both automerge rules"
+    );
+    assert_eq!(rule["automerge"], false, "manual rule {description} must opt out");
+    Ok(())
+}
+
+fn verify_shared_policy_manager(renovate: &Value) -> Result<(), std::io::Error> {
+    let rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
+    let non_major_index = rules
+        .iter()
+        .position(|rule| rule["description"] == "Automerge tested non-major dependency updates")
+        .ok_or_else(|| policy_error("generic non-major automerge rule is missing"))?;
+    let lock_index = rules
+        .iter()
+        .position(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
+        .ok_or_else(|| policy_error("lock-file maintenance automerge rule is missing"))?;
+    let devcontainer = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
+        .iter()
+        .enumerate()
+        .find(|(_, rule)| rule["description"] == "Require manual review for Dev Container features")
+        .ok_or_else(|| policy_error("Dev Container manual rule is missing"))?;
+    assert!(
+        devcontainer.0 > non_major_index && devcontainer.0 > lock_index,
+        "Dev Container manual rule must follow both automerge rules"
+    );
+    assert_eq!(devcontainer.1["automerge"], false);
+
+    let guard_managers = renovate["customManagers"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?
+        .iter()
+        .filter(|manager| manager["description"] == "Track the immutable Strukturpiloten shared-policy commit")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        guard_managers.len(),
+        1,
+        "the shared guard pin needs exactly one Renovate owner"
+    );
+    let guard_manager = guard_managers
+        .first()
+        .ok_or_else(|| policy_error("the shared guard pin needs one Renovate owner"))?;
+    assert_eq!(
+        guard_manager["managerFilePatterns"],
+        serde_json::json!([r"/^\.github/workflows/.*\.ya?ml$/"])
+    );
+    assert!(guard_manager["matchStrings"][0].as_str().is_some_and(|pattern| {
+        pattern.contains("datasource=github-digest")
+            && pattern.contains("currentValue>main")
+            && pattern.contains("currentDigest>[a-f0-9]{40}")
+    }));
+    let manager_pattern = guard_manager["matchStrings"][0]
+        .as_str()
+        .ok_or_else(|| policy_error("shared-policy manager must include its regex"))?;
+    let template = guard_manager["autoReplaceStringTemplate"]
+        .as_str()
+        .ok_or_else(|| policy_error("shared-policy manager must include its replacement template"))?;
+    assert!(
+        template.contains('\n'),
+        "replacement template must contain a real newline"
+    );
+    assert!(
+        !template.contains(r"\n"),
+        "replacement template must not contain a literal backslash-n"
+    );
+    let expected_pattern = "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})";
+    assert_eq!(manager_pattern, expected_pattern);
+    let new_digest = "b4a7d2e8f1c903b6a5d4e2f7182930c4b6d5e7f1";
+    let rewritten = template
+        .replace("{{{indentation}}}", "      ")
+        .replace("{{{depName}}}", "Strukturpiloten/.github")
+        .replace("{{{newValue}}}", "main")
+        .replace("{{{newDigest}}}", new_digest);
+    assert_eq!(
+        reextract_shared_policy_marker(manager_pattern, &rewritten),
+        Some(("Strukturpiloten/.github", "main", new_digest)),
+        "the shared-policy regex must re-extract its rewritten adjacent marker and ref"
+    );
+
+    Ok(())
+}
+
+fn verify_lockfile_guard_workflow() -> Result<(), std::io::Error> {
+    let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
+    let marker = "# renovate: datasource=github-digest depName=Strukturpiloten/.github currentValue=main";
+    let lines = workflow.lines().collect::<Vec<_>>();
+    let marker_line = lines
+        .iter()
+        .position(|line| line.trim() == marker)
+        .ok_or_else(|| policy_error("CI shared-policy Renovate marker is missing"))?;
+    let shared_ref = lines
+        .get(marker_line + 1)
+        .and_then(|line| line.trim().strip_prefix("ref: "))
+        .ok_or_else(|| policy_error("CI shared-policy marker must be adjacent to its ref"))?;
+    assert_eq!(workflow.matches(marker).count(), 1);
+    assert_eq!(shared_ref.len(), 40);
+    assert!(
+        shared_ref
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()),
+        "shared-policy ref must be a full lowercase commit SHA"
+    );
+    for required in [
+        "lockfile-release-age:",
+        "Lockfile release age",
+        "fetch-depth: 0",
+        "ref: ${{ github.event.pull_request.head.sha }}",
+        "path: .github/strukturpiloten-shared",
+        "--repository-root \"${GITHUB_WORKSPACE}\"",
+        "--base \"${BASE_SHA}\"",
+        "--head \"${HEAD_SHA}\"",
+        "--minimum-age-hours 72",
+        "if: github.event_name != 'pull_request'",
+        "lockfile-release-age]",
+        "success success success success success success success success",
+    ] {
+        assert!(workflow.contains(required), "CI lockfile guard is missing {required}");
+    }
+    let lock_job = workflow
+        .split_once("\n  lockfile-release-age:\n")
+        .and_then(|(_, remainder)| remainder.split_once("\n  pr-gate:\n"))
+        .map(|(job, _)| job)
+        .ok_or_else(|| policy_error("CI lockfile release-age job boundary is missing"))?;
+    let before_steps = lock_job
+        .split_once("\n    steps:\n")
+        .map_or(lock_job, |(prefix, _)| prefix);
+    assert!(
+        !before_steps.lines().any(|line| line.trim_start().starts_with("if:")),
+        "CI lockfile release-age job must not be skipped on main pushes"
+    );
+    Ok(())
+}
+
+fn policy_error(message: impl Into<String>) -> std::io::Error {
+    std::io::Error::other(message.into())
 }
 
 #[test]
@@ -633,4 +877,32 @@ fn linux_gate_modes_and_failure_propagation_are_correct() -> Result<(), Box<dyn 
         String::from_utf8_lossy(&result.stderr)
     );
     Ok(())
+}
+fn reextract_shared_policy_marker<'a>(
+    manager_pattern: &str,
+    candidate: &'a str,
+) -> Option<(&'a str, &'a str, &'a str)> {
+    let expected_pattern = "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})";
+    if manager_pattern != expected_pattern {
+        return None;
+    }
+    let (marker_line, ref_line) = candidate.split_once('\n')?;
+    let (indentation, marker) = marker_line.split_once('#')?;
+    if !indentation.bytes().all(|byte| matches!(byte, b' ' | b'\t')) {
+        return None;
+    }
+    let marker = marker.strip_prefix(" renovate: datasource=github-digest depName=")?;
+    let (dep_name, current_value) = marker.split_once(" currentValue=")?;
+    if dep_name != "Strukturpiloten/.github" || current_value != "main" {
+        return None;
+    }
+    let ref_line = ref_line.strip_prefix(indentation)?.strip_prefix("ref: ")?;
+    if ref_line.len() != 40
+        || !ref_line
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return None;
+    }
+    Some((dep_name, current_value, ref_line))
 }

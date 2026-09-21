@@ -107,3 +107,6 @@ tokio = { version = "1.53.1", features = ["macros", "net", "rt", "time"] }
 [dev-dependencies]
 jsonschema = { version = "0.49.9", default-features = false }
 sha2 = "0.11.0"
+# Keep the test-only `jsonschema` ICU graph compatible with the declared Rust 1.85 MSRV.
+# Remove this exact constraint once an upstream yoke-derive release supports Rust 1.85 again.
+yoke-derive = "=0.8.2"

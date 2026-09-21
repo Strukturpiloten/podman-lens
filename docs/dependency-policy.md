@@ -30,3 +30,10 @@ only after verifying an upstream replacement on Rust 1.85.
 Dependencies are locked in `Cargo.lock`, audited by `cargo deny`, and updated through Renovate.
 Git dependencies and unknown registries are denied. A dependency that changes public types, wire
 decoding, serialization, the async runtime, or the security boundary requires an ADR.
+
+Renovate applies the three-day minimum release age to direct dependency updates. Its
+lock-file-maintenance updates use a zero-day Renovate override because their synthetic update does
+not carry individual release timestamps; the shared, fail-closed lockfile release-age guard checks
+every newly introduced registry version against the same 72-hour cutoff before the required
+aggregate PR gate can succeed. Its immutable revision has one Renovate owner. Dev Container and
+checksum-pinned tool updates remain manual.

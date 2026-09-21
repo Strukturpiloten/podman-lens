@@ -52,8 +52,11 @@ symlink. This ordering keeps CLI provisioning and API access from using nested P
 concurrently.
 Release requires
 the worker result to be successful before the sole publication-permission job is eligible; failure,
-timeout, cancellation, missing evidence, or a skipped worker is fail-closed. `validation_only`
-cannot enter that job.
+timeout, cancellation, missing evidence, or a skipped worker is fail-closed. The release gate
+checks out the exact candidate SHA with credentials disabled before downloading current-attempt
+artifacts and running the candidate-owned evidence validator. This prerequisite-first ordering
+keeps a fresh runner fail-closed while making the validator available. `validation_only` cannot
+enter the publication job.
 
 ## Consequences
 

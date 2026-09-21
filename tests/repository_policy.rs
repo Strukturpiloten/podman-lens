@@ -953,6 +953,8 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
         "release validation must consume candidate-bound evidence instead of duplicating Renovate-owned image pins"
     );
 
+    assert_release_gate_checkout_and_evidence_order(&release)?;
+
     let (_, publish) = release
         .split_once("\n  publish:\n")
         .ok_or_else(|| policy_error("release publish job boundary is missing"))?;
@@ -974,6 +976,46 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
             "credentialed publish job must not rerun {forbidden}"
         );
     }
+    Ok(())
+}
+
+fn assert_release_gate_checkout_and_evidence_order(release: &str) -> Result<(), std::io::Error> {
+    let (_, gate_and_later) = release
+        .split_once("\n  release-gate:\n")
+        .ok_or_else(|| policy_error("release validation gate boundary missing"))?;
+    let (gate, _) = gate_and_later
+        .split_once("\n  publish:\n")
+        .ok_or_else(|| policy_error("release publish job boundary missing"))?;
+    for required in [
+        "- name: Check out exact candidate",
+        "uses: actions/checkout@",
+        "ref: ${{ github.sha }}",
+        "fetch-depth: 0",
+        "persist-credentials: false",
+    ] {
+        assert!(gate.contains(required), "release validation gate is missing {required}");
+    }
+
+    let ordered_steps = [
+        "- name: Require every validation prerequisite to succeed",
+        "- name: Check out exact candidate",
+        "- name: Download current-run native evidence",
+        "- name: Validate complete current-run native evidence",
+    ];
+    let mut previous_position = None;
+    for step in ordered_steps {
+        let position = gate
+            .find(step)
+            .ok_or_else(|| policy_error(format!("release validation gate is missing {step}")))?;
+        if let Some(previous_position) = previous_position {
+            assert!(
+                previous_position < position,
+                "release validation gate step is out of fail-closed order: {step}"
+            );
+        }
+        previous_position = Some(position);
+    }
+
     Ok(())
 }
 

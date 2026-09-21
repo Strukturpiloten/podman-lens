@@ -38,7 +38,9 @@ Before merging the generated `release-plz-*` pull request, verify that:
 - `scripts/check-native-release-contract.sh` passes its offline privacy, provenance, replay,
   and semantic contracts;
 - the reusable `Native Podman conformance` worker passed for the exact candidate SHA, current
-  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact; and
+  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact;
+- the release gate checked out that exact candidate, with credentials disabled, before invoking
+  the candidate-owned native-evidence validator; and
 - no publication credential is present in repository secrets.
 
 The changelog section is a release gate, not optional metadata.

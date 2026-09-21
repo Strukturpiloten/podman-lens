@@ -21,11 +21,13 @@ jobs:
       matrix:
         include:
           - id: podman-6.1-rootful
+            state_key: rf
             root_mode: rootful
             service_uid: 0
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful
             image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:2cf1d0fa3d0776e6a87bc4fd3391abd227001ab22885c5897c04970f3f38cb2c
           - id: podman-6.1-rootless
+            state_key: rl
             root_mode: rootless
             service_uid: 1000
             # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless
@@ -55,7 +57,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          state_directory="${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
+          state_key='${{ matrix.state_key }}'
+          [[ "${state_key}" =~ ^(rf|rl)$ ]]
+          [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          state_directory="/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}"
           socket_directory="${state_directory}/socket"
           root_directory="${state_directory}/root"
           runroot_directory="${state_directory}/runroot"
@@ -66,6 +72,7 @@ jobs:
           image='${{ matrix.image }}'
           service_uid='${{ matrix.service_uid }}'
           [[ "${service_uid}" =~ ^[0-9]+$ ]]
+          [[ "${#runroot_directory}" -le 50 ]] || { echo 'Podman runroot exceeds its 50-character limit.' >&2; exit 1; }
           install -d -m 0700 "${state_directory}" "${root_directory}" "${runroot_directory}" "${tmp_directory}"
           install -d -m 0770 "${socket_directory}"
           sudo chown "${service_uid}:$(id --group)" "${socket_directory}"
@@ -155,9 +162,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          state_directory="${PODMAN_LENS_NATIVE_STATE_DIRECTORY:-${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}"
-          containers_conf="${PODMAN_LENS_NATIVE_CONTAINERS_CONF:-${state_directory}/containers.conf}"
-          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${PODMAN_LENS_NATIVE_ROOT_DIRECTORY:-${state_directory}/root}" --runroot "${PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY:-${state_directory}/runroot}" --tmpdir "${PODMAN_LENS_NATIVE_TMP_DIRECTORY:-${state_directory}/tmp}")
-          "${host_podman[@]}" rm --force --volumes "${PODMAN_LENS_NATIVE_SERVICE:-podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}" || true
+          state_key='${{ matrix.state_key }}'
+          [[ "${state_key}" =~ ^(rf|rl)$ ]]
+          [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          state_directory="/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}"
+          containers_conf="${state_directory}/containers.conf"
+          service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
+          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${state_directory}/root" --runroot "${state_directory}/runroot" --tmpdir "${state_directory}/tmp")
+          "${host_podman[@]}" rm --force --volumes "${service_name}" || true
           "${host_podman[@]}" image rm --force '${{ matrix.image }}' || true
           sudo rm --recursive --force "${state_directory}"

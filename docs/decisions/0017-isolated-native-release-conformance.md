@@ -31,6 +31,9 @@ canonical image contract. The rootless image must start as reviewed UID 1000 and
 `Host.Security.Rootless` must report `true`; the rootful image must start as UID 0 and report
 `false`. The launcher receives no repository secrets or ambient Podman socket, mounts only the
 run-scoped socket directory, and removes its service, image, and state after the cell.
+The per-run, per-cell state root uses a bounded `/tmp` name so the host Podman 4.9 launcher never
+exceeds its 50-character runroot limit. Cleanup validates the run identity and matrix key, then
+recomputes that exact path instead of accepting an environment-controlled removal target.
 The outer launcher is installed from the `ubuntu-24.04` runner's package repository and is
 intentionally not a conformance-version input. Renovate continues to own the immutable inner image
 versions and digests that define the tested Podman identities.

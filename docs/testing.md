@@ -132,6 +132,9 @@ no-secret boundary. Provisioning completes before the API starts; only the run-s
 directory is mounted into the service. Setup failures still upload compact evidence because
 expected-version provenance is derived directly from the reviewed immutable matrix image. Cleanup
 removes the service, image, and isolated launcher state.
+The state root includes the run ID, run attempt, and a reviewed two-letter matrix key under `/tmp`,
+keeping each cell isolated while respecting host Podman's 50-character runroot limit. Cleanup
+validates those components and independently recomputes the exact removal target.
 The host launcher comes from the `ubuntu-24.04` runner package repository and is infrastructure,
 not the version under conformance. Renovate owns the versioned, digest-pinned inner images.
 

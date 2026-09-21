@@ -1,17 +1,13 @@
 ---
 name: Native Podman conformance
-
 on:
   workflow_call:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: native-podman-conformance-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   native-api:
     name: Native Libpod acquisition API (${{ matrix.id }})
@@ -40,73 +36,68 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Require the trusted default-branch candidate
+      - name: Require trusted default-branch candidate
         shell: bash
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -Eeuo pipefail
-          [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" ]] || {
-            echo "The privileged rootful service is restricted to the default branch." >&2
-            exit 1
-          }
+          [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" ]] || { echo 'Native conformance is default-branch-only.' >&2; exit 1; }
           git fetch --no-tags origin "refs/heads/${DEFAULT_BRANCH}"
-          [[ "$(git rev-parse "origin/${DEFAULT_BRANCH}")" == "${GITHUB_SHA}" ]] || {
-            echo "The checked-out candidate is not the current trusted default-branch ref." >&2
-            exit 1
-          }
-      - name: Create an isolated disposable Podman service
+          [[ "$(git rev-parse "origin/${DEFAULT_BRANCH}")" == "${GITHUB_SHA}" ]] || { echo 'The checked-out candidate is not the current default branch.' >&2; exit 1; }
+      - name: Install isolated host Podman launcher
         shell: bash
         run: |
           set -Eeuo pipefail
-          socket="${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}/podman.sock"
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends podman
+      - name: Start isolated native Podman service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          state_directory="${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
+          socket_directory="${state_directory}/socket"
+          root_directory="${state_directory}/root"
+          runroot_directory="${state_directory}/runroot"
+          tmp_directory="${state_directory}/tmp"
+          containers_conf="${state_directory}/containers.conf"
+          socket="${socket_directory}/podman.sock"
           service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
-          image="${{ matrix.image }}"
-          docker pull --quiet "${image}"
+          image='${{ matrix.image }}'
           service_uid='${{ matrix.service_uid }}'
           [[ "${service_uid}" =~ ^[0-9]+$ ]]
-          socket_directory="$(dirname "${socket}")"
+          install -d -m 0700 "${state_directory}" "${root_directory}" "${runroot_directory}" "${tmp_directory}"
           install -d -m 0770 "${socket_directory}"
           sudo chown "${service_uid}:$(id --group)" "${socket_directory}"
-          # The immutable, default-branch-only service image is the complete privileged boundary.
-          # Inner UID and Podman root mode are verified independently below.
-          runtime_args=(--privileged)
-          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then
-            runtime_args+=(
-              --device /dev/fuse
-              --security-opt label=disable
-              --security-opt apparmor=unconfined
-              --security-opt seccomp=unconfined
-            )
+          printf '[engine]\nlock_type = "file"\n' > "${containers_conf}"
+          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${root_directory}" --runroot "${runroot_directory}" --tmpdir "${tmp_directory}")
+          "${host_podman[@]}" pull --quiet "${image}"
+          runtime_args=(--device /dev/fuse --security-opt label=disable)
+          if [[ '${{ matrix.root_mode }}' == 'rootful' ]]; then
+            runtime_args+=(--privileged)
+          else
+            runtime_args+=(--security-opt apparmor=unconfined)
           fi
-          docker run --detach "${runtime_args[@]}" --name "${service_name}" \
-            --volume "${socket_directory}:/podman-lens:Z" \
-            "${image}" /bin/sh -ceu '
-              trap "exit 0" INT TERM
-              rm -f /podman-lens/podman.sock /podman-lens/start-api
-              while ! test -e /podman-lens/start-api; do sleep 1; done
-              exec podman system service --time=0 unix:///podman-lens/podman.sock
-            '
-          actual_service_uid="$(docker exec "${service_name}" id -u)"
-          [[ "${actual_service_uid}" == "${service_uid}" ]] || {
-            echo "Native image service UID did not match the reviewed matrix contract." >&2
-            exit 1
-          }
-          tag="${image%%@*}"
-          expected_version="${tag##*:v}"
+          "${host_podman[@]}" run --detach --name "${service_name}" "${runtime_args[@]}" --volume "${socket_directory}:/podman-lens:Z" "${image}" /bin/sh -ceu '
+            trap "exit 0" INT TERM
+            rm -f /podman-lens/podman.sock /podman-lens/start-api
+            while ! test -e /podman-lens/start-api; do sleep 1; done
+            exec podman system service --time=0 unix:///podman-lens/podman.sock
+          '
+          actual_service_uid="$("${host_podman[@]}" exec "${service_name}" id -u)"
+          [[ "${actual_service_uid}" == "${service_uid}" ]] || { echo 'Native image service UID did not match reviewed matrix contract.' >&2; exit 1; }
+          tag="${image%%@*}"; expected_version="${tag##*:v}"
           [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          actual_rootless="$(docker exec "${service_name}" podman info --format '{{.Host.Security.Rootless}}')"
-          case "${actual_rootless}" in
-            true) actual_root_mode=rootless ;;
-            false) actual_root_mode=rootful ;;
-            *) echo "Podman did not report a boolean root-mode identity." >&2; exit 1 ;;
-          esac
-          [[ "${actual_root_mode}" == '${{ matrix.root_mode }}' ]] || {
-            echo "Native image root-mode contract did not match the observed service." >&2
-            exit 1
-          }
+          actual_rootless="$("${host_podman[@]}" exec "${service_name}" podman info --format '{{.Host.Security.Rootless}}')"
+          case "${actual_rootless}" in true) actual_root_mode=rootless ;; false) actual_root_mode=rootful ;; *) echo 'Podman did not report boolean root-mode identity.' >&2; exit 1 ;; esac
+          [[ "${actual_root_mode}" == '${{ matrix.root_mode }}' ]] || { echo 'Native image root-mode contract did not match observed service.' >&2; exit 1; }
           {
             printf 'PODMAN_LENS_NATIVE_SERVICE=%s\n' "${service_name}"
+            printf 'PODMAN_LENS_NATIVE_STATE_DIRECTORY=%s\n' "${state_directory}"
+            printf 'PODMAN_LENS_NATIVE_ROOT_DIRECTORY=%s\n' "${root_directory}"
+            printf 'PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY=%s\n' "${runroot_directory}"
+            printf 'PODMAN_LENS_NATIVE_TMP_DIRECTORY=%s\n' "${tmp_directory}"
+            printf 'PODMAN_LENS_NATIVE_CONTAINERS_CONF=%s\n' "${containers_conf}"
             printf 'PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=%s\n' "${socket}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=%s\n' "${expected_version}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=%s\n' "${actual_root_mode}"
@@ -115,38 +106,26 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          service="${PODMAN_LENS_NATIVE_SERVICE}"
-          image="${{ matrix.image }}"
-          timeout --signal=TERM --kill-after=30s 5m docker exec "${service}" \
-            podman pull --quiet "${image}"
-          docker exec "${service}" podman network create --label podman-lens.conformance=network podman-lens-native-network
-          docker exec "${service}" podman volume create --label podman-lens.conformance=volume podman-lens-native-volume
-          printf '%s' 'bounded-fixture-value' | docker exec --interactive "${service}" \
-            podman secret create --label podman-lens.conformance=secret podman-lens-native-secret -
-          docker exec "${service}" podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod
-          docker exec "${service}" podman create --name podman-lens-native-container \
-            --label podman-lens.conformance=container \
-            --network podman-lens-native-network \
-            --volume podman-lens-native-volume:/bounded:Z \
-            "${image}"
-          docker exec "${service}" touch /podman-lens/start-api
+          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${PODMAN_LENS_NATIVE_CONTAINERS_CONF}" podman --root "${PODMAN_LENS_NATIVE_ROOT_DIRECTORY}" --runroot "${PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY}" --tmpdir "${PODMAN_LENS_NATIVE_TMP_DIRECTORY}")
+          service="${PODMAN_LENS_NATIVE_SERVICE}"; image='${{ matrix.image }}'
+          timeout --signal=TERM --kill-after=30s 5m "${host_podman[@]}" exec "${service}" podman pull --quiet "${image}"
+          "${host_podman[@]}" exec "${service}" podman network create --label podman-lens.conformance=network podman-lens-native-network
+          "${host_podman[@]}" exec "${service}" podman volume create --label podman-lens.conformance=volume podman-lens-native-volume
+          printf '%s' 'bounded-fixture-value' | "${host_podman[@]}" exec --interactive "${service}" podman secret create --label podman-lens.conformance=secret podman-lens-native-secret -
+          "${host_podman[@]}" exec "${service}" podman pod create --infra=false --label podman-lens.conformance=pod podman-lens-native-pod
+          "${host_podman[@]}" exec "${service}" podman create --name podman-lens-native-container --label podman-lens.conformance=container --network podman-lens-native-network --volume podman-lens-native-volume:/bounded:Z "${image}"
+          "${host_podman[@]}" exec "${service}" touch /podman-lens/start-api
           socket="${PODMAN_LENS_CONFORMANCE_UNIX_SOCKET}"
-          for _ in {1..30}; do
-            [[ -S "${socket}" ]] && break
-            sleep 1
-          done
-          [[ -S "${socket}" ]]
-          # Transfer only the run-scoped socket after the serialized CLI setup has completed.
-          sudo chmod 0600 "${socket}"
-          sudo chown "$(id --user):$(id --group)" "${socket}"
-      - name: Run exact-candidate read-only Libpod acquisition conformance
+          for _ in {1..30}; do [[ -S "${socket}" ]] && break; sleep 1; done
+          [[ -S "${socket}" ]] || { echo 'Native service did not create its run-scoped socket.' >&2; exit 1; }
+          sudo chmod 0600 "${socket}"; sudo chown "$(id --user):$(id --group)" "${socket}"
+      - name: Run exact-candidate read-only acquisition conformance
         id: conformance
         continue-on-error: true
         shell: bash
         run: |
           set -Eeuo pipefail
-          timeout --signal=TERM --kill-after=30s 10m \
-            cargo test --locked --test current_patch_conformance --test native_service_conformance -- --ignored
+          timeout --signal=TERM --kill-after=30s 10m cargo test --locked --test current_patch_conformance --test native_service_conformance -- --ignored
       - name: Record current-run native evidence
         id: evidence
         if: always()
@@ -154,23 +133,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           artifact="podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}"
-          image="${{ matrix.image }}"
-          tag="${image%%@*}"
-          expected_version="${tag##*:v}"
+          image='${{ matrix.image }}'; tag="${image%%@*}"; expected_version="${tag##*:v}"
           [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          jq --null-input \
-            --arg candidate "${GITHUB_SHA}" \
-            --arg run_id "${GITHUB_RUN_ID}" \
-            --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
-            --arg task native-api \
-            --arg cell "${{ matrix.id }}" \
-            --arg root_mode "${{ matrix.root_mode }}" \
-            --arg expected_version "${expected_version}" \
-            --arg image "${image}" \
-            --arg outcome "${{ steps.conformance.outcome }}" \
-            --arg socket_scope "isolated-disposable-service" \
-            '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task, cell: $cell, root_mode: $root_mode, expected_version: $expected_version, image: $image, outcome: $outcome, socket_scope: $socket_scope}' \
-            > "${RUNNER_TEMP}/native-podman-evidence.json"
+          jq --null-input --arg candidate "${GITHUB_SHA}" --arg run_id "${GITHUB_RUN_ID}" --arg run_attempt "${GITHUB_RUN_ATTEMPT}" --arg task native-api --arg cell "${{ matrix.id }}" --arg root_mode "${{ matrix.root_mode }}" --arg expected_version "${expected_version}" --arg image "${image}" --arg outcome "${{ steps.conformance.outcome }}" --arg socket_scope isolated-disposable-service '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task, cell: $cell, root_mode: $root_mode, expected_version: $expected_version, image: $image, outcome: $outcome, socket_scope: $socket_scope}' > "${RUNNER_TEMP}/native-podman-evidence.json"
           printf 'candidate=%s\nartifact=%s\n' "${GITHUB_SHA}" "${artifact}" >> "${GITHUB_OUTPUT}"
       - name: Upload bounded native evidence
         if: always()
@@ -185,7 +150,14 @@ jobs:
         if: always() && steps.conformance.outcome != 'success'
         shell: bash
         run: exit 1
-      - name: Remove the disposable native service
+      - name: Remove disposable native service, image, and state
         if: always()
         shell: bash
-        run: docker rm --force --volumes "${PODMAN_LENS_NATIVE_SERVICE:-podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}"
+        run: |
+          set -Eeuo pipefail
+          state_directory="${PODMAN_LENS_NATIVE_STATE_DIRECTORY:-${RUNNER_TEMP}/podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}"
+          containers_conf="${PODMAN_LENS_NATIVE_CONTAINERS_CONF:-${state_directory}/containers.conf}"
+          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${PODMAN_LENS_NATIVE_ROOT_DIRECTORY:-${state_directory}/root}" --runroot "${PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY:-${state_directory}/runroot}" --tmpdir "${PODMAN_LENS_NATIVE_TMP_DIRECTORY:-${state_directory}/tmp}")
+          "${host_podman[@]}" rm --force --volumes "${PODMAN_LENS_NATIVE_SERVICE:-podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}}" || true
+          "${host_podman[@]}" image rm --force '${{ matrix.image }}' || true
+          sudo rm --recursive --force "${state_directory}"

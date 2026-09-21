@@ -534,33 +534,70 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
     Ok(())
 }
 
-fn assert_outer_privilege_inner_rootless_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
-    let privileged = native
-        .find("          runtime_args=(--privileged)\n")
-        .ok_or_else(|| policy_error("trusted outer Docker privilege boundary is missing"))?;
-    let rootless_args = native
-        .split_once("          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then\n            runtime_args+=(\n")
-        .and_then(|(_, rest)| rest.split_once("            )\n          fi"))
-        .map(|(arguments, _)| arguments)
-        .ok_or_else(|| policy_error("rootless Docker argument boundary is missing"))?;
+fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
     for required in [
-        "--device /dev/fuse",
-        "--security-opt label=disable",
-        "--security-opt apparmor=unconfined",
-        "--security-opt seccomp=unconfined",
+        "Install isolated host Podman launcher",
+        "sudo apt-get install --yes --no-install-recommends podman",
+        "CONTAINERS_CONF_OVERRIDE",
+        "lock_type = \"file\"",
+        "host_podman=(sudo env \"CONTAINERS_CONF_OVERRIDE=${containers_conf}\" podman --root",
+        "--runroot",
+        "--tmpdir",
+        "install -d -m 0770 \"${socket_directory}\"",
+        "sudo chown \"${service_uid}:$(id --group)\" \"${socket_directory}\"",
+        "runtime_args=(--device /dev/fuse --security-opt label=disable)",
+        "runtime_args+=(--privileged)",
+        "runtime_args+=(--security-opt apparmor=unconfined)",
+        "--volume \"${socket_directory}:/podman-lens:Z\"",
+        "podman info --format '{{.Host.Security.Rootless}}'",
+        "sudo chmod 0600 \"${socket}\"",
+        "sudo chown \"$(id --user):$(id --group)\" \"${socket}\"",
+        "image rm --force",
+        "sudo rm --recursive --force",
     ] {
         assert!(
-            rootless_args.contains(required),
-            "rootless Docker arguments are missing {required}"
+            native.contains(required),
+            "isolated host Podman workflow is missing {required}"
         );
     }
-    let rootless_condition = native
-        .find("          if [[ '${{ matrix.root_mode }}' == 'rootless' ]]; then\n")
-        .ok_or_else(|| policy_error("rootless Docker condition is missing"))?;
     assert!(
-        privileged < rootless_condition,
-        "the trusted outer privilege boundary must apply before rootless-specific arguments"
+        !native.contains("docker exec"),
+        "native service must not use an outer Docker launcher"
     );
+    assert!(
+        !native.contains("docker rm"),
+        "native cleanup must not use an outer Docker launcher"
+    );
+    for forbidden in ["docker pull", "docker run"] {
+        assert!(
+            !native.contains(forbidden),
+            "native service must not retain an outer Docker command: {forbidden}"
+        );
+    }
+    let rootless = native
+        .split_once("else\n            runtime_args+=(--security-opt apparmor=unconfined)")
+        .map(|(_, after)| after)
+        .ok_or_else(|| policy_error("rootless host-Podman argument boundary missing"))?;
+    assert!(
+        !rootless.contains("runtime_args+=(--privileged)"),
+        "rootless service must not be privileged"
+    );
+    for forbidden in [
+        "seccomp=unconfined",
+        "secrets.",
+        "/run/podman/podman.sock",
+        "/var/run/docker.sock",
+    ] {
+        assert!(
+            !native.contains(forbidden),
+            "isolated native service retains forbidden outer state: {forbidden}"
+        );
+    }
+    assert_native_identity_and_failure_evidence(native)?;
+    Ok(())
+}
+
+fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
     let rootless_cell = native
         .split_once("          - id: podman-6.1-rootless\n")
         .and_then(|(_, rest)| rest.split_once("    steps:\n"))
@@ -578,7 +615,7 @@ fn assert_outer_privilege_inner_rootless_and_failure_evidence(native: &str) -> R
         );
     }
     for required in [
-        "actual_service_uid=\"$(docker exec \"${service_name}\" id -u)\"",
+        "actual_service_uid=\"$(\"${host_podman[@]}\" exec \"${service_name}\" id -u)\"",
         "[[ \"${actual_service_uid}\" == \"${service_uid}\" ]]",
         "podman info --format '{{.Host.Security.Rootless}}'",
         "[[ \"${actual_root_mode}\" == '${{ matrix.root_mode }}' ]]",
@@ -588,18 +625,13 @@ fn assert_outer_privilege_inner_rootless_and_failure_evidence(native: &str) -> R
             "inner rootless identity verification is missing {required}"
         );
     }
-    assert!(
-        !native.contains("secrets."),
-        "native privileged boundary must not receive repository secrets"
-    );
-
     let evidence = native
         .split_once("      - name: Record current-run native evidence\n")
         .and_then(|(_, rest)| rest.split_once("      - name: Upload bounded native evidence\n"))
         .map(|(evidence, _)| evidence)
         .ok_or_else(|| policy_error("native evidence step boundary is missing"))?;
     for required in [
-        "image=\"${{ matrix.image }}\"",
+        "image='${{ matrix.image }}'",
         "expected_version=\"${tag##*:v}\"",
         "--arg expected_version \"${expected_version}\"",
         "--arg image \"${image}\"",
@@ -630,16 +662,15 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
         "overwrite: true",
         "steps.conformance.outcome != 'success'",
-        "runtime_args=(--privileged)",
+        "runtime_args+=(--privileged)",
         "service_uid: 0",
         "service_uid: 1000",
         "--device /dev/fuse",
         "--security-opt label=disable",
         "--security-opt apparmor=unconfined",
-        "--security-opt seccomp=unconfined",
         "while ! test -e /podman-lens/start-api",
-        "docker exec \"${service}\" touch /podman-lens/start-api",
-        "docker rm --force --volumes",
+        "host_podman[@]}\" exec \"${service}\" touch /podman-lens/start-api",
+        "Remove disposable native service, image, and state",
         "actions/upload-artifact@",
         "datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful",
     ] {
@@ -652,13 +683,13 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
         .find("podman secret create")
         .ok_or_else(|| policy_error("native resources must be provisioned"))?;
     let start_api = native
-        .find("docker exec \"${service}\" touch /podman-lens/start-api")
+        .find("host_podman[@]}\" exec \"${service}\" touch /podman-lens/start-api")
         .ok_or_else(|| policy_error("native API start handshake must be explicit"))?;
     assert!(
         provision < start_api,
         "nested CLI provisioning must finish before the API service starts"
     );
-    assert_outer_privilege_inner_rootless_and_failure_evidence(&native)?;
+    assert_isolated_host_podman_inner_rootless_and_failure_evidence(&native)?;
     let images = native
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("image: "))

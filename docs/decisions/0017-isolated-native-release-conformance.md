@@ -23,13 +23,17 @@ Before the production read-only acquisition test, the worker provisions a bounde
 container, pod, network, volume, image, and secret-metadata set in that disposable service. The
 worker uploads a compact evidence JSON whose stable artifact name includes candidate SHA, run
 ID, run attempt, and task. Release selects and validates that exact attempt, so a retry cannot
-reuse stale earlier-attempt evidence. Both cells use a privileged disposable outer Docker boundary
-because the hosted Docker runtime otherwise denies nested Podman re-execution. That outer privilege
-is limited to exact digest-pinned images from the trusted current default branch, receives no
-repository secrets, and is removed after the cell. It does not determine inner Podman identity. The
-rootless image must still start as reviewed UID 1000 and `Host.Security.Rootless` must report
-`true`; the rootful image must start as UID 0 and report `false`. The rootless cell retains the
-reviewed FUSE and SELinux/AppArmor/seccomp arguments required by the image contract.
+reuse stale earlier-attempt evidence. Both cells use a rootful host-Podman launcher with isolated
+root, runroot, temporary, file-lock, and socket state. Common service arguments provide FUSE and
+disable SELinux relabeling. The rootful image alone uses a privileged outer container; the reviewed
+source-built rootless image stays unprivileged and adds only the AppArmor exception required by its
+canonical image contract. The rootless image must start as reviewed UID 1000 and
+`Host.Security.Rootless` must report `true`; the rootful image must start as UID 0 and report
+`false`. The launcher receives no repository secrets or ambient Podman socket, mounts only the
+run-scoped socket directory, and removes its service, image, and state after the cell.
+The outer launcher is installed from the `ubuntu-24.04` runner's package repository and is
+intentionally not a conformance-version input. Renovate continues to own the immutable inner image
+versions and digests that define the tested Podman identities.
 Failure evidence derives the reviewed version from the immutable matrix image rather than
 successful-service environment, so a setup failure still uploads bounded
 candidate/run/attempt/cell evidence. Resource provisioning finishes before the API service starts,

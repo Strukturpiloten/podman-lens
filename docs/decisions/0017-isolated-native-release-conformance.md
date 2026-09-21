@@ -20,10 +20,13 @@ BoxFerry `podman-6.1-rootful` and `podman-6.1-rootless` images at immutable mani
 Renovate owns each version-and-digest pair as one replacement.
 
 Before the production read-only acquisition test, the worker provisions a bounded sanitized
-container, pod, network, volume, image, and secret-metadata set in that disposable service. The
-worker uploads a compact evidence JSON whose stable artifact name includes candidate SHA, run
-ID, run attempt, and task. Release selects and validates that exact attempt, so a retry cannot
-reuse stale earlier-attempt evidence. Both cells use a rootful host-Podman launcher with isolated
+container, pod, network, volume, image, and secret-metadata set in that disposable service.
+Identity checks and every inner Podman provisioning command run beneath the outer container's
+initial OCI process. Host-side `podman exec` is forbidden: GitHub-hosted runners can deny the
+re-exec required by rootless Podman even when the same operation succeeds from that initial
+process. The worker uploads a compact evidence JSON whose stable artifact name includes candidate
+SHA, run ID, run attempt, and task. Release selects and validates that exact attempt, so a retry
+cannot reuse stale earlier-attempt evidence. Both cells use a rootful host-Podman launcher with isolated
 root, runroot, temporary, file-lock, and socket state. Common service arguments provide FUSE and
 disable SELinux relabeling. The rootful image alone uses a privileged outer container; the reviewed
 source-built rootless image stays unprivileged and adds only the AppArmor exception required by its
@@ -39,9 +42,14 @@ intentionally not a conformance-version input. Renovate continues to own the imm
 versions and digests that define the tested Podman identities.
 Failure evidence derives the reviewed version from the immutable matrix image rather than
 successful-service environment, so a setup failure still uploads bounded
-candidate/run/attempt/cell evidence. Resource provisioning finishes before the API service starts,
-avoiding concurrent CLI/API access to nested Podman storage; the socket is then handed off to the
-runner.
+candidate/run/attempt/cell evidence. The initial process atomically publishes only bounded setup
+status, service UID, and root-mode files in the run-scoped socket directory. The host uses a
+five-minute polling deadline while also checking container liveness, then requires regular
+non-symlink files with one line, strict byte bounds, and allowlisted values. Only after successful
+validation does the host create a directory start gate. The initial process waits for that gate and
+replaces itself with `podman system service`; socket readiness is separately bounded to 30 seconds and rejects a
+symlink. This ordering keeps CLI provisioning and API access from using nested Podman storage
+concurrently.
 Release requires
 the worker result to be successful before the sole publication-permission job is eligible; failure,
 timeout, cancellation, missing evidence, or a skipped worker is fail-closed. `validation_only`

@@ -1246,6 +1246,7 @@ fn verify_shared_policy_manager(renovate: &Value) -> Result<(), std::io::Error> 
         guard_manager["managerFilePatterns"],
         serde_json::json!([r"/^\.github/workflows/.*\.ya?ml$/"])
     );
+    assert_eq!(guard_manager["datasourceTemplate"], "github-digest");
     assert!(guard_manager["matchStrings"][0].as_str().is_some_and(|pattern| {
         pattern.contains("datasource=github-digest")
             && pattern.contains("currentValue>main")

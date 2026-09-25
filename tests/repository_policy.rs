@@ -1375,19 +1375,20 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let config = fs::read_to_string(root.join(".codex/config.toml"))?;
     for required in [
-        "model = \"gpt-5.6-sol\"",
+        "# Workspace defaults; keep primary-session overrides aligned with Astra/xhigh.",
+        "model = \"gpt-6-astra\"",
         "model_reasoning_effort = \"xhigh\"",
-        "max_concurrent_threads_per_session = 3",
-        "default_subagent_model = \"gpt-5.6-terra\"",
+        "max_concurrent_threads_per_session = 9",
+        "default_subagent_model = \"gpt-6-sol\"",
         "default_subagent_reasoning_effort = \"medium\"",
     ] {
         assert!(config.contains(required), "missing agent default: {required}");
     }
     for (role, model, effort, sandbox) in [
-        ("implementation-worker", "gpt-5.6-terra", "high", "workspace-write"),
-        ("specification-researcher", "gpt-5.6-terra", "high", "read-only"),
-        ("reviewer", "gpt-5.6-sol", "high", "read-only"),
-        ("verifier", "gpt-5.6-terra", "medium", "workspace-write"),
+        ("implementation-worker", "gpt-6-sol", "high", "workspace-write"),
+        ("specification-researcher", "gpt-6-sol", "high", "read-only"),
+        ("reviewer", "gpt-6-sol", "high", "read-only"),
+        ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
         let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
         for (key, value) in [
@@ -1407,8 +1408,68 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = fs::read_to_string(root.join(".codex/agents/verifier.toml"))?;
     assert!(verifier.contains("./scripts/check-all.sh --check"));
     assert!(verifier.contains("never run the default formatting gate"));
+    assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6-sol agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
-    assert!(!instructions.contains("Sol") && !instructions.contains("Terra") && !instructions.contains("Astra"));
+    assert!(instructions.contains("`gpt-6-astra` with `xhigh` reasoning"));
+    assert!(instructions.contains("`gpt-6-sol` with `high` reasoning"));
+    assert!(instructions.contains("`gpt-6-luna` with"));
+    assert!(instructions.contains("up to nine concurrent subagents plus the primary manager"));
+    assert!(instructions.contains("at most one complete gate or heavy runtime suite"));
+    let testing = fs::read_to_string(root.join("docs/testing.md"))?;
+    assert!(testing.contains("Keep any explicit primary-session override aligned with Astra/xhigh."));
+    assert!(testing.contains("merges covered by the standing authorization"));
+    Ok(())
+}
+
+#[test]
+fn standing_github_authorization_stays_scoped_and_guarded() -> Result<(), Box<dyn std::error::Error>> {
+    let instructions = fs::read_to_string("AGENTS.md")?;
+    let (_, authorization) = instructions
+        .split_once("## Workspace scope and standing GitHub authorization")
+        .ok_or("missing standing authorization section")?;
+    let (authorization, _) = authorization
+        .split_once("## Agent roles and verification")
+        .ok_or("missing agent roles section")?;
+    let repositories = authorization
+        .lines()
+        .filter(|line| line.starts_with("- "))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        repositories,
+        [
+            "- `Strukturpiloten/boxferry`",
+            "- `Strukturpiloten/compose-lens`",
+            "- `Strukturpiloten/podman-lens`",
+            "- `Strukturpiloten/quadlet-lens`",
+            "- `Strukturpiloten/boxferry-website`",
+            "- `Strukturpiloten/docker-lens`",
+        ]
+    );
+
+    let policy = authorization.split_whitespace().collect::<Vec<_>>().join(" ");
+    for required in [
+        "Do not work on or modify any repository outside this explicit allowlist",
+        "A newly discovered checkout is not implicitly in scope",
+        "For user-requested work within this scope",
+        "merge verified task-related pull requests without asking for renewed approval",
+        "does not authorize unrelated backlog work",
+        "discussion-only proposals",
+        "expansion of the requested product scope",
+        "A later user instruction may narrow or revoke this permission",
+        "read back the exact head commit",
+        "ready, mergeable, independently reviewed",
+        "every required check successful",
+        "exact-head safeguard",
+        "never bypass branch protection or use an administrator override",
+        "does not authorize releases, publication, deployment operations",
+        "merging release/publication/deployment pull requests",
+        "Subagents remain within their assigned task and checkout and must not perform those writes",
+    ] {
+        assert!(policy.contains(required), "missing authorization boundary: {required}");
+    }
+    assert!(!instructions.contains("does not authorize a merge"));
+    assert!(!instructions.contains("Merge only when the user explicitly authorizes"));
+    assert!(!instructions.contains("default stopping point"));
     Ok(())
 }
 

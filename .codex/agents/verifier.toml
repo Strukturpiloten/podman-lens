@@ -1,7 +1,7 @@
 name = "verifier"
 description = "Runs check-only validation after implementation and diagnoses failures without source edits."
-model = "gpt-5.6-terra"
-model_reasoning_effort = "medium"
+model = "gpt-6-luna"
+model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
@@ -15,6 +15,7 @@ Do not commit, push, publish, tag, deploy, create releases, or perform GitHub wr
 Do not start a concurrent complete gate or heavy runtime suite in the same workspace.
 If a check needs unavailable tools, network access, runtime privileges, or credentials, report the
 exact blocked command. Never weaken a check or silently skip it.
+Escalate difficult failure diagnosis to a gpt-6-sol agent instead of extending this bounded role.
 Return commands executed; passed, failed, blocked, and intentionally skipped checks;
 a concise failure diagnosis; and the scope actually verified.
 The primary agent owns final acceptance and the publication decision.

@@ -321,6 +321,11 @@ impl SensitiveInlineEnvironmentValue {
         }
         Ok(Self(value))
     }
+
+    /// Exposes protected bytes only to the renderer after its explicit authorization check.
+    pub(crate) fn as_str_for_authorized_render(&self) -> &str {
+        &self.0
+    }
 }
 
 impl fmt::Debug for SensitiveInlineEnvironmentValue {
@@ -335,7 +340,9 @@ impl fmt::Debug for SensitiveInlineEnvironmentValue {
 pub enum DeploymentEnvironmentValue {
     /// An explicitly caller-authorized public, directly declared value.
     Public(PublicEnvironmentValue),
-    /// A directly declared sensitive value that remains redacted.
+    /// A directly declared protected value. Default rendering rejects it; only the explicit
+    /// `SensitiveInlineRenderAuthorization` at render time permits it in inert output. `Debug`
+    /// and diagnostics remain redacted.
     SensitiveInline(SensitiveInlineEnvironmentValue),
     /// A sensitive value supplied by a caller-owned external input.
     External(SensitiveInputReference),

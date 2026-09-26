@@ -1,10 +1,12 @@
 //! Version-aware, transport-neutral deployment-plan rendering.
 //!
 //! This M6-A boundary turns validated M5 semantics into reviewable CLI and Libpod request
-//! descriptions. It never opens a connection, sends a request, or serializes secret material.
+//! descriptions. It never opens a connection or sends a request. Protected inline environment
+//! values enter inert output only with a separate render-time authorization.
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
+    fmt,
     fmt::Write as _,
 };
 
@@ -605,12 +607,24 @@ impl RenderingFinding {
     }
 }
 
-/// A deterministic Podman CLI invocation represented without shell quoting.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A deterministic Podman CLI invocation represented without shell quoting. Its argument bytes
+/// may contain explicitly authorized protected values; `Debug` omits them.
+#[derive(Clone, Eq, PartialEq)]
 pub struct CliInvocation {
     program: &'static str,
     argv: Vec<String>,
     external_input: Option<SensitiveInputReference>,
+}
+
+impl fmt::Debug for CliInvocation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CliInvocation")
+            .field("program", &self.program)
+            .field("argv", &"[redacted]")
+            .field("external_input_required", &self.external_input.is_some())
+            .finish()
+    }
 }
 
 impl CliInvocation {
@@ -628,7 +642,8 @@ impl CliInvocation {
         self.program
     }
 
-    /// Returns command arguments without shell quoting or interpolation.
+    /// Returns command arguments without shell quoting or interpolation. Treat these bytes as
+    /// sensitive when protected inline rendering was authorized.
     #[must_use]
     pub fn argv(&self) -> &[String] {
         &self.argv
@@ -650,15 +665,26 @@ pub enum RenderedHttpMethod {
     Post,
 }
 
-/// A Libpod request body that is either safe JSON, absent, or deferred sensitive bytes.
-#[derive(Clone, Debug, PartialEq)]
+/// A Libpod request body that is either rendered JSON, absent, or deferred sensitive bytes.
+/// Rendered JSON may contain explicitly authorized protected inline values; `Debug` omits it.
+#[derive(Clone, PartialEq)]
 pub enum RenderedHttpBody {
     /// No HTTP body is required.
     Empty,
-    /// A deterministic typed JSON body.
+    /// A deterministic typed JSON body, potentially containing authorized protected values.
     Json(Value),
     /// The caller must supply raw sensitive material; the reference is never serialized.
     ExternalSensitiveInput(SensitiveInputReference),
+}
+
+impl fmt::Debug for RenderedHttpBody {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => formatter.write_str("Empty"),
+            Self::Json(_) => formatter.write_str("Json([redacted])"),
+            Self::ExternalSensitiveInput(_) => formatter.write_str("ExternalSensitiveInput([redacted])"),
+        }
+    }
 }
 
 /// A deterministic, non-executable Libpod request description.
@@ -690,7 +716,8 @@ impl LibpodInvocation {
         &self.path_and_query
     }
 
-    /// Returns the safe JSON, no body, or external sensitive-input requirement.
+    /// Returns the rendered JSON, no body, or external sensitive-input requirement.
+    /// Treat JSON bytes as sensitive when protected inline rendering was authorized.
     #[must_use]
     pub fn body(&self) -> &RenderedHttpBody {
         &self.body
@@ -736,6 +763,7 @@ impl RenderedOperation {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeploymentRendering {
     status: RenderStatus,
+    contains_protected_inline_environment: bool,
     connection: Option<DeploymentConnectionReference>,
     external_preconditions: Vec<ExternalPrecondition>,
     operations: Vec<RenderedOperation>,
@@ -746,6 +774,13 @@ impl DeploymentRendering {
     #[must_use]
     pub const fn status(&self) -> RenderStatus {
         self.status
+    }
+
+    /// Reports whether this complete inert rendering includes protected inline environment
+    /// values. The flag is derived from values actually rendered, not from a grant alone.
+    #[must_use]
+    pub const fn contains_protected_inline_environment(&self) -> bool {
+        self.contains_protected_inline_environment
     }
 
     /// Returns the caller-selected non-sensitive output connection reference, when present.
@@ -775,6 +810,7 @@ impl DeploymentRendering {
     /// expansion, or `eval`; it contains only the displayed Podman invocations. Each deferred
     /// secret requires a caller-provided regular file path in deterministic
     /// `PODMAN_LENS_SECRET_INPUT_<n>` order.
+    /// The script can contain explicitly authorized protected environment values.
     #[must_use]
     pub fn shell_script(&self) -> String {
         let mut script =
@@ -841,6 +877,32 @@ impl RenderingOutcome {
     }
 }
 
+/// Explicit permission to place caller-supplied protected inline environment values in inert
+/// Podman renderings. The grant covers every such value in one plan; it does not authorize
+/// unresolved external values, acquisition, execution, or deployment.
+///
+/// The caller must make this choice separately from constructing intent or promoting ordinary
+/// portable settings. Treat generated CLI arguments, Libpod JSON, scripts, and version 2
+/// deployment JSON as sensitive output when protected values are rendered. Version 1 artifacts
+/// refuse these renderings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SensitiveInlineRenderAuthorization(());
+
+#[allow(clippy::new_without_default)] // A default grant would silently authorize protected output.
+impl SensitiveInlineRenderAuthorization {
+    /// Explicitly authorizes protected inline environment values for one render call.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(())
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum SensitiveInlineRenderPolicy {
+    Reject,
+    Authorized,
+}
+
 /// Renders a validated semantic plan into non-executable CLI and Libpod descriptions.
 ///
 /// M6-A accepts only targets whose engine and API versions are semantically identical and exactly
@@ -848,6 +910,76 @@ impl RenderingOutcome {
 /// relation; per-field wire evidence is required before that relation can be rendered.
 #[must_use]
 pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
+    render_deployment_inner(plan, SensitiveInlineRenderPolicy::Reject)
+}
+
+/// Renders a plan after an explicit caller decision to include protected inline environment
+/// values in inert output. This does not resolve external values or execute the rendering.
+///
+/// All protected inline environment values in `plan` are included. Callers must keep resulting
+/// version 2 artifact bytes private and avoid logging them; version 1 refuses them before writing
+/// bytes. `Debug` stays redacted.
+///
+/// # Example
+///
+/// ```
+/// use podman_lens::{
+///     ContainerIntent, DeploymentEnvironmentValue, DeploymentIntent, DeploymentResource,
+///     DeploymentResourceId, EnvironmentAssignment, EnvironmentName, ExternalPrecondition,
+///     ObservedApiVersion, ObservedPodmanVersion, ResourceKind,
+///     SensitiveInlineEnvironmentValue, SensitiveInlineRenderAuthorization, TargetProfile,
+///     artifact::{deployment_v1, deployment_v2}, plan_deployment, render_deployment,
+///     render_deployment_with_authorization,
+/// };
+///
+/// let target = TargetProfile::new(
+///     ObservedPodmanVersion::parse("6.1.0")?,
+///     ObservedApiVersion::parse("6.1.0")?,
+/// )?;
+/// let image = DeploymentResourceId::new(ResourceKind::Image, "registry.example.invalid/app:1")?;
+/// let mut container = ContainerIntent::new(
+///     DeploymentResourceId::new(ResourceKind::Container, "application")?,
+///     image.clone(),
+/// )?;
+/// container.settings_mut().add_environment(EnvironmentAssignment::new(
+///     EnvironmentName::new("MODE")?,
+///     DeploymentEnvironmentValue::SensitiveInline(
+///         SensitiveInlineEnvironmentValue::new("protected-example-canary")?,
+///     ),
+/// ))?;
+/// let mut intent = DeploymentIntent::new(target);
+/// intent.add_resource(DeploymentResource::ExternalPrecondition(
+///     ExternalPrecondition::new(image)?,
+/// ));
+/// intent.add_resource(DeploymentResource::Container(container));
+/// let planned = plan_deployment(&intent);
+/// let plan = planned.plan().expect("complete semantic plan");
+/// let denied = render_deployment(plan);
+/// assert_eq!(denied.findings()[0].field(), Some("environment.sensitive_inline"));
+/// assert!(denied.rendering().is_none());
+///
+/// let authorized = render_deployment_with_authorization(
+///     plan,
+///     SensitiveInlineRenderAuthorization::new(),
+/// );
+/// let rendering = authorized.rendering().expect("authorized inert rendering");
+/// assert!(serde_json::to_string(&deployment_v1::deployment(rendering)).is_err());
+/// let artifact = deployment_v2::deployment(rendering);
+/// assert!(artifact.contains_protected_inline_environment());
+/// let artifact_bytes = serde_json::to_string(&artifact)?;
+/// assert!(artifact_bytes.contains("protected-example-canary"));
+/// assert!(!format!("{authorized:?}").contains("protected-example-canary"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[must_use]
+pub fn render_deployment_with_authorization(
+    plan: &DeploymentPlan,
+    _authorization: SensitiveInlineRenderAuthorization,
+) -> RenderingOutcome {
+    render_deployment_inner(plan, SensitiveInlineRenderPolicy::Authorized)
+}
+
+fn render_deployment_inner(plan: &DeploymentPlan, inline_policy: SensitiveInlineRenderPolicy) -> RenderingOutcome {
     let Some(version) = reviewed_renderer_target_version(plan) else {
         return RenderingOutcome {
             rendering: None,
@@ -861,6 +993,7 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
     let connection = plan.connection().map(DeploymentConnectionReference::as_str);
     let managed_image_sources = managed_image_sources(plan);
     let mut deferred = false;
+    let mut contains_protected_inline_environment = false;
     let mut operations = Vec::with_capacity(plan.operations().len());
     let mut findings = Vec::new();
     let mut blocked_resources = BTreeSet::new();
@@ -868,8 +1001,12 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
         if blocked_resources.contains(operation.id().resource()) {
             continue;
         }
-        let unsupported_fields =
-            unsupported_fields(operation.resource_intent(), &version, plan.target().execution_context());
+        let unsupported_fields = unsupported_fields(
+            operation.resource_intent(),
+            &version,
+            plan.target().execution_context(),
+            inline_policy,
+        );
         if !unsupported_fields.is_empty() {
             blocked_resources.insert(operation.id().resource().clone());
             findings.extend(unsupported_fields.into_iter().map(|field| {
@@ -885,8 +1022,18 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
             }));
             continue;
         }
-        match render_operation(operation, &version, connection, &managed_image_sources) {
+        match render_operation(operation, &version, connection, &managed_image_sources, inline_policy) {
             Ok(rendered) => {
+                if operation.id().action() == crate::SemanticOperationAction::Create {
+                    contains_protected_inline_environment |= matches!(
+                        operation.resource_intent(),
+                        DeploymentResource::Container(container)
+                            if container.settings().environment().iter().any(|assignment| matches!(
+                                assignment.value(),
+                                crate::DeploymentEnvironmentValue::SensitiveInline(_)
+                            ))
+                    );
+                }
                 deferred |= rendered.status == RenderStatus::DeferredSensitiveInput;
                 operations.push(rendered);
             }
@@ -902,6 +1049,7 @@ pub fn render_deployment(plan: &DeploymentPlan) -> RenderingOutcome {
                 } else {
                     RenderStatus::Exact
                 },
+                contains_protected_inline_environment,
                 connection: plan.connection().cloned(),
                 external_preconditions: plan.external_preconditions().to_vec(),
                 operations,
@@ -922,6 +1070,7 @@ fn render_operation(
     version: &str,
     connection: Option<&str>,
     managed_image_sources: &BTreeMap<DeploymentResourceId, String>,
+    inline_policy: SensitiveInlineRenderPolicy,
 ) -> Result<RenderedOperation, RenderingFinding> {
     let id = operation.id().resource();
     let mut prefix = connection.map_or_else(Vec::new, |value| vec!["--connection".to_owned(), value.to_owned()]);
@@ -1102,7 +1251,7 @@ fn render_operation(
                         Some("secret_grants.cli_ambiguous"),
                     ));
                 }
-                append_container_setting_arguments(&mut cli_suffix, container, id)?;
+                append_container_setting_arguments(&mut cli_suffix, container, id, inline_policy)?;
                 append_container_runtime_arguments(&mut cli_suffix, container, id, version)?;
                 let Some(body_map) = body.as_object_mut() else {
                     return Err(RenderingFinding::new(
@@ -1111,7 +1260,7 @@ fn render_operation(
                         Some("container_body"),
                     ));
                 };
-                append_container_setting_json(body_map, container, id)?;
+                append_container_setting_json(body_map, container, id, inline_policy)?;
                 append_secret_grants_json(body_map, container.secret_grants());
                 append_container_runtime_json(body_map, container, id, version)?;
                 cli_suffix.push(image.to_owned());
@@ -1768,7 +1917,7 @@ struct RejectDuplicateJsonKeysVisitor;
 impl<'de> de::Visitor<'de> for RejectDuplicateJsonKeysVisitor {
     type Value = RejectDuplicateJsonKeys;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a JSON value without duplicate object keys")
     }
 
@@ -2425,6 +2574,7 @@ fn unsupported_fields(
     resource: &DeploymentResource,
     version: &str,
     context: crate::TargetExecutionContext,
+    inline_policy: SensitiveInlineRenderPolicy,
 ) -> Vec<&'static str> {
     match resource {
         DeploymentResource::Image(image) => {
@@ -2508,12 +2658,14 @@ fn unsupported_fields(
                 fields.push("mounts.subpath_nocopy");
             }
             let settings = container.settings();
-            if settings.environment().iter().any(|assignment| {
-                matches!(
-                    assignment.value(),
-                    crate::DeploymentEnvironmentValue::SensitiveInline(_)
-                )
-            }) {
+            if inline_policy == SensitiveInlineRenderPolicy::Reject
+                && settings.environment().iter().any(|assignment| {
+                    matches!(
+                        assignment.value(),
+                        crate::DeploymentEnvironmentValue::SensitiveInline(_)
+                    )
+                })
+            {
                 fields.push("environment.sensitive_inline");
             }
             if settings
@@ -3715,10 +3867,26 @@ fn rendering_runtime_finding(identity: &DeploymentResourceId, field: &'static st
     )
 }
 
+fn authorized_environment_value(
+    value: &crate::DeploymentEnvironmentValue,
+    inline_policy: SensitiveInlineRenderPolicy,
+) -> Option<&str> {
+    match value {
+        crate::DeploymentEnvironmentValue::Public(value) => Some(value.as_str()),
+        crate::DeploymentEnvironmentValue::SensitiveInline(value)
+            if inline_policy == SensitiveInlineRenderPolicy::Authorized =>
+        {
+            Some(value.as_str_for_authorized_render())
+        }
+        crate::DeploymentEnvironmentValue::SensitiveInline(_) | crate::DeploymentEnvironmentValue::External(_) => None,
+    }
+}
+
 fn append_container_setting_arguments(
     arguments: &mut Vec<String>,
     container: &crate::ContainerIntent,
     identity: &DeploymentResourceId,
+    inline_policy: SensitiveInlineRenderPolicy,
 ) -> Result<(), RenderingFinding> {
     let settings = container.settings();
     if let Some(entrypoint) = settings.entrypoint() {
@@ -3749,7 +3917,7 @@ fn append_container_setting_arguments(
         arguments.push(format!("{}={}", label.key().as_str(), label.value().as_str()));
     }
     for assignment in settings.environment() {
-        let crate::DeploymentEnvironmentValue::Public(value) = assignment.value() else {
+        let Some(value) = authorized_environment_value(assignment.value(), inline_policy) else {
             return Err(RenderingFinding::new(
                 DiagnosticCode::RenderingUnsupported,
                 Some(identity.clone()),
@@ -3757,7 +3925,7 @@ fn append_container_setting_arguments(
             ));
         };
         arguments.push("--env".to_owned());
-        arguments.push(format!("{}={}", assignment.name().as_str(), value.as_str()));
+        arguments.push(format!("{}={value}", assignment.name().as_str()));
     }
     if let Some(restart) = settings.restart_policy() {
         arguments.push("--restart".to_owned());
@@ -3770,6 +3938,7 @@ fn append_container_setting_json(
     body: &mut Map<String, Value>,
     container: &crate::ContainerIntent,
     identity: &DeploymentResourceId,
+    inline_policy: SensitiveInlineRenderPolicy,
 ) -> Result<(), RenderingFinding> {
     let settings = container.settings();
     if let Some(command) = settings.command() {
@@ -3807,17 +3976,14 @@ fn append_container_setting_json(
     if !settings.environment().is_empty() {
         let mut environment = Map::new();
         for assignment in settings.environment() {
-            let crate::DeploymentEnvironmentValue::Public(value) = assignment.value() else {
+            let Some(value) = authorized_environment_value(assignment.value(), inline_policy) else {
                 return Err(RenderingFinding::new(
                     DiagnosticCode::RenderingUnsupported,
                     Some(identity.clone()),
                     Some("environment"),
                 ));
             };
-            environment.insert(
-                assignment.name().as_str().to_owned(),
-                Value::String(value.as_str().to_owned()),
-            );
+            environment.insert(assignment.name().as_str().to_owned(), Value::String(value.to_owned()));
         }
         body.insert("env".to_owned(), Value::Object(environment));
     }

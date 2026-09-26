@@ -143,12 +143,17 @@ the relevant catalogue, boundary tests, and guide in one change.
 
 Secret payload endpoints are never requested. Environment values, protected health commands,
 credentials, connection details, raw unknown JSON, and secret driver options are excluded from
-diagnostics, debug output, snapshots, and deployment artifacts unless a public output value is
-explicitly constructed by the caller.
+diagnostics, debug output, and snapshots. The ordinary renderer excludes protected inline values
+from deployment artifacts. A separate render-time authorization can place caller-declared protected
+inline environment values in inert output; unresolved external values still block rendering. Those
+v2 artifact bytes carry an explicit protected-value indicator and require sensitive handling when
+it is true; v1 refuses such output before serialization writes bytes. `Debug` remains redacted.
 
 `snapshot::v1` is an always-redacted observational export. It is still operational data because
-resource names, identifiers, and evidence paths may remain. `artifact::deployment_v1` represents
-caller-authorized desired output and never accepts an observational snapshot as input.
+resource names, identifiers, and evidence paths may remain. `artifact::deployment_v1` preserves
+the original public-only desired-output contract. `artifact::deployment_v2` permits authorized
+protected inline environment values with an explicit consumer-visible indicator. Neither accepts
+an observational snapshot as input.
 
 ## Decisions
 

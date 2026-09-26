@@ -18,8 +18,8 @@ authorization, output publication, and any later execution decision.
   shared prerequisites, and authorized network crossings.
 - [Plan and render](planning-rendering/): turn caller-authored target intent into an ordered
   semantic plan, CLI and Libpod descriptions, deployment JSON, and a review script.
-- [Handle diagnostics and privacy](diagnostics-privacy/): preserve structured findings and keep
-  runtime-sensitive data out of diagnostics, snapshots, and deployment artifacts.
+- [Handle diagnostics and privacy](diagnostics-privacy/): preserve structured findings, keep
+  observation exports redacted, and authorize protected target values only at rendering.
 - [Select a compatible version](compatibility/): use the finite reviewed Podman catalogue and an
   explicit target execution context.
 

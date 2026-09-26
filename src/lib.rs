@@ -151,7 +151,8 @@ pub use probe::{MAX_PROBE_JSON_BYTES, ServiceObservation, probe_libpod_service};
 pub use read_only_unix_transport::{MIN_HTTP1_HEADER_BYTES, ReadOnlyUnixTransport, ReadOnlyUnixTransportTimeouts};
 pub use render::{
     CliInvocation, DeploymentRendering, LibpodInvocation, RenderStatus, RenderedHttpBody, RenderedHttpMethod,
-    RenderedOperation, RenderingFinding, RenderingOutcome, render_deployment,
+    RenderedOperation, RenderingFinding, RenderingOutcome, SensitiveInlineRenderAuthorization, render_deployment,
+    render_deployment_with_authorization,
 };
 pub use runtime::{
     ConfiguredHealthCheck, ContainerNamespaceSettings, ContainerResourceControls, ContainerRuntimeSettings,

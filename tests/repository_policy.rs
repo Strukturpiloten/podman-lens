@@ -20,6 +20,7 @@ fn published_package_includes_the_public_contract_and_governance_documents() -> 
         "/docs/**",
         "/docs/schemas/podman-lens-snapshot-v1.schema.json",
         "/docs/schemas/podman-lens-deployment-v1.schema.json",
+        "/docs/schemas/podman-lens-deployment-v2.schema.json",
         "/examples/**",
         "/catalogue/v1/podman-deployment-rendering.json",
         "/catalogue/v1/native-field-coverage.json",
@@ -178,6 +179,7 @@ fn deployment_renderer_evidence_schema_and_exact_goldens_exist() {
     for file in [
         "catalogue/v1/podman-deployment-rendering.json",
         "docs/schemas/podman-lens-deployment-v1.schema.json",
+        "docs/schemas/podman-lens-deployment-v2.schema.json",
         "fixtures/deployment/deployment-plan-v1.json",
         "fixtures/deployment/deployment.sh",
     ] {

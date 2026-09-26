@@ -20,8 +20,10 @@ Snapshots are always redacted, even when acquisition retained environment values
 exclude environment values, secret payloads, connection details, raw unknown JSON, label values,
 driver-option values, and Compose ownership values. They retain safe structural and evidence data
 needed to diagnose acquisition and grouping decisions. Deployment rendering is a distinct output
-contract in `artifact::deployment_v1`, not a snapshot. It may contain only explicitly
-caller-authorized public declared values and never sensitive values or sensitive-input references.
+contract in `artifact::deployment_v1`, not a snapshot. Decision
+[0018](0018-explicit-protected-inline-render-authorization.md) retains v1 as public-only and
+permits protected inline environment values only in v2 after a distinct render-time grant;
+external sensitive-input references remain excluded.
 Its optional connection field is only `null` or a validated 1–64-byte ASCII Podman connection name:
 an ASCII alphanumeric first character followed only by ASCII alphanumeric characters, dots,
 underscores, or hyphens. It can never represent a URI, endpoint, socket path, credential, token,
@@ -38,7 +40,8 @@ they never describe a caller-selected deployment or migration target.
   response types.
 - Snapshot redaction is independent of acquisition policy and covered by distinctive leak tests.
 - Deployment artifacts preserve only a safe connection selector, never a connection endpoint,
-  credential detail, secret material, or sensitive-input reference.
+  credential detail, or sensitive-input reference. Protected inline environment values require
+  the separate render-time grant from decision 0018.
 - Snapshots retain resource identities, environment variable names, evidence URLs, and source
   field paths. Image aliases and network subnets are intentionally represented only by counts:
   their spellings can reveal private registry, topology, or addressing information. This

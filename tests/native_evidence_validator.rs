@@ -3,6 +3,54 @@
 use std::{fs, process::Command};
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+fn active_pin(name: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let pins = fs::read_to_string("scripts/native-runtime-pins.sh")?;
+    pins.lines()
+        .find_map(|line| line.strip_prefix(&format!("readonly {name}=")))
+        .map(str::to_owned)
+        .ok_or_else(|| format!("missing active native pin {name}").into())
+}
+
+fn invalid_evidence_cases() -> Vec<(&'static str, Value)> {
+    vec![
+        ("candidate", Value::String("b".repeat(40))),
+        ("run_id", Value::String("previous-run".into())),
+        ("run_attempt", Value::String("1".into())),
+        ("cell", Value::String("podman-6.1-rootless".into())),
+        ("root_mode", Value::String("rootless".into())),
+        ("expected_version", Value::String("6.1.0".into())),
+        ("api_version", Value::String("not-a-version".into())),
+        ("image_id", Value::String("not-an-image-id".into())),
+        ("base_image", Value::String("an-unreviewed-base".into())),
+        ("rpm_sha256", Value::String("a".repeat(64))),
+        ("source_revision", Value::String("a".repeat(40))),
+        ("source_rpm_sha256", Value::String("a".repeat(64))),
+        ("source_archive_sha256", Value::String("a".repeat(64))),
+        ("repomd_sha256", Value::String("a".repeat(64))),
+        ("primary_sha256", Value::String("a".repeat(64))),
+        ("closure_sha256", Value::String("not-a-digest".into())),
+        ("peak_state_kib", Value::String("8388609".into())),
+        ("peak_state_kib", Value::String("0".into())),
+        ("build_peak_state_kib", Value::String("0".into())),
+        ("runtime_peak_state_kib", Value::String("8388609".into())),
+        ("peak_state_kib", Value::String("1048576".into())),
+        ("packages", serde_json::json!(["unreviewed 0:1-1.x86_64"])),
+        ("build_outcome", Value::String("failure".into())),
+        ("outcome", Value::String("failure".into())),
+    ]
+}
+
+fn lowercase_hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        encoded.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
 
 #[test]
 fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,6 +60,16 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
     let candidate = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let run = "12345";
     let attempt = "2";
+    let version_tag = active_pin("PODMAN_NATIVE_VERSION")?;
+    let version = version_tag.trim_start_matches('v');
+    let base_image = active_pin("PODMAN_NATIVE_BASE_IMAGE")?;
+    let rpm_sha = active_pin("PODMAN_NATIVE_RPM_SHA256")?;
+    let source_revision = active_pin("PODMAN_NATIVE_SOURCE_REVISION")?;
+    let source_rpm_sha = active_pin("PODMAN_NATIVE_SOURCE_RPM_SHA256")?;
+    let source_archive_sha = active_pin("PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256")?;
+    let repomd_sha = active_pin("PODMAN_NATIVE_REPOMD_SHA256")?;
+    let primary_sha = active_pin("PODMAN_NATIVE_PRIMARY_SHA256")?;
+    let rpm_release = active_pin("PODMAN_NATIVE_RPM_RELEASE")?;
     let write_evidence =
         |evidence_attempt: &str, cell: &str, value: &Value| -> Result<(), Box<dyn std::error::Error>> {
             let directory = root.join(format!(
@@ -30,11 +88,20 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
         } else {
             "rootless"
         };
+        let state_key = if root_mode == "rootful" { "rf" } else { "rl" };
+        let package = format!("podman 5:{version}-{rpm_release}.x86_64");
+        let closure_sha = lowercase_hex(&Sha256::digest(format!("{package}\n").as_bytes()));
         serde_json::json!({
             "candidate": candidate, "run_id": run, "run_attempt": evidence_attempt, "task": "native-api", "cell": cell,
-            "root_mode": root_mode, "expected_version": "6.1.0",
-            "image": format!("ghcr.io/strukturpiloten/{cell}:v6.1.0@sha256:{}", "a".repeat(64)),
-            "outcome": "success", "socket_scope": "isolated-disposable-service"
+            "root_mode": root_mode, "expected_version": version, "api_version": "6.1.0",
+            "image": format!("localhost/podman-lens-native:{version_tag}-{state_key}"),
+            "image_id": format!("sha256:{}", "a".repeat(64)),
+            "base_image": base_image, "rpm_sha256": rpm_sha, "source_revision": source_revision,
+            "source_rpm_sha256": source_rpm_sha, "source_archive_sha256": source_archive_sha,
+            "repomd_sha256": repomd_sha,
+            "primary_sha256": primary_sha, "closure_sha256": closure_sha, "packages": [package],
+            "build_peak_state_kib": "1048576", "runtime_peak_state_kib": "2097152", "peak_state_kib": "2097152",
+            "build_outcome": "success", "outcome": "success", "socket_scope": "isolated-disposable-service"
         })
     };
     let validate = || -> Result<std::process::ExitStatus, std::io::Error> {
@@ -59,14 +126,7 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
         write_evidence(attempt, cell, &evidence(attempt, cell))?;
     }
     assert!(validate()?.success(), "complete current evidence must pass");
-    for (field, replacement) in [
-        ("candidate", Value::String("b".repeat(40))),
-        ("run_id", Value::String("previous-run".into())),
-        ("run_attempt", Value::String("1".into())),
-        ("cell", Value::String("podman-6.1-rootless".into())),
-        ("root_mode", Value::String("rootless".into())),
-        ("outcome", Value::String("failure".into())),
-    ] {
+    for (field, replacement) in invalid_evidence_cases() {
         let mut invalid = evidence(attempt, "podman-6.1-rootful");
         invalid[field] = replacement;
         write_evidence(attempt, "podman-6.1-rootful", &invalid)?;

@@ -2,18 +2,61 @@
 name: Native Podman conformance
 on:
   workflow_call:
+    inputs:
+      release_validation:
+        description: Release calls must explicitly request default-branch validation.
+        required: true
+        type: boolean
+      candidate_sha:
+        description: Reserved for validation-only manual dispatch.
+        required: false
+        type: string
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character head SHA of the reviewed same-repository issue branch.
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
   group: native-podman-conformance-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  native-api:
-    name: Native Libpod acquisition API (${{ matrix.id }})
+  admit-candidate:
+    name: Admit exact native candidate
     if: github.repository == 'Strukturpiloten/podman-lens'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      candidate_sha: ${{ steps.admit.outputs.candidate_sha }}
+    steps:
+      - name: Check out exact candidate without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Admit release or reviewed manual validation
+        id: admit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          NATIVE_RELEASE_VALIDATION: ${{ inputs.release_validation == true }}
+          NATIVE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          ORIGINAL_ACTOR: ${{ github.actor }}
+          RERUN_ACTOR: ${{ github.triggering_actor }}
+        run: bash scripts/admit-native-candidate.sh
+  native-api:
+    name: Native Libpod acquisition API (${{ matrix.id }})
+    needs: admit-candidate
+    if: needs.admit-candidate.result == 'success'
+    runs-on: ubuntu-24.04
+    # Pre-cleanup step maxima total 42m; 5m cleanup plus 3m job reserve remain.
+    timeout-minutes: 50
     permissions:
       contents: read
     strategy:
@@ -24,40 +67,51 @@ jobs:
             state_key: rf
             root_mode: rootful
             service_uid: 0
-            # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful
-            image: ghcr.io/strukturpiloten/podman-6.1-rootful:v6.1.0@sha256:d5c695e0e224b3296753db967bb40faf5005d770c7589c2261ad8b0b159472fa
           - id: podman-6.1-rootless
             state_key: rl
             root_mode: rootless
             service_uid: 1000
-            # renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless
-            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:5fe9b8068a8e40de1189b23434ba3e2b84ff4e3b576fe2a844e25582ad6b181e
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.admit-candidate.outputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Require trusted default-branch candidate
-        shell: bash
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          set -Eeuo pipefail
-          [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" ]] || { echo 'Native conformance is default-branch-only.' >&2; exit 1; }
-          git fetch --no-tags origin "refs/heads/${DEFAULT_BRANCH}"
-          [[ "$(git rev-parse "origin/${DEFAULT_BRANCH}")" == "${GITHUB_SHA}" ]] || { echo 'The checked-out candidate is not the current default branch.' >&2; exit 1; }
       - name: Install isolated host Podman launcher
+        timeout-minutes: 5
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends podman
-      - name: Start and provision isolated native Podman service
+      - name: Build pinned native runtime from fixed Fedora compose
+        id: runtime
+        timeout-minutes: 13
         shell: bash
+        env:
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
+          NATIVE_ROOT_MODE: ${{ matrix.root_mode }}
         run: |
           set -Eeuo pipefail
-          state_key='${{ matrix.state_key }}'
+          bash scripts/build-native-runtime-budgeted.sh "${NATIVE_STATE_KEY}" "${NATIVE_ROOT_MODE}"
+      - name: Start and provision isolated native Podman service
+        id: provision
+        timeout-minutes: 6
+        shell: bash
+        env:
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
+          NATIVE_CELL_ID: ${{ matrix.id }}
+          NATIVE_SERVICE_UID: ${{ matrix.service_uid }}
+          NATIVE_ROOT_MODE: ${{ matrix.root_mode }}
+          NATIVE_IMAGE: ${{ steps.runtime.outputs.image }}
+          NATIVE_FIXTURE_IMAGE: ${{ steps.runtime.outputs.base_image }}
+          NATIVE_EXPECTED_VERSION: ${{ steps.runtime.outputs.expected_version }}
+        run: |
+          set -Eeuo pipefail
+          provision_native() {
+          state_key="${NATIVE_STATE_KEY}"
           [[ "${state_key}" =~ ^(rf|rl)$ ]]
           [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ ]]
           [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
@@ -68,10 +122,11 @@ jobs:
           tmp_directory="${state_directory}/tmp"
           containers_conf="${state_directory}/containers.conf"
           socket="${socket_directory}/podman.sock"
-          service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
-          image='${{ matrix.image }}'
-          service_uid='${{ matrix.service_uid }}'
-          root_mode="${{ matrix.root_mode }}"
+          service_name="podman-lens-native-${GITHUB_RUN_ID}-${NATIVE_CELL_ID}"
+          image="${NATIVE_IMAGE}"
+          fixture_image="${NATIVE_FIXTURE_IMAGE}"
+          service_uid="${NATIVE_SERVICE_UID}"
+          root_mode="${NATIVE_ROOT_MODE}"
           [[ "${service_uid}" =~ ^[0-9]+$ ]]
           [[ "${root_mode}" =~ ^(rootful|rootless)$ ]]
           [[ "${#runroot_directory}" -le 50 ]] || { echo 'Podman runroot exceeds its 50-character limit.' >&2; exit 1; }
@@ -80,7 +135,17 @@ jobs:
           sudo chown "${service_uid}:$(id --group)" "${socket_directory}"
           printf '[engine]\nlock_type = "file"\n' > "${containers_conf}"
           host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${root_directory}" --runroot "${runroot_directory}" --tmpdir "${tmp_directory}")
-          "${host_podman[@]}" pull --quiet "${image}"
+          [[ "${NATIVE_EXPECTED_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${image}" == "localhost/podman-lens-native:v${NATIVE_EXPECTED_VERSION}-${state_key}" ]]
+          source scripts/native-runtime-pins.sh
+          [[ "${fixture_image}" == "${PODMAN_NATIVE_BASE_IMAGE}" ]]
+          preflight_script=''
+          if [[ "${root_mode}" == rootless ]]; then
+            [[ -f scripts/native-rootless-preflight.sh && ! -L scripts/native-rootless-preflight.sh ]]
+            [[ "$(stat --format=%s -- scripts/native-rootless-preflight.sh)" -le 8192 ]]
+            preflight_script="$(< scripts/native-rootless-preflight.sh)"
+            [[ -n "${preflight_script}" ]]
+          fi
           runtime_args=(--device /dev/fuse --security-opt label=disable)
           if [[ "${root_mode}" == rootful ]]; then
             runtime_args+=(--privileged)
@@ -89,7 +154,7 @@ jobs:
           fi
           # The nested shell, not this launcher shell, expands the single-quoted program.
           # shellcheck disable=SC2016
-          "${host_podman[@]}" run --detach --name "${service_name}" "${runtime_args[@]}" --volume "${socket_directory}:/podman-lens:Z" "${image}" /bin/sh -ceu '
+          timeout --signal=TERM --kill-after=5s 45s "${host_podman[@]}" run --detach --name "${service_name}" "${runtime_args[@]}" --volume "${socket_directory}:/podman-lens:Z" "${image}" /bin/sh -ceu '
             status=/podman-lens/setup.status
             trap "exit 143" INT TERM
             trap "code=\$?; printf \"%s\n\" \"\${code}\" > \"\${status}.tmp\"; mv -f \"\${status}.tmp\" \"\${status}\"" EXIT
@@ -98,6 +163,9 @@ jobs:
               /podman-lens/service-uid /podman-lens/service-uid.tmp \
               /podman-lens/root-mode /podman-lens/root-mode.tmp
             actual_service_uid="$(id -u)"
+            if test "$2" = rootless; then
+              /bin/sh -c "$4" >&2 || printf "native-rootless-preflight unavailable\n" >&2
+            fi
             actual_rootless="$(podman info --format "{{.Host.Security.Rootless}}")"
             case "${actual_rootless}" in
               true) actual_root_mode=rootless ;;
@@ -125,7 +193,7 @@ jobs:
             trap "exit 143" INT TERM
             while ! test -d /podman-lens/start-api; do sleep 1; done
             exec podman system service --time=0 unix:///podman-lens/podman.sock
-          ' -- "${service_uid}" "${root_mode}" "${image}"
+          ' -- "${service_uid}" "${root_mode}" "${fixture_image}" "${preflight_script}"
           status_file="${socket_directory}/setup.status"
           setup_deadline=$((SECONDS + 300))
           while (( SECONDS < setup_deadline )); do
@@ -165,43 +233,130 @@ jobs:
           IFS= read -r actual_root_mode < "${socket_directory}/root-mode"
           [[ "${actual_service_uid}" =~ ^[0-9]+$ && "${actual_service_uid}" == "${service_uid}" ]] || { echo 'Native image service UID did not match reviewed matrix contract.' >&2; exit 1; }
           [[ "${actual_root_mode}" =~ ^(rootful|rootless)$ && "${actual_root_mode}" == "${root_mode}" ]] || { echo 'Native image root-mode contract did not match observed service.' >&2; exit 1; }
-          tag="${image%%@*}"; expected_version="${tag##*:v}"
+          expected_version="${NATIVE_EXPECTED_VERSION}"
           [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           {
             printf 'PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=%s\n' "${socket}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=%s\n' "${expected_version}"
             printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=%s\n' "${actual_root_mode}"
+            printf 'PODMAN_LENS_CONFORMANCE_EXPECTED_IMAGE=%s\n' "${fixture_image}"
           } >> "${GITHUB_ENV}"
+          }
+          export -f provision_native
+          bash scripts/run-native-runtime-budgeted.sh "${NATIVE_STATE_KEY}" provision -- bash -c 'set -Eeuo pipefail; provision_native'
       - name: Start API after bounded sanitized provisioning
+        id: api_start
+        timeout-minutes: 1
         shell: bash
+        env:
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
         run: |
           set -Eeuo pipefail
+          start_native_api() {
           socket="${PODMAN_LENS_CONFORMANCE_UNIX_SOCKET}"
           socket_directory="$(dirname -- "${socket}")"
           mkdir "${socket_directory}/start-api"
           for _ in {1..30}; do [[ -S "${socket}" && ! -L "${socket}" ]] && break; sleep 1; done
           [[ -S "${socket}" && ! -L "${socket}" ]] || { echo 'Native service did not create its run-scoped socket.' >&2; exit 1; }
           sudo chmod 0600 "${socket}"; sudo chown "$(id --user):$(id --group)" "${socket}"
+          headers="$(curl --fail --silent --show-error --max-time 10 --unix-socket "${socket}" --dump-header - --output /dev/null http://localhost/libpod/_ping)"
+          api_version="$(printf '%s\n' "${headers}" | awk 'tolower($1) == "libpod-api-version:" {gsub("\r", "", $2); print $2}')"
+          [[ "${api_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Native Libpod API header did not report one exact version.' >&2; exit 1; }
+          printf 'PODMAN_LENS_CONFORMANCE_API_VERSION=%s\n' "${api_version}" >> "${GITHUB_ENV}"
+          }
+          export -f start_native_api
+          bash scripts/run-native-runtime-budgeted.sh "${NATIVE_STATE_KEY}" api -- bash -c 'set -Eeuo pipefail; start_native_api'
       - name: Run exact-candidate read-only acquisition conformance
         id: conformance
+        timeout-minutes: 11
         continue-on-error: true
         shell: bash
+        env:
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
+          NATIVE_CELL_ID: ${{ matrix.id }}
         run: |
           set -Eeuo pipefail
-          timeout --signal=TERM --kill-after=30s 10m cargo test --locked --test current_patch_conformance --test native_service_conformance -- --ignored
+          conform_and_stop_native() {
+            timeout --signal=TERM --kill-after=30s 10m cargo test --locked --test current_patch_conformance --test native_service_conformance -- --ignored
+            state_key="${NATIVE_STATE_KEY}"
+            [[ "${state_key}" =~ ^(rf|rl)$ && "${GITHUB_RUN_ID}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+            state_directory="/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}"
+            service_name="podman-lens-native-${GITHUB_RUN_ID}-${NATIVE_CELL_ID}"
+            host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${state_directory}/containers.conf" podman --root "${state_directory}/root" --runroot "${state_directory}/runroot" --tmpdir "${state_directory}/tmp")
+            "${host_podman[@]}" rm --force --volumes "${service_name}"
+          }
+          export -f conform_and_stop_native
+          bash scripts/run-native-runtime-budgeted.sh "${NATIVE_STATE_KEY}" conformance -- bash -c 'set -Eeuo pipefail; conform_and_stop_native'
       - name: Record current-run native evidence
         id: evidence
         if: always()
+        timeout-minutes: 1
+        env:
+          NATIVE_BUILD_PEAK: ${{ steps.runtime.outputs.peak_state_kib }}
+          NATIVE_PROVISION_PEAK: ${{ steps.provision.outputs.peak_state_kib }}
+          NATIVE_API_PEAK: ${{ steps.api_start.outputs.peak_state_kib }}
+          NATIVE_CONFORMANCE_PEAK: ${{ steps.conformance.outputs.peak_state_kib }}
+          NATIVE_CELL_ID: ${{ matrix.id }}
+          NATIVE_ROOT_MODE: ${{ matrix.root_mode }}
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
+          NATIVE_IMAGE: ${{ steps.runtime.outputs.image }}
+          NATIVE_IMAGE_ID: ${{ steps.runtime.outputs.image_id }}
+          NATIVE_CLOSURE_SHA256: ${{ steps.runtime.outputs.closure_sha256 }}
+          NATIVE_BUILD_OUTCOME: ${{ steps.runtime.outcome }}
+          NATIVE_CONFORMANCE_OUTCOME: ${{ steps.conformance.outcome }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          artifact="podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}"
-          image='${{ matrix.image }}'; tag="${image%%@*}"; expected_version="${tag##*:v}"
+          artifact="podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${NATIVE_CELL_ID}"
+          source scripts/native-runtime-pins.sh
+          image="${NATIVE_IMAGE}"
+          expected_version="${PODMAN_NATIVE_VERSION#v}"
           [[ "${expected_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          jq --null-input --arg candidate "${GITHUB_SHA}" --arg run_id "${GITHUB_RUN_ID}" --arg run_attempt "${GITHUB_RUN_ATTEMPT}" --arg task native-api --arg cell "${{ matrix.id }}" --arg root_mode "${{ matrix.root_mode }}" --arg expected_version "${expected_version}" --arg image "${image}" --arg outcome "${{ steps.conformance.outcome }}" --arg socket_scope isolated-disposable-service '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task, cell: $cell, root_mode: $root_mode, expected_version: $expected_version, image: $image, outcome: $outcome, socket_scope: $socket_scope}' > "${RUNNER_TEMP}/native-podman-evidence.json"
+          state_key="${NATIVE_STATE_KEY}"
+          [[ "${state_key}" =~ ^(rf|rl)$ && "${GITHUB_RUN_ID}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          closure_file="/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}/package-closure.txt"
+          packages='[]'
+          if [[ -f "${closure_file}" && ! -L "${closure_file}" ]]; then
+            [[ "$(stat --format=%s -- "${closure_file}")" -le 65536 ]]
+            packages="$(jq --raw-input --slurp 'split("\n") | map(select(length > 0))' "${closure_file}")"
+          fi
+          build_peak=${NATIVE_BUILD_PEAK:-0}
+          runtime_peak=0
+          for phase_peak in "${NATIVE_PROVISION_PEAK:-0}" "${NATIVE_API_PEAK:-0}" "${NATIVE_CONFORMANCE_PEAK:-0}"; do
+            [[ "${phase_peak}" =~ ^[0-9]+$ && "${phase_peak}" -le 8388608 ]]
+            if (( phase_peak > runtime_peak )); then runtime_peak=${phase_peak}; fi
+          done
+          [[ "${build_peak}" =~ ^[0-9]+$ && "${build_peak}" -le 8388608 ]]
+          peak=${build_peak}
+          if (( runtime_peak > peak )); then peak=${runtime_peak}; fi
+          jq --null-input \
+            --arg candidate "${GITHUB_SHA}" --arg run_id "${GITHUB_RUN_ID}" --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg task native-api --arg cell "${NATIVE_CELL_ID}" --arg root_mode "${NATIVE_ROOT_MODE}" \
+            --arg expected_version "${expected_version}" --arg api_version "${PODMAN_LENS_CONFORMANCE_API_VERSION:-}" --arg image "${image}" \
+            --arg image_id "${NATIVE_IMAGE_ID}" --arg base_image "${PODMAN_NATIVE_BASE_IMAGE}" \
+            --arg rpm_sha256 "${PODMAN_NATIVE_RPM_SHA256}" --arg source_revision "${PODMAN_NATIVE_SOURCE_REVISION}" \
+            --arg source_rpm_sha256 "${PODMAN_NATIVE_SOURCE_RPM_SHA256}" \
+            --arg source_archive_sha256 "${PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256}" \
+            --arg repomd_sha256 "${PODMAN_NATIVE_REPOMD_SHA256}" --arg primary_sha256 "${PODMAN_NATIVE_PRIMARY_SHA256}" \
+            --arg closure_sha256 "${NATIVE_CLOSURE_SHA256}" --argjson packages "${packages}" \
+            --arg build_peak_state_kib "${build_peak}" --arg runtime_peak_state_kib "${runtime_peak}" --arg peak_state_kib "${peak}" \
+            --arg build_outcome "${NATIVE_BUILD_OUTCOME}" --arg outcome "${NATIVE_CONFORMANCE_OUTCOME}" \
+            --arg socket_scope isolated-disposable-service \
+            '{candidate: $candidate, run_id: $run_id, run_attempt: $run_attempt, task: $task,
+              cell: $cell, root_mode: $root_mode, expected_version: $expected_version,
+              api_version: $api_version, image: $image,
+              image_id: $image_id, base_image: $base_image, rpm_sha256: $rpm_sha256,
+              source_revision: $source_revision, source_rpm_sha256: $source_rpm_sha256,
+              source_archive_sha256: $source_archive_sha256, repomd_sha256: $repomd_sha256,
+              primary_sha256: $primary_sha256, closure_sha256: $closure_sha256, packages: $packages,
+              build_peak_state_kib: $build_peak_state_kib, runtime_peak_state_kib: $runtime_peak_state_kib,
+              peak_state_kib: $peak_state_kib,
+              build_outcome: $build_outcome, outcome: $outcome, socket_scope: $socket_scope}' \
+            > "${RUNNER_TEMP}/native-podman-evidence.json"
           printf 'candidate=%s\nartifact=%s\n' "${GITHUB_SHA}" "${artifact}" >> "${GITHUB_OUTPUT}"
       - name: Upload bounded native evidence
         if: always()
+        timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.evidence.outputs.artifact }}
@@ -210,22 +365,17 @@ jobs:
           overwrite: true
           retention-days: 7
       - name: Fail closed when native conformance did not succeed
-        if: always() && steps.conformance.outcome != 'success'
+        if: always() && (steps.runtime.outcome != 'success' || steps.conformance.outcome != 'success')
+        timeout-minutes: 1
         shell: bash
         run: exit 1
       - name: Remove disposable native service, image, and state
         if: always()
+        timeout-minutes: 5
         shell: bash
+        env:
+          NATIVE_STATE_KEY: ${{ matrix.state_key }}
         run: |
           set -Eeuo pipefail
-          state_key='${{ matrix.state_key }}'
-          [[ "${state_key}" =~ ^(rf|rl)$ ]]
-          [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ ]]
-          [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
-          state_directory="/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}"
-          containers_conf="${state_directory}/containers.conf"
-          service_name="podman-lens-native-${GITHUB_RUN_ID}-${{ matrix.id }}"
-          host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${containers_conf}" podman --root "${state_directory}/root" --runroot "${state_directory}/runroot" --tmpdir "${state_directory}/tmp")
-          "${host_podman[@]}" rm --force --volumes "${service_name}" || true
-          "${host_podman[@]}" image rm --force '${{ matrix.image }}' || true
-          sudo rm --recursive --force "${state_directory}"
+          state_key="${NATIVE_STATE_KEY}"
+          bash scripts/cleanup-native-runtime.sh "${state_key}"

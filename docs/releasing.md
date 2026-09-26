@@ -8,6 +8,11 @@ or receive its publication permissions.
 The reusable CI caller always runs the complete candidate validation plan for Release, including
 the offline native-evidence contract. The separate live native conformance worker remains an
 additional fail-closed release gate; a focused pull-request plan never substitutes for either.
+Release calls the reusable native worker with `release_validation=true`. Its separate admission
+job checks out the exact SHA and verifies that the candidate still heads the current default
+branch before the privileged matrix starts. The calling dispatch event cannot select the manual
+issue-branch path. A reviewed issue-branch manual native run is useful pre-merge diagnostics but
+is validation-only; its artifacts never replace fresh SHA/run/attempt-bound Release evidence.
 
 ## Prepare a release-worthy change
 
@@ -42,7 +47,8 @@ Before merging the generated `release-plz-*` pull request, verify that:
 - `scripts/check-native-release-contract.sh` passes its offline privacy, provenance, replay,
   and semantic contracts;
 - the reusable `Native Podman conformance` worker passed for the exact candidate SHA, current
-  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact;
+  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact, pinned RPM and
+  Fedora compose provenance, built image ID, installed package closure, and both root modes;
 - the release gate checked out that exact candidate, with credentials disabled, before invoking
   the candidate-owned native-evidence validator; and
 - no publication credential is present in repository secrets.

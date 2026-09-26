@@ -751,7 +751,9 @@ pub enum ContainerMountSelinuxRelabel {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum AuthoredImageSpellingHint {
-    /// The transient operand matched the configured `ImageName` spelling.
+    /// The transient operand matched the configured `ImageName` spelling, or
+    /// differed only by an authored tag omitted from the same digest-pinned
+    /// registry/repository reference by Podman canonicalization.
     MatchesConfiguredImage,
     /// The transient operand matched the local resolved image identifier.
     MatchesLocalImageId,

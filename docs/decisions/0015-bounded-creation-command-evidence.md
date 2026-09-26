@@ -18,7 +18,11 @@ independent observation states: missing typed image evidence cannot erase a
 correlated relabel hint, and unavailable mount correlation cannot erase a valid
 image hint. Image evidence is contradictory only when both the configured image
 spelling and local resolved image identifier are available and the transient
-operand differs from both. Unknown option arity, malformed values, and ambiguous
+operand differs from both. The only non-identical configured-image match is a
+digest-pinned authored tag omitted from Podman's configured image reference:
+registry, repository, and the full SHA-256 digest must agree exactly. This
+does not equate unrelated image IDs or differing tags on two tagged references.
+Unknown option arity, malformed values, and ambiguous
 correlations remain explicit observation states. Conflict findings are value-free.
 
 No raw command component, image spelling, path, environment assignment, secret

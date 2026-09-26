@@ -67,6 +67,8 @@ jobs:
     name: Native API conformance
     if: github.repository == 'Strukturpiloten/podman-lens'
     uses: ./.github/workflows/native-podman-conformance.yml
+    with:
+      release_validation: true
     permissions:
       contents: read
 

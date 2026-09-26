@@ -70,6 +70,13 @@ cassettes (CLI-only and mixed CLI/Compose-provider) as privacy-reviewed, determi
 evidence. The cassettes and capture manifest are test-only repository formats, not a second
 live matrix or a public interchange contract.
 
+The active native release worker selects the latest reviewed 6.1 patch separately from immutable
+6.1.0 capture and output-anchor provenance. Its Fedora 45 Beta image is isolated test
+infrastructure, not a Fedora 45 distribution-compatibility claim. A new patch becomes reviewed
+only after both root modes, Libpod API identity, and acquisition tests pass against the actual
+runtime. Its exact candidate and review outcome are determined by hosted native evidence, not
+by a version pin or this page alone.
+
 See the packaged `catalogue/v1/podman-capabilities.json`,
 `catalogue/v1/podman-deployment-rendering.json`, and
 `catalogue/v1/native-field-coverage.json` for machine-readable evidence.

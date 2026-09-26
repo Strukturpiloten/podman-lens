@@ -106,9 +106,11 @@ The ignored current-patch test permits only the fixed read-only acquisition prob
 explicit socket and exact expected version:
 
 ```console
+source scripts/native-runtime-pins.sh
 PODMAN_LENS_CONFORMANCE_UNIX_SOCKET=/absolute/podman.sock \
-PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION=6.1.0 \
+PODMAN_LENS_CONFORMANCE_EXPECTED_VERSION="${PODMAN_NATIVE_VERSION#v}" \
 PODMAN_LENS_CONFORMANCE_EXPECTED_ROOT_MODE=rootless \
+PODMAN_LENS_CONFORMANCE_EXPECTED_IMAGE="${PODMAN_NATIVE_BASE_IMAGE}" \
 cargo test --test current_patch_conformance --test native_service_conformance -- --ignored
 ```
 
@@ -122,6 +124,14 @@ The ordinary local, CI, and release gate remains offline. The captured Podman 6.
 anchor native response behavior without creating a second live matrix; expanding that evidence
 requires a new privacy review and immutable provenance.
 
+After independent review of the whole same-repository issue branch, including its workflow and
+admission script, manually run `gh workflow run native-podman-conformance.yml --ref
+TheRealBecks/issue98 -f candidate_sha=<reviewed-head-sha>` with the exact 40-character head SHA.
+Admission checks that SHA, the current branch and checkout heads, and both original and rerun
+actors' write-or-higher permission. Moved branches, tags, forks, and unavailable permission APIs
+fail before the native matrix. This validation-only path never runs for untrusted PR events or
+replaces fresh Release evidence.
+
 `Native Podman conformance` creates a fresh disposable Podman service, passes only its run-scoped
 socket to the ignored tests, and uploads SHA/run/attempt/task-bound evidence. Release calls that reusable
 worker; an unavailable, failed, timed-out, cancelled, or skipped worker blocks publication. It
@@ -130,27 +140,25 @@ pods, networks, volumes, images, and secret metadata; it captures no service pay
 the temporary store. Both reviewed images run through a rootful host-Podman launcher with isolated
 per-cell root, runroot, temporary, file-lock, and socket state. Common service arguments provide
 `/dev/fuse` and `label=disable`; the rootful image alone uses a privileged outer container, while
-the reviewed source-built rootless image stays unprivileged and adds only
+the rootless image stays unprivileged and adds only
 `apparmor=unconfined`. The workflow independently requires UID 1000 and
 `Host.Security.Rootless=true` for rootless, and UID 0 plus `Host.Security.Rootless=false` for
-rootful. Only exact digest-pinned images on the trusted current default branch enter that
-no-secret boundary. The rootless image's identity checks and all bounded resource provisioning
-execute beneath the outer container's initial OCI process. Host-side `podman exec` is forbidden
-because hosted runners can deny rootless Podman's re-exec while the same commands work from the
-initial process. Provisioning completes before the API starts; only the run-scoped socket directory
-is mounted into the service. The initial process publishes atomic, byte-bounded status and identity
-files. The host uses a five-minute polling deadline, checks service liveness, rejects symlinks and
-malformed values, and then creates a directory start gate. The initial process replaces itself with
-the API service only after that gate, and the host gives its run-scoped socket 30 seconds to become
-ready.
+rootful. Only reviewed, checksum-verified runtime inputs from an admitted exact candidate enter
+that no-secret boundary. Release admission remains current-default-branch-only. Provisioning
+precedes API startup through a bounded status handshake.
+[ADR 0017](decisions/0017-isolated-native-release-conformance.md) records the rootless launcher,
+initial-process requirement, socket isolation, and failure limits.
 Setup failures still upload compact evidence because expected-version provenance is derived
-directly from the reviewed immutable matrix image. Cleanup removes the service, image, and isolated
+directly from the candidate's active pin file. Cleanup removes the service, image, and isolated
 launcher state.
-The state root includes the run ID, run attempt, and a reviewed two-letter matrix key under `/tmp`,
-keeping each cell isolated while respecting host Podman's 50-character runroot limit. Cleanup
-validates those components and independently recomputes the exact removal target.
-The host launcher comes from the `ubuntu-24.04` runner package repository and is infrastructure,
-not the version under conformance. Renovate owns the versioned, digest-pinned inner images.
+Cleanup derives the isolated state path from validated run, attempt, and cell IDs; it preserves
+leaks. SIGKILL cannot run traps.
+Build storage budgets and peak evidence follow [ADR 0017](decisions/0017-isolated-native-release-conformance.md).
+The `ubuntu-24.04` host launcher is infrastructure. Each cell builds from a pinned Fedora 45
+base, fixed Beta compose, and checksum-verified Koji RPM. Release evidence records the package
+closure and image ID. Beta is test infrastructure; native root-mode and API checks still gate
+support. Renovate updates need manual review. The 6.1.0 cassettes remain historical.
+The current-patch probe simulation is synthetic; live checks cover authored hints and 404.
 
 ## Coverage and compatibility
 

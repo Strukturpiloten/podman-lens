@@ -27,6 +27,7 @@ historical implementation batch.
 | `tests/support/cassette.rs`                              | Test-only strict request-aware replay                                               |
 | `tests/`                                                 | Public, boundary, fixture, schema, rendering, and policy tests                      |
 | `scripts/`                                               | Deterministic validation and release helpers                                        |
+| `containers/native-podman/`                              | Transient fixed-compose inner runtime build for active native conformance           |
 
 Protocol response shapes remain private to the acquisition implementation. Public native
 observations belong in `observation.rs`; caller-authored target settings belong in the output

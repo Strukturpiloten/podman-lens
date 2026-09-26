@@ -118,6 +118,26 @@ fn assert_fixed_request_sequence(transport: &RecordingTransport) -> Result<(), B
     Ok(())
 }
 
+/// Synthetic current-patch contract: this is not a recaptured 6.1.2 response.
+/// It keeps patch-level engine identity separate from the service's API identity.
+#[tokio::test]
+async fn current_patch_simulation_keeps_api_and_failure_evidence_separate() -> Result<(), Box<dyn std::error::Error>> {
+    let body = serde_json::json!({"Components": [{"Name": "Podman Engine", "Version": "6.1.2"}]}).to_string();
+    let supported = RecordingTransport::new(vec![ping("6.1.0")?, version(body.as_bytes())?]);
+    let observation = probe_libpod_service(&supported).await?;
+    assert_eq!(observation.engine_version().original(), "6.1.2");
+    assert_eq!(observation.api_version().original(), "6.1.0");
+    assert_fixed_request_sequence(&supported)?;
+
+    let unavailable = RecordingTransport::new(vec![ping("6.1.0")?, response(503, Vec::new(), Vec::new())?]);
+    let Err(error) = probe_libpod_service(&unavailable).await else {
+        return Err("native version failure must not become support".into());
+    };
+    assert_eq!(error.code(), DiagnosticCode::ProbeHttpStatus);
+    assert_fixed_request_sequence(&unavailable)?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn every_pinned_fixture_decodes_with_the_fixed_two_get_requests() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/api-version");

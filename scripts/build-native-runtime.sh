@@ -57,6 +57,16 @@ image="localhost/podman-lens-native:${PODMAN_NATIVE_VERSION}-${state_key}"
   --build-arg "PODMAN_RPM_RELEASE=${PODMAN_NATIVE_RPM_RELEASE}" \
   --build-arg "SOURCE_ARCHIVE_SHA256=${PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256}" \
   --tag "${image}" "${context}"
+if [[ "${root_mode}" == rootless ]]; then
+  # Verify that file capabilities survive the final image layer and runtime mount.
+  # The single-quoted script runs inside the image.
+  # shellcheck disable=SC2016
+  "${host_podman[@]}" run --rm --entrypoint /bin/bash "${image}" -o pipefail -c '
+    [[ "$(id -u)" == 1000 ]] \
+      && getcap -n -- /usr/bin/newuidmap | grep -Fx "/usr/bin/newuidmap cap_setuid=ep" \
+      && getcap -n -- /usr/bin/newgidmap | grep -Fx "/usr/bin/newgidmap cap_setgid=ep"
+  '
+fi
 # The fixed compose must still serve the reviewed index after dependency resolution.
 curl --fail --location --silent --show-error --max-time 30 --output "${context}/repomd-after.xml" "${PODMAN_NATIVE_COMPOSE_URL}/repodata/repomd.xml"
 printf '%s  %s\n' "${PODMAN_NATIVE_REPOMD_SHA256}" "${context}/repomd-after.xml" | sha256sum --check --status

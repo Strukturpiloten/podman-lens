@@ -1755,6 +1755,53 @@ fn configured_creation_hint<T>(value: T) -> ObservationField<T> {
     ObservationField::Observed(ObservedValue::new(value, ObservationOrigin::Configured))
 }
 
+/// Podman may omit an authored tag when it canonicalizes a digest-pinned
+/// `ImageName`. Accept only that one spelling change; the registry,
+/// repository, and full digest must remain byte-for-byte identical.
+fn same_image_after_digest_tag_canonicalization(authored: &str, configured: &str) -> bool {
+    fn parts(reference: &str) -> Option<(&str, Option<&str>, &str)> {
+        let (name, digest) = reference.split_once("@sha256:")?;
+        if digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return None;
+        }
+        let (registry_and_path, last_component) = name.rsplit_once('/')?;
+        if registry_and_path.is_empty() || last_component.is_empty() || name.contains('@') {
+            return None;
+        }
+        let tag = last_component.rsplit_once(':').map(|(_, tag)| tag);
+        if tag.is_some_and(|value| {
+            value.is_empty()
+                || !value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+        }) {
+            return None;
+        }
+        let repository = tag.map_or(name, |value| &name[..name.len() - value.len() - 1]);
+        if repository.ends_with('/') || repository.rsplit('/').next().is_some_and(|value| value.contains(':')) {
+            return None;
+        }
+        Some((repository, tag, digest))
+    }
+
+    match (parts(authored), parts(configured)) {
+        (
+            Some((authored_name, authored_tag, authored_digest)),
+            Some((configured_name, configured_tag, configured_digest)),
+        ) => {
+            authored_name == configured_name
+                && authored_digest == configured_digest
+                && authored_tag.is_some()
+                && configured_tag.is_none()
+        }
+        _ => false,
+    }
+}
+
 fn decode_authored_image_spelling_hint(
     parsed_image: &str,
     configured_image: &ObservationField<String>,
@@ -1764,7 +1811,9 @@ fn decode_authored_image_spelling_hint(
 ) -> ObservationField<AuthoredImageSpellingHint> {
     let configured = configured_image.observed();
     let local = local_image_id.observed();
-    if configured.is_some_and(|value| value.value() == parsed_image) {
+    if configured.is_some_and(|value| {
+        value.value() == parsed_image || same_image_after_digest_tag_canonicalization(parsed_image, value.value())
+    }) {
         return configured_creation_hint(AuthoredImageSpellingHint::MatchesConfiguredImage);
     }
     if local.is_some_and(|value| value.value() == parsed_image) {
@@ -6996,6 +7045,82 @@ mod typed_observation_constructor_tests {
             ObservationField::Observed(ref value)
                 if matches!(value.value().image(), ObservationField::Observed(image)
                     if *image.value() == AuthoredImageSpellingHint::MatchesLocalImageId)
+        ));
+    }
+
+    #[test]
+    fn digest_pinned_authored_tag_only_matches_the_same_canonical_repository_and_digest() {
+        let digest = "a".repeat(64);
+        let authored = format!("registry.fedoraproject.org/fedora:45@sha256:{digest}");
+        let canonical = format!("registry.fedoraproject.org/fedora@sha256:{digest}");
+        assert!(same_image_after_digest_tag_canonicalization(&authored, &canonical));
+        assert!(!same_image_after_digest_tag_canonicalization(&canonical, &authored));
+
+        let identity = ResourceIdentity::new(ResourceKind::Container, "image-hint".to_owned(), None);
+        let configured =
+            ObservationField::Observed(ObservedValue::new(canonical.clone(), ObservationOrigin::Configured));
+        let local_image_id = ObservationField::Observed(ObservedValue::new(
+            format!("sha256:{}", "c".repeat(64)),
+            ObservationOrigin::LocalResolution,
+        ));
+        let mut findings = Vec::new();
+        let matching =
+            decode_authored_image_spelling_hint(&authored, &configured, &local_image_id, &identity, &mut findings);
+        assert!(matches!(
+            matching,
+            ObservationField::Observed(value)
+                if *value.value() == AuthoredImageSpellingHint::MatchesConfiguredImage
+        ));
+        assert!(findings.is_empty());
+
+        // A synthetic inspect projection exercises the bounded CreateCommand
+        // parser and decoder together; historical captured fixtures stay immutable.
+        let synthetic = serde_json::json!({
+            "ImageName": canonical,
+            "Config": {"CreateCommand": ["podman", "create", authored]}
+        });
+        let projected = decode_container_creation_evidence(
+            container_create_command(synthetic.as_object().expect("synthetic object")),
+            &configured,
+            &local_image_id,
+            &ObservationField::Absent,
+            &identity,
+            &mut findings,
+        );
+        assert!(matches!(
+            projected,
+            ObservationField::Observed(value)
+                if matches!(value.value().image(), ObservationField::Observed(image)
+                    if *image.value() == AuthoredImageSpellingHint::MatchesConfiguredImage)
+        ));
+        assert!(findings.is_empty());
+
+        let invalid = [
+            format!("registry.fedoraproject.org/fedora:45@sha256:{}", "b".repeat(64)),
+            format!("registry.example.invalid/fedora:45@sha256:{digest}"),
+            format!("registry.fedoraproject.org/other:45@sha256:{digest}"),
+            format!("registry.fedoraproject.org/fedora:45@sha256:{}", "a".repeat(63)),
+            format!("sha256:{digest}"),
+        ];
+        for operand in invalid {
+            assert!(!same_image_after_digest_tag_canonicalization(&operand, &canonical));
+            let mut findings = Vec::new();
+            let decoded =
+                decode_authored_image_spelling_hint(&operand, &configured, &local_image_id, &identity, &mut findings);
+            assert!(matches!(
+                decoded,
+                ObservationField::Observed(value)
+                    if *value.value() == AuthoredImageSpellingHint::Contradictory
+            ));
+            assert!(
+                findings
+                    .iter()
+                    .any(|finding| finding.code() == DiagnosticCode::CreationEvidenceConflict)
+            );
+        }
+        assert!(!same_image_after_digest_tag_canonicalization(
+            &authored,
+            &format!("registry.fedoraproject.org/fedora:46@sha256:{digest}")
         ));
     }
 

@@ -3,6 +3,41 @@
 use std::{fs, os::unix::fs::PermissionsExt, process::Command, time::SystemTime};
 
 #[test]
+fn rootless_image_preserves_only_required_mapping_helper_capabilities() -> Result<(), Box<dyn std::error::Error>> {
+    let containerfile = fs::read_to_string("containers/native-podman/Containerfile")?;
+    let rootless_stage = containerfile
+        .split_once("FROM runtime AS rootless\n")
+        .map(|(_, stage)| stage)
+        .ok_or("rootless image stage missing")?;
+    for exact_capability in [
+        "setcap cap_setuid=ep /usr/bin/newuidmap",
+        "setcap cap_setgid=ep /usr/bin/newgidmap",
+        "getcap -n -- /usr/bin/newuidmap | grep -Fx '/usr/bin/newuidmap cap_setuid=ep'",
+        "getcap -n -- /usr/bin/newgidmap | grep -Fx '/usr/bin/newgidmap cap_setgid=ep'",
+    ] {
+        assert!(
+            rootless_stage.contains(exact_capability),
+            "rootless image lost exact helper check: {exact_capability}"
+        );
+    }
+    assert!(rootless_stage.contains("USER 1000"));
+
+    let builder = fs::read_to_string("scripts/build-native-runtime.sh")?;
+    assert!(builder.contains("if [[ \"${root_mode}\" == rootless ]]; then"));
+    assert!(builder.contains("[[ \"$(id -u)\" == 1000 ]]"));
+    for exact_capability in [
+        "getcap -n -- /usr/bin/newuidmap | grep -Fx \"/usr/bin/newuidmap cap_setuid=ep\"",
+        "getcap -n -- /usr/bin/newgidmap | grep -Fx \"/usr/bin/newgidmap cap_setgid=ep\"",
+    ] {
+        assert!(
+            builder.contains(exact_capability),
+            "runtime image lost exact helper check: {exact_capability}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn rootless_preflight_reports_only_bounded_nonsecret_facts() -> Result<(), Box<dyn std::error::Error>> {
     let nonce = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_nanos();
     let root = std::env::temp_dir().join(format!("podman-lens-rootless-preflight-{}-{nonce}", std::process::id()));

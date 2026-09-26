@@ -11,7 +11,7 @@ ARG SOURCE_ARCHIVE_SHA256
 # hadolint ignore=DL3041
 RUN dnf --disablerepo='*' --enablerepo=podman-lens-fixed \
       --setopt=install_weak_deps=False --nogpgcheck install -y /tmp/podman.rpm \
-      aardvark-dns cpio crun fuse-overlayfs netavark passt shadow-utils shadow-utils-subid slirp4netns \
+      aardvark-dns cpio crun fuse-overlayfs libcap netavark passt shadow-utils shadow-utils-subid slirp4netns \
     && rpm -q --qf '%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' podman \
       | grep -Fx "5:${PODMAN_VERSION}-${PODMAN_RPM_RELEASE}.x86_64" \
     && rpm -q --qf '%{SOURCERPM}\n' podman \
@@ -35,5 +35,10 @@ RUN dnf --disablerepo='*' --enablerepo=podman-lens-fixed \
 ENV XDG_RUNTIME_DIR=/run/user/1000
 FROM runtime AS rootful
 FROM runtime AS rootless
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN setcap cap_setuid=ep /usr/bin/newuidmap \
+    && setcap cap_setgid=ep /usr/bin/newgidmap \
+    && getcap -n -- /usr/bin/newuidmap | grep -Fx '/usr/bin/newuidmap cap_setuid=ep' \
+    && getcap -n -- /usr/bin/newgidmap | grep -Fx '/usr/bin/newgidmap cap_setgid=ep'
 ENV HOME=/home/podmanlens
 USER 1000

@@ -72,7 +72,10 @@ cannot reuse stale earlier-attempt evidence. Both cells use a rootful host-Podma
 root, runroot, temporary, file-lock, and socket state. Common service arguments provide FUSE and
 disable SELinux relabeling. The rootful image alone uses a privileged outer container; the
 rootless image stays unprivileged and adds only the AppArmor exception required by the nested
-service contract. The rootless image must start as reviewed UID 1000 and
+service contract. Its final image stage grants `/usr/bin/newuidmap` only `cap_setuid=ep` and
+`/usr/bin/newgidmap` only `cap_setgid=ep`; image construction and a UID-1000 runtime probe must
+verify those exact file capabilities before native conformance begins. The rootless image must
+start as reviewed UID 1000 and
 `Host.Security.Rootless` must report `true`; the rootful image must start as UID 0 and report
 `false`. The launcher receives no repository secrets or ambient Podman socket, mounts only the
 run-scoped socket directory, and removes its service, image, and state after the cell.

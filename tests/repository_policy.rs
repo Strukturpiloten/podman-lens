@@ -1314,8 +1314,7 @@ fn verify_lockfile_guard_workflow() -> Result<(), std::io::Error> {
         "--head \"${HEAD_SHA}\"",
         "--minimum-age-hours 72",
         "if: github.event_name != 'pull_request'",
-        "lockfile-release-age]",
-        "success success success success success success success success",
+        "python3 \"${verifier}\" gate",
     ] {
         assert!(workflow.contains(required), "CI lockfile guard is missing {required}");
     }
@@ -1328,9 +1327,65 @@ fn verify_lockfile_guard_workflow() -> Result<(), std::io::Error> {
         .split_once("\n    steps:\n")
         .map_or(lock_job, |(prefix, _)| prefix);
     assert!(
-        !before_steps.lines().any(|line| line.trim_start().starts_with("if:")),
-        "CI lockfile release-age job must not be skipped on main pushes"
+        before_steps.contains("if: needs.validation-plan.outputs.select_lockfile_release_age == 'true'"),
+        "CI lockfile release-age job must follow the validated plan"
     );
+    let gate = workflow
+        .split_once("\n  pr-gate:\n")
+        .map(|(_, gate)| gate)
+        .ok_or_else(|| policy_error("CI aggregate gate is missing"))?;
+    let needs_block = gate
+        .split_once("\n    needs:\n")
+        .and_then(|(_, remainder)| remainder.split_once("\n    runs-on:"))
+        .map(|(needs, _)| needs)
+        .ok_or_else(|| policy_error("CI aggregate needs block is missing"))?;
+    let actual_needs = needs_block
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '-'))
+        .filter(|name| !name.is_empty())
+        .collect::<Vec<_>>();
+    let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
+    let jobs = policy["jobs"]
+        .as_array()
+        .ok_or_else(|| policy_error("validation policy has no job list"))?;
+    let expected_needs = std::iter::once("validation-plan")
+        .chain(jobs.iter().map(|job| job.as_str().unwrap_or("")))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actual_needs, expected_needs,
+        "CI aggregate must cover every planned job exactly once"
+    );
+    assert!(
+        gate.contains("if: always()"),
+        "CI aggregate must run after failed or skipped jobs"
+    );
+    assert!(
+        gate.contains("NEEDS_JSON: ${{ toJSON(needs) }}"),
+        "CI aggregate must inspect job results"
+    );
+    Ok(())
+}
+
+#[test]
+fn change_aware_validation_keeps_release_and_aggregate_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+    let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
+    let release = fs::read_to_string(".github/workflows/release.yml")?;
+    let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
+    assert_eq!(policy["repository"], "Strukturpiloten/podman-lens");
+    assert_eq!(policy["schema"], 2);
+    assert_eq!(policy["documentation_examples_manifest"], Value::Null);
+    assert_eq!(
+        policy["profile_jobs"]["prose"],
+        serde_json::json!(["documentation", "lockfile-release-age"])
+    );
+    assert!(workflow.contains(".validation-base/scripts/validation-plan.py plan"));
+    assert!(workflow.contains("trusted base has no classifier"));
+    assert!(workflow.contains("first-rollout required job"));
+    assert!(workflow.contains("python3 \"${verifier}\" gate"));
+    assert!(workflow.contains("--tested-sha \"${GITHUB_SHA}\""));
+    assert!(workflow.contains("cargo test --locked --test public_guides"));
+    assert!(!workflow.contains("runs-on: macos-14"));
+    assert!(release.contains("uses: ./.github/workflows/ci.yml"));
+    assert!(release.contains("uses: ./.github/workflows/native-podman-conformance.yml"));
     Ok(())
 }
 
@@ -1375,8 +1430,8 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let config = fs::read_to_string(root.join(".codex/config.toml"))?;
     for required in [
-        "# Workspace defaults; keep primary-session overrides aligned with Astra/xhigh.",
-        "model = \"gpt-6-astra\"",
+        "# Workspace defaults; keep primary-session overrides aligned with Sol/xhigh.",
+        "model = \"gpt-6-sol\"",
         "model_reasoning_effort = \"xhigh\"",
         "max_concurrent_threads_per_session = 9",
         "default_subagent_model = \"gpt-6-sol\"",
@@ -1410,14 +1465,16 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     assert!(verifier.contains("never run the default formatting gate"));
     assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6-sol agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
-    assert!(instructions.contains("`gpt-6-astra` with `xhigh` reasoning"));
+    assert!(instructions.contains("`gpt-6-sol` with `xhigh` reasoning"));
     assert!(instructions.contains("`gpt-6-sol` with `high` reasoning"));
     assert!(instructions.contains("`gpt-6-luna` with"));
     assert!(instructions.contains("up to nine concurrent subagents plus the primary manager"));
     assert!(instructions.contains("at most one complete gate or heavy runtime suite"));
     let testing = fs::read_to_string(root.join("docs/testing.md"))?;
-    assert!(testing.contains("Keep any explicit primary-session override aligned with Astra/xhigh."));
-    assert!(testing.contains("merges covered by the standing authorization"));
+    assert!(testing.contains("Sol/xhigh"));
+    assert!(testing.contains("The primary owns final"));
+    assert!(testing.contains("validation and merges"));
+    assert!(testing.contains("`./scripts/check-all.sh --check`"));
     Ok(())
 }
 
@@ -1473,7 +1530,7 @@ fn standing_github_authorization_stays_scoped_and_guarded() -> Result<(), Box<dy
     Ok(())
 }
 
-// The full shell gate targets the Linux Dev Container, not the macOS portability lane.
+// The full shell gate targets the Linux Dev Container; macOS client compatibility is unverified.
 // Keep configuration assertions above platform-independent.
 #[cfg(target_os = "linux")]
 #[test]

@@ -11,10 +11,16 @@ Run this after the final edit:
 ./scripts/check-all.sh
 ```
 
-It formats tracked files, checks GitHub Actions, compiles all targets and examples, runs policy,
-unit, integration, and doctests, builds Rustdoc with warnings denied, verifies the release package,
-measures coverage, checks the MSRV, audits dependencies, validates documentation links, checks the
-public API, and enforces the offline captured-native release contract.
+For measured, change-aware feedback use `python3 scripts/validation-plan.py run-local`.
+Every public guide edit runs file/link checks and `tests/public_guides.rs`, which checks page
+inventory and navigation; other edits use the full gate. `--full` forces it, while `--docs-only`
+rejects current guides. PRs use the trusted-base classifier and initially run full. Main, manual,
+and Release run full; Release also requires native conformance. Every selected job must pass.
+Both local modes reject `CARGO_TARGET_DIR` outside the worktree to avoid stale test binaries.
+Focused checks never replace final `check-all.sh`.
+
+The gate checks formatting, Actions, Rust targets/tests/docs/package, coverage, MSRV,
+dependencies, links, public API, and offline captured-native evidence.
 
 ## Test layers
 
@@ -157,19 +163,11 @@ catalogue, its evidence, positive and negative tests, and the public compatibili
 
 ## Agent-assisted verification
 
-Repository model defaults and role overrides live in [`.codex/`](../.codex/); permissions and
-workflow ownership remain defined in [`AGENTS.md`](../AGENTS.md). Reload or start a new trusted
-project session after updating configuration; an explicit session override can take precedence.
-Keep any explicit primary-session override aligned with Astra/xhigh.
-
-Use `./scripts/check-all.sh --check` to run the complete gate without formatting repository-owned
-files. The default command (or `--fix`) still formats first. Both modes run the same validation;
-ignored caches and build artifacts may change. Verifiers report failures without fixing files,
-and the primary agent owns the final complete gate and merges covered by the standing authorization
-in [`AGENTS.md`](../AGENTS.md).
-
-The shell-runner regression tests target the Linux Dev Container gate. Agent-configuration checks
-remain platform-independent; the macOS portability lane does not require Linux validation tools.
+Model defaults and roles are in [`.codex/`](../.codex/); scope and GitHub authority are in
+[`AGENTS.md`](../AGENTS.md). Keep primary overrides at Sol/xhigh. The primary owns final
+validation and merges; verifiers use `./scripts/check-all.sh --check` without source formatting.
+Default/`--fix` formats first; both run the same checks. Shell-runner tests target Linux.
+macOS client compatibility is intended but has no runner evidence.
 
 The fuller BoxFerry consumer remains ignored and cannot discover an ambient socket. Invoke it
 only with the explicit fixture socket and one exact reviewed expected version (`5.8.6` or

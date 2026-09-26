@@ -5,6 +5,10 @@ the only publisher, tagger, attestation producer, and GitHub release creator. It
 `validation_only` dispatch runs the identical validation path but cannot enter the publication job
 or receive its publication permissions.
 
+The reusable CI caller always runs the complete candidate validation plan for Release, including
+the offline native-evidence contract. The separate live native conformance worker remains an
+additional fail-closed release gate; a focused pull-request plan never substitutes for either.
+
 ## Prepare a release-worthy change
 
 Only merged `feat`, `fix`, `perf`, `refactor`, or `revert` commits create a release

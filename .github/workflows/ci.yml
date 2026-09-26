@@ -200,7 +200,13 @@ jobs:
         run: |
           npm ci --ignore-scripts
           printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
-      - run: sudo bash scripts/install-file-tools.sh /usr/local/bin
+      - name: Install checksum-pinned file-quality tools as the runner user
+        shell: bash
+        run: |
+          set -euo pipefail
+          file_tool_bin="$(mktemp -d "${RUNNER_TEMP}/podman-lens-file-tools.XXXXXXXX")"
+          bash scripts/install-file-tools.sh "${file_tool_bin}"
+          printf '%s\n' "${file_tool_bin}" >> "${GITHUB_PATH}"
       - run: bash scripts/check-files.sh --check
       - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
       - run: bash scripts/check-release-metadata.sh

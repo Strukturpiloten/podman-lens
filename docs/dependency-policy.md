@@ -36,4 +36,8 @@ lock-file-maintenance updates use a zero-day Renovate override because their syn
 not carry individual release timestamps; the shared, fail-closed lockfile release-age guard checks
 every newly introduced registry version against the same 72-hour cutoff before the required
 aggregate PR gate can succeed. Its immutable revision has one Renovate owner. Dev Container and
-checksum-pinned tool updates remain manual.
+checksum-pinned tool updates remain manual. The PR documentation job installs those tools as the
+runner user into a unique directory under `RUNNER_TEMP`, then adds that directory to `GITHUB_PATH`.
+The installer retains its version and SHA-256 checks; this destination-only change leaves the
+existing Renovate extraction from `scripts/install-file-tools.sh` and its manual checksum-review
+rule unchanged.

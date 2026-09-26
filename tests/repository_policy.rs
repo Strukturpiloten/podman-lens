@@ -1022,10 +1022,73 @@ fn assert_release_gate_checkout_and_evidence_order(release: &str) -> Result<(), 
 }
 
 #[test]
-fn hosted_documentation_job_exposes_locked_node_tools() -> Result<(), std::io::Error> {
+fn hosted_documentation_job_installs_file_tools_without_elevation() -> Result<(), std::io::Error> {
     let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
-    assert!(workflow.contains("${GITHUB_WORKSPACE}/node_modules/.bin"));
-    assert!(workflow.contains("${GITHUB_PATH}"));
+    let documentation = workflow
+        .split_once("\n  documentation:\n")
+        .and_then(|(_, remainder)| remainder.split_once("\n  lockfile-release-age:\n"))
+        .map(|(job, _)| job)
+        .ok_or_else(|| policy_error("CI documentation job boundary missing"))?;
+    for required in [
+        "npm ci --ignore-scripts",
+        "${GITHUB_WORKSPACE}/node_modules/.bin",
+        "mktemp -d \"${RUNNER_TEMP}/podman-lens-file-tools.XXXXXXXX\"",
+        "bash scripts/install-file-tools.sh \"${file_tool_bin}\"",
+        "printf '%s\\n' \"${file_tool_bin}\" >> \"${GITHUB_PATH}\"",
+        "bash scripts/check-files.sh --check",
+    ] {
+        assert!(
+            documentation.contains(required),
+            "CI documentation job is missing {required}"
+        );
+    }
+    assert!(
+        !documentation.contains("sudo "),
+        "PR-controlled documentation steps must run without sudo"
+    );
+    Ok(())
+}
+
+#[test]
+fn hosted_file_tools_keep_checksum_verification_for_every_pin() -> Result<(), std::io::Error> {
+    let installer = fs::read_to_string("scripts/install-file-tools.sh")?;
+    let download = installer
+        .split_once("\ndownload() {\n")
+        .and_then(|(_, remainder)| remainder.split_once("\n}\n"))
+        .map(|(body, _)| body)
+        .ok_or_else(|| policy_error("file-tool download function is missing"))?;
+    assert!(download.contains("curl --proto '=https' --tlsv1.2 --fail"));
+    assert!(installer.contains("set -Eeuo pipefail"));
+    assert!(download.contains("printf '%s  %s\\n' \"${checksum}\" \"${destination}\" | sha256sum --check --status"));
+
+    for tool in ["tombi", "shfmt", "shellcheck", "hadolint"] {
+        let checksum_assignment = format!("readonly {tool}_checksum=\"");
+        let checksums = installer
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix(&checksum_assignment))
+            .filter_map(|value| value.strip_suffix('"'))
+            .collect::<Vec<_>>();
+        assert_eq!(checksums.len(), 2, "{tool} needs checksums for both CI architectures");
+        assert!(
+            checksums.iter().all(|checksum| checksum.len() == 64
+                && checksum
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())),
+            "{tool} checksums must be lowercase SHA-256 digests"
+        );
+
+        let version_reference = format!("${{{tool}_version}}");
+        let checksum_reference = format!("\"${{{tool}_checksum}}\"");
+        let downloads = installer
+            .lines()
+            .filter(|line| line.starts_with("download \"https://") && line.contains(&version_reference))
+            .collect::<Vec<_>>();
+        assert_eq!(downloads.len(), 1, "{tool} needs one verified download");
+        assert!(
+            downloads[0].ends_with(&checksum_reference),
+            "{tool} download must pass its pinned checksum to the verifier"
+        );
+    }
     Ok(())
 }
 

@@ -59,6 +59,16 @@ for input, or execute a plan.
 
 ## Validation
 
+For development feedback, `python3 scripts/validation-plan.py run-local` selects a bounded
+profile from the complete staged, unstaged, and untracked working-tree snapshot. Public guide
+edits run file checks, offline links, and the focused guide contract; code, workflow, policy,
+unknown, and mixed edits fall back to the complete gate. The `--full` flag always runs the
+complete gate. All current public guides are executable documentation because the guide test
+also enforces page inventory and navigation; `--docs-only` therefore rejects them. The local
+task is not pre-publication evidence; run the complete gate after the final edit. CI reads PR classification
+from the trusted base, bootstraps with full validation, and keeps full main, dispatch, and
+release-call validation. Native release conformance remains separate and mandatory.
+
 Run the complete gate after the final edit:
 
 ```shell
@@ -118,7 +128,8 @@ checkout and must not perform those writes.
 
 Model defaults belong in [`.codex/config.toml`](.codex/config.toml); task-specific models and
 reasoning belong in [`.codex/agents/`](.codex/agents/). The primary manager always uses
-`gpt-6-astra` with `xhigh` reasoning. Implementation, specification research, and independent
+`gpt-6-sol` with `xhigh` reasoning. Use `gpt-6-astra` with `xhigh` selectively for difficult
+architecture. Implementation, specification research, and independent
 review use `gpt-6-sol` with `high` reasoning; check-only verification uses `gpt-6-luna` with
 `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult failure
 diagnosis. These model settings do not expand workspace scope or grant additional permissions.

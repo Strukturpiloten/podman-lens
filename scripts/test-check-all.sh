@@ -34,20 +34,22 @@ esac
 MOCK
 chmod +x "${test_root}/bin/mock"
 for tool in actionlint bash cargo cargo-deny cargo-llvm-cov cargo-semver-checks cspell curl git \
-  hadolint jq lychee markdownlint-cli2 npm prettier rustup shellcheck shfmt tombi uv zizmor; do
+  hadolint jq lychee markdownlint-cli2 npm prettier python3 rustup shellcheck shfmt tombi uv zizmor; do
   ln -s mock "${test_root}/bin/${tool}"
 done
 
 run_gate() {
   local label=$1
   shift
+  local mock_repository="${CHECK_ALL_TEST_REPOSITORY_ROOT:-${test_root}/repository}"
+  local mock_target="${CHECK_ALL_TEST_TARGET_DIR:-${mock_repository}/target}"
   : > "${test_root}/${label}.commands"
   PATH="${test_root}/bin:${PATH}" \
     CHECK_ALL_TEST_LOG="${test_root}/${label}.commands" \
-    CARGO_TARGET_DIR="${test_root}/target" \
+    CARGO_TARGET_DIR="${mock_target}" \
     BOXFERRY_SEMVER_RELEASE_TYPE="" PODMAN_LENS_SEMVER_CHECK=0 \
     BOXFERRY_WEBSITE_SOURCE_MODE=local \
-    "${bash_executable}" "${test_root}/repository/scripts/check-all.sh" "$@" \
+    "${bash_executable}" "${mock_repository}/scripts/check-all.sh" "$@" \
     > "${test_root}/${label}.output" 2>&1
 }
 
@@ -62,6 +64,18 @@ export BOXFERRY_WEBSITE_FORMAT_MODE=fix
 run_gate default
 run_gate fix --fix
 run_gate check --check
+
+# A target owned by a former worktree must not be reused after relocation.
+mkdir -p "${test_root}/relocated/scripts"
+cp -- "${script_directory}/check-all.sh" "${test_root}/relocated/scripts/check-all.sh"
+status=0
+CHECK_ALL_TEST_REPOSITORY_ROOT="${test_root}/relocated" \
+  CHECK_ALL_TEST_TARGET_DIR="${test_root}/repository/target" \
+  run_gate relocated --check || status=$?
+[[ "${status}" == 2 && ! -s "${test_root}/relocated.commands" ]]
+grep --fixed-strings --quiet -- 'CARGO_TARGET_DIR must be inside this worktree' \
+  "${test_root}/relocated.output"
+
 diff -u "${test_root}/default.commands" "${test_root}/fix.commands"
 assert_contains fix "bash scripts/check-files.sh --fix"
 assert_contains check "bash scripts/check-files.sh --check"

@@ -9,7 +9,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=22
+readonly total_steps=23
 
 fail() {
   printf 'PodmanLens local validation failed: %s\n' "$1" >&2
@@ -43,7 +43,7 @@ run_step() {
   "$@"
 }
 
-required_tools=(actionlint cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee markdownlint-cli2 prettier rustup shellcheck shfmt tombi zizmor)
+required_tools=(actionlint cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee markdownlint-cli2 prettier python3 rustup shellcheck shfmt tombi zizmor)
 missing_tools=()
 for tool in "${required_tools[@]}"; do
   command -v "${tool}" > /dev/null 2>&1 || missing_tools+=("${tool}")
@@ -51,6 +51,18 @@ done
 if ((${#missing_tools[@]} != 0)); then
   printf -v missing_list ' %s' "${missing_tools[@]}"
   fail "missing required tool(s):${missing_list}. Use the PodmanLens Dev Container."
+fi
+
+# Cargo test binaries can embed absolute fixture paths. An external target
+# shared with another worktree may retain binaries after that worktree moves
+# or is removed, so the complete gate only accepts worktree-owned artifacts.
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+  resolved_target_dir="$(realpath -m -- "${CARGO_TARGET_DIR}")" ||
+    fail "cannot resolve CARGO_TARGET_DIR: ${CARGO_TARGET_DIR}"
+  case "${resolved_target_dir}" in
+    "${repository_root}/"*) export CARGO_TARGET_DIR="${resolved_target_dir}" ;;
+    *) fail "CARGO_TARGET_DIR must be inside this worktree; unset it or choose a worktree-local target directory" ;;
+  esac
 fi
 
 list_existing_files() {
@@ -92,6 +104,7 @@ run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows
 run_step "Check all workspace targets and features" cargo ci-check
 run_step "Check repository policies" cargo ci-policy
+run_step "Test validation-plan regressions" env PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
 run_step "Run Clippy with warnings denied" cargo ci-clippy
 run_step "Run workspace tests" cargo ci-test
 run_step "Check captured native release contract" bash scripts/check-native-release-contract.sh

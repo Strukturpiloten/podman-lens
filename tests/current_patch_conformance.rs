@@ -45,5 +45,10 @@ async fn current_reviewed_patch_probes_read_only_service() -> Result<(), Box<dyn
     )?;
     let observation = probe_libpod_service(&transport).await?;
     assert_eq!(observation.engine_version().original(), expected);
+    if let Ok(reported_api) = std::env::var("PODMAN_LENS_CONFORMANCE_API_VERSION") {
+        assert_eq!(observation.api_version().original(), reported_api);
+    }
+    assert!(observation.api_version().as_semver() >= &Version::new(4, 0, 0));
+    assert!(observation.api_version().as_semver() <= &parsed);
     Ok(())
 }

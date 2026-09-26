@@ -1,0 +1,39 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS runtime
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ARG PODMAN_VERSION
+ARG PODMAN_RPM_RELEASE
+COPY podman.rpm /tmp/podman.rpm
+COPY podman.src.rpm /tmp/podman.src.rpm
+COPY fedora-beta.repo /etc/yum.repos.d/podman-lens-fixed.repo
+ARG SOURCE_ARCHIVE_SHA256
+# The fixed compose's repomd and primary index are independently SHA-256 pinned by the builder.
+# hadolint ignore=DL3041
+RUN dnf --disablerepo='*' --enablerepo=podman-lens-fixed \
+      --setopt=install_weak_deps=False --nogpgcheck install -y /tmp/podman.rpm \
+      aardvark-dns cpio crun fuse-overlayfs netavark passt shadow-utils shadow-utils-subid slirp4netns \
+    && rpm -q --qf '%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' podman \
+      | grep -Fx "5:${PODMAN_VERSION}-${PODMAN_RPM_RELEASE}.x86_64" \
+    && rpm -q --qf '%{SOURCERPM}\n' podman \
+      | grep -Fx "podman-${PODMAN_VERSION}-${PODMAN_RPM_RELEASE}.src.rpm" \
+    && podman --version | grep -Fx "podman version ${PODMAN_VERSION}" \
+    && mkdir -m 0700 /tmp/podman-source \
+    && rpm2cpio /tmp/podman.src.rpm | cpio -id --quiet --directory /tmp/podman-source \
+    && printf '%s  %s\n' "${SOURCE_ARCHIVE_SHA256}" "/tmp/podman-source/v${PODMAN_VERSION}.tar.gz" | sha256sum --check --status \
+    && grep -Fx 'Source0: https://github.com/containers/%{name}/archive/v%{version_no_tilde}.tar.gz' /tmp/podman-source/podman.spec \
+    && ! grep -Eq '^Patch[0-9]*:' /tmp/podman-source/podman.spec \
+    && rm -rf /tmp/podman-source \
+    && useradd --create-home --uid 1000 podmanlens \
+    && printf 'podmanlens:100000:65536\n' >> /etc/subuid \
+    && printf 'podmanlens:100000:65536\n' >> /etc/subgid \
+    && install -d -m 0700 -o 1000 -g 1000 /run/user/1000 \
+    && install -d -m 0755 /usr/share/podman-lens \
+    && rpm -qa --qf '%{NAME} %{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' \
+      | LC_ALL=C sort > /usr/share/podman-lens/native-package-closure.txt \
+    && dnf clean all \
+    && rm -f /tmp/podman.rpm /tmp/podman.src.rpm
+ENV XDG_RUNTIME_DIR=/run/user/1000
+FROM runtime AS rootful
+FROM runtime AS rootless
+ENV HOME=/home/podmanlens
+USER 1000

@@ -42,7 +42,7 @@ mapfile -d '' structured_files < <(list_existing_files '*.json' '*.jsonc' '*.yam
 mapfile -d '' yaml_document_files < <(list_existing_files '*.yaml' '*.yml')
 mapfile -d '' toml_files < <(list_existing_files '*.toml')
 mapfile -d '' shell_files < <(list_existing_files '*.sh')
-mapfile -d '' dockerfiles < <(list_existing_files ':(glob)Dockerfile' ':(glob)**/Dockerfile' ':(glob)**/Dockerfile.*')
+mapfile -d '' dockerfiles < <(list_existing_files ':(glob)Dockerfile' ':(glob)**/Dockerfile' ':(glob)**/Dockerfile.*' 'containers/native-podman/Containerfile')
 
 if ((${#markdown_files[@]} == 0)); then
   printf 'PodmanLens contains no Markdown files to check.\n' >&2

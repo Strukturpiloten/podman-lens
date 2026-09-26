@@ -484,6 +484,7 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
         "validation_only",
         "release-metadata",
         "native-conformance",
+        "release_validation: true",
         "needs.release-gate.result == 'success'",
         "needs: [deterministic, release-metadata, native-conformance, semver]",
     ] {
@@ -536,6 +537,60 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
     Ok(())
 }
 
+fn assert_native_cleanup_contract(native: &str) -> Result<(), std::io::Error> {
+    let cleanup = native
+        .split_once("      - name: Remove disposable native service, image, and state\n")
+        .map(|(_, cleanup)| cleanup)
+        .ok_or_else(|| policy_error("isolated native cleanup step is missing"))?;
+    assert!(cleanup.contains("bash scripts/cleanup-native-runtime.sh \"${state_key}\""));
+    let cleanup_script = fs::read_to_string("scripts/cleanup-native-runtime.sh")?;
+    for required in [
+        "state_directory=\"/tmp/pl-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${state_key}\"",
+        "[[ \"${GITHUB_RUN_ID}\" =~ ^[0-9]+$ && \"${GITHUB_RUN_ATTEMPT}\" =~ ^[0-9]+$ ]]",
+        "ps --all --external",
+        "rm --force --volumes",
+        "volume ls --format '{{.Name}}'",
+        "volume rm --force",
+        "unmount --all",
+        "images --all",
+        "remaining_volumes=",
+        "remaining_mounts=",
+        "Native cleanup incomplete; preserving task-owned state",
+        "sudo du --summarize --human-readable -- \"${state_directory}\"",
+        "sudo rm --recursive --force -- \"${state_directory}\"",
+    ] {
+        assert!(
+            cleanup_script.contains(required),
+            "native cleanup is missing {required}"
+        );
+    }
+    let removal = cleanup_script
+        .rfind("sudo rm --recursive --force")
+        .ok_or_else(|| policy_error("native cleanup removal is missing"))?;
+    let mount_check = cleanup_script
+        .find("remaining_mounts=")
+        .ok_or_else(|| policy_error("native cleanup mount check is missing"))?;
+    let disk_inventory = cleanup_script
+        .find("sudo du --summarize")
+        .ok_or_else(|| policy_error("native cleanup disk inventory is missing"))?;
+    assert!(mount_check < removal);
+    assert!(disk_inventory < removal);
+    for forbidden in [
+        "PODMAN_LENS_NATIVE_STATE_DIRECTORY",
+        "PODMAN_LENS_NATIVE_ROOT_DIRECTORY",
+        "PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY",
+        "PODMAN_LENS_NATIVE_TMP_DIRECTORY",
+        "PODMAN_LENS_NATIVE_CONTAINERS_CONF",
+        "PODMAN_LENS_NATIVE_SERVICE",
+    ] {
+        assert!(
+            !cleanup.contains(forbidden),
+            "cleanup removal targets must not trust {forbidden}"
+        );
+    }
+    Ok(())
+}
+
 fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str) -> Result<(), std::io::Error> {
     for required in [
         "Install isolated host Podman launcher",
@@ -558,8 +613,6 @@ fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str)
         "podman info --format \"{{.Host.Security.Rootless}}\"",
         "sudo chmod 0600 \"${socket}\"",
         "sudo chown \"$(id --user):$(id --group)\" \"${socket}\"",
-        "image rm --force",
-        "sudo rm --recursive --force",
     ] {
         assert!(
             native.contains(required),
@@ -570,36 +623,16 @@ fn assert_isolated_host_podman_inner_rootless_and_failure_evidence(native: &str)
     assert_eq!(
         native.matches(short_state).count(),
         2,
-        "setup and cleanup must independently derive the bounded state directory"
+        "setup and monitored conformance teardown must independently derive the bounded state directory"
     );
     for validated in [
         "[[ \"${state_key}\" =~ ^(rf|rl)$ ]]",
         "[[ \"${GITHUB_RUN_ID}\" =~ ^[0-9]+$ ]]",
         "[[ \"${GITHUB_RUN_ATTEMPT}\" =~ ^[0-9]+$ ]]",
     ] {
-        assert_eq!(
-            native.matches(validated).count(),
-            2,
-            "setup and cleanup must independently enforce {validated}"
-        );
+        assert_eq!(native.matches(validated).count(), 1, "setup must enforce {validated}");
     }
-    let cleanup = native
-        .split_once("      - name: Remove disposable native service, image, and state\n")
-        .map(|(_, cleanup)| cleanup)
-        .ok_or_else(|| policy_error("isolated native cleanup step is missing"))?;
-    for forbidden in [
-        "PODMAN_LENS_NATIVE_STATE_DIRECTORY",
-        "PODMAN_LENS_NATIVE_ROOT_DIRECTORY",
-        "PODMAN_LENS_NATIVE_RUNROOT_DIRECTORY",
-        "PODMAN_LENS_NATIVE_TMP_DIRECTORY",
-        "PODMAN_LENS_NATIVE_CONTAINERS_CONF",
-        "PODMAN_LENS_NATIVE_SERVICE",
-    ] {
-        assert!(
-            !cleanup.contains(forbidden),
-            "cleanup removal targets must not trust {forbidden}"
-        );
-    }
+    assert_native_cleanup_contract(native)?;
     assert!(
         !native.contains("docker exec"),
         "native service must not use an outer Docker launcher"
@@ -643,19 +676,15 @@ fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::
         .and_then(|(_, rest)| rest.split_once("    steps:\n"))
         .map(|(cell, _)| cell)
         .ok_or_else(|| policy_error("rootless matrix cell boundary is missing"))?;
-    for required in [
-        "root_mode: rootless",
-        "service_uid: 1000",
-        "image: ghcr.io/strukturpiloten/podman-6.1-rootless:v",
-        "@sha256:",
-    ] {
+    for required in ["root_mode: rootless", "service_uid: 1000"] {
         assert!(
             rootless_cell.contains(required),
             "rootless matrix identity is missing {required}"
         );
     }
     for required in [
-        "root_mode=\"${{ matrix.root_mode }}\"",
+        "NATIVE_ROOT_MODE: ${{ matrix.root_mode }}",
+        "root_mode=\"${NATIVE_ROOT_MODE}\"",
         "[[ \"${root_mode}\" =~ ^(rootful|rootless)$ ]]",
         "if [[ \"${root_mode}\" == rootful ]]",
         "actual_service_uid=\"$(id -u)\"",
@@ -688,10 +717,17 @@ fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::
         .map(|(evidence, _)| evidence)
         .ok_or_else(|| policy_error("native evidence step boundary is missing"))?;
     for required in [
-        "image='${{ matrix.image }}'",
-        "expected_version=\"${tag##*:v}\"",
+        "source scripts/native-runtime-pins.sh",
+        "expected_version=\"${PODMAN_NATIVE_VERSION#v}\"",
         "--arg expected_version \"${expected_version}\"",
         "--arg image \"${image}\"",
+        "NATIVE_IMAGE_ID: ${{ steps.runtime.outputs.image_id }}",
+        "NATIVE_CLOSURE_SHA256: ${{ steps.runtime.outputs.closure_sha256 }}",
+        "--arg image_id \"${NATIVE_IMAGE_ID}\"",
+        "--arg closure_sha256 \"${NATIVE_CLOSURE_SHA256}\"",
+        "--arg api_version \"${PODMAN_LENS_CONFORMANCE_API_VERSION:-}\"",
+        "NATIVE_BUILD_OUTCOME: ${{ steps.runtime.outcome }}",
+        "--arg build_outcome \"${NATIVE_BUILD_OUTCOME}\"",
     ] {
         assert!(
             evidence.contains(required),
@@ -708,11 +744,17 @@ fn assert_native_identity_and_failure_evidence(native: &str) -> Result<(), std::
 const NATIVE_CONFORMANCE_REQUIRED: &[&str] = &[
     "workflow_call:",
     "workflow_dispatch:",
+    "release_validation:",
+    "candidate_sha:",
+    "needs: admit-candidate",
+    "if: needs.admit-candidate.result == 'success'",
+    "ref: ${{ needs.admit-candidate.outputs.candidate_sha }}",
     "ref: ${{ github.sha }}",
     "podman system service",
     "PODMAN_LENS_CONFORMANCE_UNIX_SOCKET",
     "native_service_conformance",
-    "podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.id }}",
+    "NATIVE_CELL_ID: ${{ matrix.id }}",
+    "podman-lens-native-api-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${NATIVE_CELL_ID}",
     "--arg run_attempt \"${GITHUB_RUN_ATTEMPT}\"",
     "overwrite: true",
     "steps.conformance.outcome != 'success'",
@@ -757,59 +799,212 @@ const NATIVE_CONFORMANCE_REQUIRED: &[&str] = &[
     "[[ -S \"${socket}\" && ! -L \"${socket}\" ]]",
     "Remove disposable native service, image, and state",
     "actions/upload-artifact@",
-    "datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootful",
+    "Build pinned native runtime from fixed Fedora compose",
 ];
 
-fn assert_reviewed_native_images(native: &str) -> Result<(), std::io::Error> {
-    let images = native
+fn assert_native_timeout_budget(native: &str) -> Result<(), std::io::Error> {
+    let native_worker = native
+        .split_once("\n  native-api:\n")
+        .map(|(_, worker)| worker)
+        .ok_or_else(|| policy_error("native worker job is missing"))?;
+    let job_header = native_worker
+        .split_once("    steps:\n")
+        .map(|(header, _)| header)
+        .ok_or_else(|| policy_error("native worker steps are missing"))?;
+    let job_minutes = job_header
         .lines()
-        .filter_map(|line| line.trim_start().strip_prefix("image: "))
-        .collect::<Vec<_>>();
-    assert_eq!(images.len(), 2, "native matrix must declare two runtime images");
-    let expected_image_names = BTreeSet::from([
-        "ghcr.io/strukturpiloten/podman-6.1-rootful",
-        "ghcr.io/strukturpiloten/podman-6.1-rootless",
-    ]);
-    let mut observed_image_names = BTreeSet::new();
-    for image in images {
-        let (name, version_and_digest) = image
-            .split_once(":v")
-            .ok_or_else(|| policy_error(format!("native image must have a v-prefixed tag: {image}")))?;
-        assert!(
-            expected_image_names.contains(name),
-            "native image has an unreviewed repository: {name}"
-        );
-        assert!(
-            observed_image_names.insert(name),
-            "native image repository appears more than once: {name}"
-        );
-        let (version, digest) = version_and_digest
-            .split_once("@sha256:")
-            .ok_or_else(|| policy_error(format!("native image must have a SHA-256 digest: {image}")))?;
-        let version = Version::parse(version)
-            .map_err(|error| policy_error(format!("native image must use a semantic version ({version}): {error}")))?;
-        assert!(
-            version.pre.is_empty() && version.build.is_empty(),
-            "native image must use a stable semantic version: {version}"
-        );
-        assert!(
-            digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()),
-            "native image must use a complete SHA-256 digest"
-        );
+        .find_map(|line| line.strip_prefix("    timeout-minutes: "))
+        .ok_or_else(|| policy_error("native worker job timeout is missing"))?
+        .parse::<u32>()
+        .map_err(|error| policy_error(format!("invalid native job timeout: {error}")))?;
+    let mut steps = std::collections::BTreeMap::new();
+    for section in native_worker.split("      - name: ").skip(1) {
+        let name = section.lines().next().unwrap_or_default();
+        let minutes = section
+            .lines()
+            .find_map(|line| line.strip_prefix("        timeout-minutes: "))
+            .ok_or_else(|| policy_error(format!("native step {name} has no timeout")))?
+            .parse::<u32>()
+            .map_err(|error| policy_error(format!("invalid native step {name} timeout: {error}")))?;
+        assert!(steps.insert(name, minutes).is_none(), "duplicate native step {name}");
     }
-    assert_eq!(observed_image_names, expected_image_names);
+    let cleanup = steps
+        .remove("Remove disposable native service, image, and state")
+        .ok_or_else(|| policy_error("native cleanup step is missing"))?;
+    assert_eq!(steps.len(), 9, "all pre-cleanup native steps need bounded timeouts");
+    let pre_cleanup: u32 = steps.values().sum();
+    assert!(job_minutes <= 50, "native job must remain bounded");
+    assert!(
+        cleanup >= 5,
+        "native cleanup needs five minutes even after a prior timeout"
+    );
+    assert!(
+        pre_cleanup + cleanup + 2 <= job_minutes,
+        "native phase maxima must leave cleanup plus two minutes of job reserve"
+    );
     Ok(())
 }
 
-#[test]
-fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
-    let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
+fn assert_reviewed_native_images(native: &str) -> Result<(), std::io::Error> {
+    assert!(
+        !native.contains("matrix.image"),
+        "native matrix must use the built candidate image"
+    );
+    assert!(native.contains("bash scripts/build-native-runtime-budgeted.sh"));
+    assert!(native.contains("steps.runtime.outputs.image"));
+    assert!(native.contains("steps.runtime.outputs.peak_state_kib"));
+    for phase in ["provision", "api", "conformance"] {
+        assert!(
+            native.contains(&format!(
+                "scripts/run-native-runtime-budgeted.sh \"${{NATIVE_STATE_KEY}}\" {phase} --"
+            )),
+            "native {phase} phase must run under exact-store monitoring"
+        );
+    }
+    for output in [
+        "steps.provision.outputs.peak_state_kib",
+        "steps.api_start.outputs.peak_state_kib",
+        "steps.conformance.outputs.peak_state_kib",
+    ] {
+        assert!(native.contains(output), "native runtime peak is missing {output}");
+    }
+    assert!(native.contains("http://localhost/libpod/_ping"));
+    let pins = fs::read_to_string("scripts/native-runtime-pins.sh")?;
+    let version = pins
+        .lines()
+        .find_map(|line| line.strip_prefix("readonly PODMAN_NATIVE_VERSION=v"))
+        .ok_or_else(|| policy_error("native Podman version pin is missing"))?;
+    let parsed = Version::parse(version)
+        .map_err(|error| policy_error(format!("native version must be stable semver: {error}")))?;
+    assert!(parsed.pre.is_empty() && parsed.build.is_empty());
+    for name in [
+        "PODMAN_NATIVE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256",
+        "PODMAN_NATIVE_REPOMD_SHA256",
+        "PODMAN_NATIVE_PRIMARY_SHA256",
+    ] {
+        let value = pins
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("readonly {name}=")))
+            .ok_or_else(|| policy_error(format!("missing {name}")))?;
+        assert!(value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+    assert!(pins.contains("readonly PODMAN_NATIVE_BASE_IMAGE=registry.fedoraproject.org/fedora:45@sha256:"));
+    assert!(pins.contains("readonly PODMAN_NATIVE_COMPOSE_URL=https://dl.fedoraproject.org/pub/fedora/linux/releases/test/45_Beta/Everything/x86_64/os"));
+    let builder = fs::read_to_string("scripts/build-native-runtime.sh")?;
+    for required in [
+        "sha256sum --check --status",
+        "PODMAN_NATIVE_REPOMD_SHA256",
+        "PODMAN_NATIVE_PRIMARY_SHA256",
+        "--pull=never",
+        "--target \"${root_mode}\"",
+        "repomd-after.xml",
+        "native-package-closure.txt",
+        "image_id=\"$(normalize_native_image_id \"${raw_image_id}\")\"",
+    ] {
+        assert!(builder.contains(required), "native image builder is missing {required}");
+    }
+    let budgeted_builder = fs::read_to_string("scripts/build-native-runtime-budgeted.sh")?;
+    assert!(budgeted_builder.contains("run-native-runtime-budgeted.sh"));
+    assert!(budgeted_builder.contains("timeout --signal=TERM --kill-after=30s 12m"));
+    let watchdog = fs::read_to_string("scripts/run-native-runtime-budgeted.sh")?;
+    for required in [
+        "preflight_available_kib=$((10 * 1024 * 1024))",
+        "available_floor_kib=$((2 * 1024 * 1024))",
+        "state_max_kib=$((8 * 1024 * 1024))",
+        "sample_native_storage",
+        "sudo env LC_ALL=C du -skx -- \"${state_directory}\"",
+        "setsid \"$@\"",
+        "kill -TERM -- \"-${command_pid}\"",
+        "trap finish EXIT",
+        "cleanup-native-runtime.sh",
+        "peak_state_kib=",
+    ] {
+        assert!(
+            watchdog.contains(required),
+            "native lifecycle budget is missing {required}"
+        );
+    }
+    let containerfile = fs::read_to_string("containers/native-podman/Containerfile")?;
+    assert!(
+        fs::read_to_string("scripts/check-files.sh")?.contains("'containers/native-podman/Containerfile'"),
+        "the active native Containerfile must enter Hadolint file checks"
+    );
+    for required in [
+        "--disablerepo='*' --enablerepo=podman-lens-fixed",
+        "grep -Fx \"5:${PODMAN_VERSION}-${PODMAN_RPM_RELEASE}.x86_64\"",
+        "FROM runtime AS rootful",
+        "FROM runtime AS rootless",
+        "USER 1000",
+    ] {
+        assert!(
+            containerfile.contains(required),
+            "native Containerfile is missing {required}"
+        );
+    }
+    Ok(())
+}
+
+fn assert_native_renovate_extraction(manager: &Value, marker: &str) -> Result<(), std::io::Error> {
+    let pattern = manager["matchStrings"][0]
+        .as_str()
+        .ok_or_else(|| policy_error("native Renovate regex is missing"))?;
+    let result = std::process::Command::new("grep")
+        .args(["-Pzo", "--", pattern, "scripts/native-runtime-pins.sh"])
+        .output()?;
+    assert!(result.status.success(), "Renovate regex did not extract {marker}");
+    assert_eq!(
+        result.stdout.split(|&byte| byte == 0).count(),
+        2,
+        "Renovate regex must extract {marker} exactly once"
+    );
+    assert!(String::from_utf8_lossy(&result.stdout).contains(marker));
+    Ok(())
+}
+
+fn assert_native_admission_contract(native: &str) -> Result<(), std::io::Error> {
+    let admission = native
+        .split_once("\n  admit-candidate:\n")
+        .and_then(|(_, after)| after.split_once("\n  native-api:\n"))
+        .map(|(admission, _)| admission)
+        .ok_or_else(|| policy_error("native candidate admission must precede the privileged matrix"))?;
+    for required in [
+        "permissions:\n      contents: read",
+        "persist-credentials: false",
+        "NATIVE_RELEASE_VALIDATION: ${{ inputs.release_validation == true }}",
+        "NATIVE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}",
+        "ORIGINAL_ACTOR: ${{ github.actor }}",
+        "RERUN_ACTOR: ${{ github.triggering_actor }}",
+        "run: bash scripts/admit-native-candidate.sh",
+    ] {
+        assert!(admission.contains(required), "native admission is missing {required}");
+    }
+    assert!(!native.contains("pull_request_target:"));
     for &required in NATIVE_CONFORMANCE_REQUIRED {
         assert!(
             native.contains(required),
             "native conformance workflow is missing {required}"
         );
     }
+    for run_block in native.split("        run: |\n").skip(1) {
+        let script = run_block
+            .lines()
+            .take_while(|line| line.starts_with("          ") || line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !script.contains("${{"),
+            "native workflow must pass expressions through step env, not interpolate them into shell scripts"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std::io::Error> {
+    let native = fs::read_to_string(".github/workflows/native-podman-conformance.yml")?;
+    assert_native_admission_contract(&native)?;
     let identity = native
         .find("actual_service_uid=\"$(id -u)\"")
         .ok_or_else(|| policy_error("initial-process identity check is missing"))?;
@@ -886,6 +1081,7 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
     );
     assert_isolated_host_podman_inner_rootless_and_failure_evidence(&native)?;
     assert_reviewed_native_images(&native)?;
+    assert_native_timeout_budget(&native)?;
 
     Ok(())
 }
@@ -904,39 +1100,46 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
     }
     let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)
         .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
-    let managers = renovate["customManagers"]
+    let all_managers = renovate["customManagers"]
         .as_array()
-        .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?
+        .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?;
+    let managers = all_managers
         .iter()
-        .filter(|manager| manager["description"] == "Update the native Podman release and immutable manifest together")
+        .filter(|manager| {
+            manager["description"]
+                == "Signal current native Podman patch; checksum and conformance require manual review"
+        })
         .collect::<Vec<_>>();
-    assert_eq!(managers.len(), 1, "native runtime image needs one Renovate owner");
+    assert_eq!(managers.len(), 1, "native Podman patch needs one Renovate owner");
     let manager = managers[0];
     assert!(manager["matchStrings"][0].as_str().is_some_and(|pattern| {
-        pattern.contains("(?<currentValue>v") && pattern.contains("currentDigest>sha256:[a-f0-9]{64}")
+        pattern.contains("containers/podman") && pattern.contains("PODMAN_NATIVE_VERSION=(?<currentValue>v")
     }));
-    assert_eq!(manager["datasourceTemplate"], "docker");
-    assert_eq!(manager["versioningTemplate"], "docker");
-    let replacement = manager["autoReplaceStringTemplate"]
-        .as_str()
-        .ok_or_else(|| policy_error("native image manager needs a replacement template"))?;
-    assert!(replacement.contains(":{{{newValue}}}@{{{newDigest}}}"));
-    assert!(replacement.contains('\n'));
-    assert!(!replacement.contains(r"\n"));
-    let rendered = replacement
-        .replace("{{{depName}}}", "ghcr.io/strukturpiloten/podman-6.1-rootless")
-        .replace("{{{newValue}}}", "v6.1.99")
-        .replace("{{{newDigest}}}", &format!("sha256:{}", "a".repeat(64)));
-    assert_eq!(rendered.lines().count(), 2);
-    assert!(rendered.lines().next().is_some_and(|line| {
-        line == "# renovate: datasource=docker depName=ghcr.io/strukturpiloten/podman-6.1-rootless"
+    assert_eq!(manager["versioningTemplate"], "semver");
+    assert_eq!(
+        manager["managerFilePatterns"],
+        serde_json::json!(["/^scripts/native-runtime-pins\\.sh$/"])
+    );
+    assert_native_renovate_extraction(manager, "PODMAN_NATIVE_VERSION=v")?;
+    let base_managers = all_managers
+        .iter()
+        .filter(|manager| manager["description"] == "Update the native Fedora base tag and immutable manifest together")
+        .collect::<Vec<_>>();
+    assert_eq!(base_managers.len(), 1, "native Fedora base needs one Renovate owner");
+    assert!(base_managers[0]["matchStrings"][0].as_str().is_some_and(|pattern| {
+        pattern.contains("PODMAN_NATIVE_BASE_IMAGE") && pattern.contains("currentDigest>sha256:[a-f0-9]{64}")
     }));
-    assert!(rendered.lines().nth(1).is_some_and(|line| {
-        line == format!(
-            "            image: ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.99@sha256:{}",
-            "a".repeat(64)
-        )
-    }));
+    assert_native_renovate_extraction(base_managers[0], "PODMAN_NATIVE_BASE_IMAGE=")?;
+    for marker in ["PODMAN_NATIVE_VERSION", "PODMAN_NATIVE_BASE_IMAGE"] {
+        assert_eq!(
+            all_managers
+                .iter()
+                .filter(|manager| manager["matchStrings"].to_string().contains(marker))
+                .count(),
+            1,
+            "{marker} must have one Renovate owner"
+        );
+    }
     let review_rules = renovate["packageRules"]
         .as_array()
         .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
@@ -946,10 +1149,11 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
     assert_eq!(review_rules.len(), 1);
     assert_eq!(
         review_rules[0]["matchFileNames"],
-        serde_json::json!([".github/workflows/native-podman-conformance.yml"])
+        serde_json::json!(["scripts/native-runtime-pins.sh"])
     );
     assert_eq!(review_rules[0]["dependencyDashboardApproval"], true);
     assert_eq!(review_rules[0]["automerge"], false);
+    assert_eq!(review_rules[0]["allowedVersions"], "/^(v6\\.1\\.[0-9]+|45)$/");
     assert!(
         !release.contains("expected_rootful") && !release.contains("expected_rootless"),
         "release validation must consume candidate-bound evidence instead of duplicating Renovate-owned image pins"

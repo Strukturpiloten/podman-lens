@@ -31,6 +31,16 @@ and sensitive-input boundaries without producing a partial plan.
 field has exact evidence for the selected target in both CLI and Libpod planes. Unsupported or
 manual fields produce structured findings and no partial artifact for the affected rendering.
 
+Protected inline environment values are rejected by this default path. A caller who explicitly
+authorizes all protected inline environment values in one plan can call
+`render_deployment_with_authorization(&plan, SensitiveInlineRenderAuthorization::new())`.
+Unresolved external environment values still block the complete rendering. Authorized output
+bytes may contain protected values in CLI arguments, Libpod JSON, and the review script.
+`artifact::deployment_v1` refuses such a rendering before writing any bytes. Use
+`artifact::deployment_v2` to serialize it: v2 includes a
+`contains_protected_inline_environment` indicator derived from rendered values. Handle the bytes
+as sensitive when that indicator is true; `Debug` remains redacted.
+
 ## Artifacts are inert
 
 `artifact::deployment_v1::deployment` serializes desired deployment output. It is not an observed

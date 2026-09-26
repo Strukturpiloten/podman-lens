@@ -12,9 +12,10 @@ in the committed renderer evidence. That evidence records the immutable CLI and 
 for each operation at every reviewed release, plus the body-decoding source when a body exists. The
 optional non-sensitive output connection survives into the rendering and JSON export. The review
 script safely names every external prerequisite in deterministic comments but never exposes secret
-material or its external reference. A deployment artifact may contain only explicitly
-caller-authorized public declared values; it never contains a sensitive value or sensitive-input
-reference. Neither the renderer nor the script generator opens a connection
+material or its external reference. The ordinary renderer permits public declared values. Decision
+[0018](0018-explicit-protected-inline-render-authorization.md) additionally permits protected
+inline environment values with an explicit render-time grant, but only version 2 artifacts can
+serialize them. Neither path serializes an external sensitive-input reference. Neither the renderer nor the script generator opens a connection
 or executes Podman.
 
 Pod networks, pod-member container assignment, and unpodded-container networks are exact. M6-B1a
@@ -24,8 +25,9 @@ container command, entrypoint, user, workdir, hostname, labels, environment, and
 the semantic plan. M6-B1b records revision-pinned CLI, model, and Libpod handler evidence for every
 exact emitted setting on every reviewed line before rendering becomes exact. The current v5 catalogue
 retains that B1 evidence and adds M6-B2 availability plus cross-repository common-module claims. It
-renders only caller-declared public label and environment values; sensitive inline and external
-environment variants block the entire artifact with static, redacted findings. M6-B4 supersedes
+renders caller-declared public label and environment values by default; sensitive inline and
+external environment variants block the entire artifact with static, redacted findings. Decision
+0018 adds the explicit protected-inline path, while external values remain blocked. M6-B4 supersedes
 the earlier secret-attachment boundary with typed mount/environment grants and bounded mount
 options; secret bytes remain an explicit external input requirement.
 

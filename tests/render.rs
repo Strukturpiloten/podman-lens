@@ -10,8 +10,10 @@ use podman_lens::{
     NamedVolumeMount, NetworkAttachment, NetworkCidr, NetworkIntent, NetworkRoute, NetworkSubnet, ObservedApiVersion,
     ObservedPodmanVersion, PodIntent, PortMapping, PortProtocol, PublicEnvironmentValue, PublicLabelValue,
     RenderStatus, RenderedHttpBody, ResourceKind, RestartPolicy, RouteType, SecretGrant, SecretIntent,
-    SensitiveInlineEnvironmentValue, SensitiveInputReference, TargetExecutionContext, TargetProfile, VolumeIntent,
-    artifact::deployment_v1, plan_deployment, render_deployment,
+    SensitiveInlineEnvironmentValue, SensitiveInlineRenderAuthorization, SensitiveInputReference,
+    TargetExecutionContext, TargetProfile, VolumeIntent,
+    artifact::{deployment_v1, deployment_v2},
+    plan_deployment, render_deployment, render_deployment_with_authorization,
 };
 
 fn id(kind: ResourceKind, name: &str) -> DeploymentResourceId {
@@ -1861,6 +1863,168 @@ fn renderer_rejects_sensitive_environment_values_without_leaking_names_or_values
     let debug = format!("{outcome:?}");
     assert!(!debug.contains(sensitive_sentinel));
     assert!(!debug.contains("PASSWORD"));
+}
+
+fn protected_environment_plan(
+    version: &str,
+    context: TargetExecutionContext,
+    external: bool,
+) -> podman_lens::DeploymentPlan {
+    let image = id(ResourceKind::Image, "registry.example.invalid/app:1");
+    let mut container = ContainerIntent::new(id(ResourceKind::Container, "app"), image.clone()).expect("container");
+    container
+        .settings_mut()
+        .add_environment(EnvironmentAssignment::new(
+            EnvironmentName::new("MODE").expect("benign-looking name"),
+            DeploymentEnvironmentValue::SensitiveInline(
+                SensitiveInlineEnvironmentValue::new("pl103-protected-canary-'$VALUE").expect("protected value"),
+            ),
+        ))
+        .expect("environment");
+    if external {
+        container
+            .settings_mut()
+            .add_environment(EnvironmentAssignment::new(
+                EnvironmentName::new("CACHE_HINT").expect("benign-looking name"),
+                DeploymentEnvironmentValue::External(
+                    SensitiveInputReference::new("pl103-external-reference-canary").expect("reference"),
+                ),
+            ))
+            .expect("external environment");
+    }
+    let mut selected_target = target(version, version);
+    selected_target.set_execution_context(context);
+    let mut intent = DeploymentIntent::new(selected_target);
+    intent.add_resource(DeploymentResource::Image(
+        ImageIntent::new(
+            image,
+            ImageSource::new("registry.example.invalid/app:1").expect("image source"),
+            ImagePullPolicy::Missing,
+        )
+        .expect("image"),
+    ));
+    intent.add_resource(DeploymentResource::Container(container));
+    plan_deployment(&intent).plan().cloned().expect("semantic plan")
+}
+
+#[test]
+fn protected_inline_rendering_requires_explicit_grant_and_redacts_debug() {
+    const CANARY: &str = "pl103-protected-canary-'$VALUE";
+    for version in ["5.6.0", "5.7.0", "5.8.6", "6.0.0", "6.1.0"] {
+        for context in [TargetExecutionContext::Rootful, TargetExecutionContext::Rootless] {
+            let plan = protected_environment_plan(version, context, false);
+            let denied = render_deployment(&plan);
+            assert!(denied.rendering().is_none());
+            assert_eq!(denied.findings()[0].field(), Some("environment.sensitive_inline"));
+            assert!(!format!("{denied:?}").contains(CANARY));
+            assert!(!denied.findings()[0].message().contains(CANARY));
+
+            let permitted = render_deployment_with_authorization(&plan, SensitiveInlineRenderAuthorization::new());
+            let rendering = permitted.rendering().expect("explicitly authorized inert rendering");
+            let create = rendering
+                .operations()
+                .iter()
+                .find(|operation| {
+                    operation.operation().id().action() == podman_lens::SemanticOperationAction::Create
+                        && operation.operation().id().resource().kind() == ResourceKind::Container
+                })
+                .expect("container create");
+            assert!(
+                create
+                    .cli()
+                    .argv()
+                    .windows(2)
+                    .any(|args| args[0] == "--env" && args[1] == format!("MODE={CANARY}"))
+            );
+            assert!(matches!(create.libpod().body(), RenderedHttpBody::Json(body) if body["env"]["MODE"] == CANARY));
+            let quoted_assignment = format!("'MODE={}'", CANARY.replace('\'', "'\"'\"'"));
+            assert!(rendering.shell_script().contains(&quoted_assignment));
+            assert!(rendering.contains_protected_inline_environment());
+            let mut v1_bytes = Vec::new();
+            let v1_error = serde_json::to_writer(&mut v1_bytes, &deployment_v1::deployment(rendering))
+                .expect_err("v1 must reject protected content before emitting bytes");
+            assert!(v1_bytes.is_empty());
+            assert!(!v1_error.to_string().contains(CANARY));
+            let artifact = deployment_v2::deployment(rendering);
+            assert_eq!(artifact.schema_version(), 2);
+            assert!(artifact.contains_protected_inline_environment());
+            let serialized = serde_json::to_string(&artifact).expect("inert artifact");
+            assert!(serialized.contains(CANARY));
+            let v2_value: serde_json::Value = serde_json::from_str(&serialized).expect("v2 JSON");
+            assert_eq!(v2_value["schema_version"], 2);
+            assert_eq!(v2_value["contains_protected_inline_environment"], true);
+            for debug in [
+                format!("{permitted:?}"),
+                format!("{rendering:?}"),
+                format!("{create:?}"),
+                format!("{:?}", create.cli()),
+                format!("{:?}", create.libpod()),
+                format!("{:?}", create.libpod().body()),
+                format!("{artifact:?}"),
+            ] {
+                assert!(!debug.contains(CANARY), "protected value in Debug output");
+            }
+        }
+    }
+}
+
+#[test]
+fn authorization_does_not_resolve_external_environment_or_produce_partial_artifacts() {
+    const INLINE: &str = "pl103-protected-canary-'$VALUE";
+    const EXTERNAL: &str = "pl103-external-reference-canary";
+    let plan = protected_environment_plan("6.1.0", TargetExecutionContext::Rootless, true);
+    let result = render_deployment_with_authorization(&plan, SensitiveInlineRenderAuthorization::new());
+    assert!(result.rendering().is_none());
+    assert_eq!(result.findings()[0].field(), Some("environment.external"));
+    for debug in [format!("{result:?}"), format!("{:?}", result.findings())] {
+        assert!(!debug.contains(INLINE));
+        assert!(!debug.contains(EXTERNAL));
+        assert!(!debug.contains("CACHE_HINT"));
+    }
+}
+
+#[test]
+fn versioned_artifact_schemas_keep_protected_output_distinct() -> Result<(), Box<dyn std::error::Error>> {
+    let plan = protected_environment_plan("6.1.0", TargetExecutionContext::Rootless, false);
+    let permitted = render_deployment_with_authorization(&plan, SensitiveInlineRenderAuthorization::new());
+    let rendering = permitted.rendering().expect("authorized rendering");
+    let v2_value = serde_json::to_value(deployment_v2::deployment(rendering))?;
+    let v1_schema: serde_json::Value =
+        serde_json::from_str(include_str!("../docs/schemas/podman-lens-deployment-v1.schema.json"))?;
+    let v2_schema: serde_json::Value =
+        serde_json::from_str(include_str!("../docs/schemas/podman-lens-deployment-v2.schema.json"))?;
+    let v1_validator = jsonschema::options()
+        .with_draft(jsonschema::Draft::Draft202012)
+        .build(&v1_schema)?;
+    let v2_validator = jsonschema::options()
+        .with_draft(jsonschema::Draft::Draft202012)
+        .build(&v2_schema)?;
+    assert!(!v1_validator.is_valid(&v2_value));
+    assert!(v2_validator.is_valid(&v2_value));
+    let mut missing_indicator = v2_value.clone();
+    let removed = missing_indicator
+        .as_object_mut()
+        .expect("artifact object")
+        .remove("contains_protected_inline_environment");
+    assert_eq!(removed, Some(serde_json::Value::Bool(true)));
+    assert!(!v2_validator.is_valid(&missing_indicator));
+    let mut wrong_indicator = v2_value.clone();
+    wrong_indicator["contains_protected_inline_environment"] = serde_json::json!("true");
+    assert!(!v2_validator.is_valid(&wrong_indicator));
+    let mut wrong_version = v2_value;
+    wrong_version["schema_version"] = serde_json::json!(1);
+    assert!(!v2_validator.is_valid(&wrong_version));
+
+    let public_plan = complete_plan("6.1.0");
+    let public_rendering =
+        render_deployment_with_authorization(&public_plan, SensitiveInlineRenderAuthorization::new())
+            .rendering()
+            .cloned()
+            .expect("no protected values rendered");
+    assert!(!public_rendering.contains_protected_inline_environment());
+    assert!(!deployment_v2::deployment(&public_rendering).contains_protected_inline_environment());
+    assert!(serde_json::to_value(deployment_v1::deployment(&public_rendering)).is_ok());
+    Ok(())
 }
 
 #[test]

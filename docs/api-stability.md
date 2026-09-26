@@ -46,11 +46,17 @@ An incompatible shape requires a new versioned module and schema. An existing sc
 never silently rewritten. Exact golden files and negative schema mutations protect semantics that
 the schema alone cannot express.
 
-Snapshots remain always redacted. Deployment artifacts contain only public desired values
-explicitly authorized by the caller and never sensitive input references. The frozen `snapshot::v1`
-shape omits native network attachment aliases entirely, including their state and count. Their exact
-spelling, field path, and runtime-ID classification are available only from the typed observation
-API, where downstream mapping remains an explicit authorization.
+Snapshots remain always redacted. `artifact::deployment_v1` remains the public-only serialized
+contract: it fails before writing bytes if a rendering contains protected inline environment
+values. `artifact::deployment_v2` carries an explicit
+`contains_protected_inline_environment` indicator and may include these values only after a
+render-time `SensitiveInlineRenderAuthorization`. The ordinary `render_deployment` path still
+rejects them. External sensitive input references never enter either artifact version. `Debug`
+of renderings and artifacts stays redacted; v2 serialized bytes require sensitive handling when
+the indicator is true.
+The frozen `snapshot::v1` shape omits native network attachment aliases entirely, including their
+state and count. Their exact spelling, field path, and runtime-ID classification are available only
+from the typed observation API, where downstream mapping remains an explicit authorization.
 
 ## Version and catalogue changes
 

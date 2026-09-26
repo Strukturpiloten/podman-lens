@@ -18,7 +18,7 @@ all-or-nothing when findings block a complete result.
 ## Privacy boundaries
 
 PodmanLens excludes these observed or protected values from diagnostics, `Debug`, `Display`,
-observational snapshots, and deployment artifacts:
+and observational snapshots. Deployment artifacts exclude them by default:
 
 - actual connection endpoints, credentials, certificates, host keys, and opaque authentication
   values;
@@ -36,7 +36,15 @@ the public API and snapshots.
 A caller-selected non-sensitive connection name may remain as provenance. Public target labels
 authored explicitly by the caller are serialized into deployment artifacts by design. Secret
 payload endpoints are never requested. Base64 is not protection. A caller must explicitly construct
-a public target value before it can appear in a deployment artifact.
+a public target value before it can appear in a deployment artifact by the ordinary renderer.
+
+Never cast a protected value through `PublicEnvironmentValue`: use
+`render_deployment_with_authorization` and `SensitiveInlineRenderAuthorization` at the render call.
+Its output bytes can contain protected values, so treat the CLI arguments, Libpod JSON, review
+script, and serialized v2 artifact as sensitive. The original v1 artifact fails serialization
+before writing protected bytes. V2 exposes `contains_protected_inline_environment` so consumers
+can identify sensitive output. Their `Debug` views remain redacted. External
+environment values remain unresolved and block the complete artifact.
 
 ## Snapshot versus deployment artifact
 
@@ -44,8 +52,9 @@ a public target value before it can appear in a deployment artifact.
 evidence. It can still expose resource names, IDs, native field paths, and evidence URLs, so it is
 redacted rather than anonymous.
 
-`artifact::deployment_v1` represents caller-authorized desired output. It never deserializes as an
-inventory and never contains sensitive input references. Review both forms before sharing them.
+`artifact::deployment_v1` retains the public-only desired-output contract. V2 represents
+caller-authorized protected inline output with an explicit indicator. Neither deserializes as an
+inventory or contains external sensitive input references. Review both forms before sharing them.
 
 Bounded creation evidence exposes only closed consistency results and typed mount indices, never
 the command or its arguments. Its image and mount-relabel states are independent; unavailable

@@ -1,6 +1,6 @@
 # 0005: Sensitive values require explicit authorization
 
-- Status: Accepted
+- Status: Accepted; rendered-output restriction amended by [0018](0018-explicit-protected-inline-render-authorization.md)
 - Date: 2026-08-19
 
 ## Context
@@ -14,11 +14,11 @@ Secret inspection returns metadata by default. Payload acquisition requires expl
 authorization and produces an opaque sensitive value type. Runtime environment values are redacted
 by default; callers must explicitly request their inclusion.
 
-Sensitive values never appear in diagnostics, logs, observational snapshots, deployment artifacts,
-`Debug` or `Display` output, or serialized deployment plans. Plans refer to external sensitive
-inputs. Any future file export is an explicit unsafe mode and writes restricted files. Base64 is not
-treated as protection. A value in a deployment artifact must have been explicitly declared public
-by the caller; no observed sensitive value can be converted into that public contract.
+Sensitive values never appear in diagnostics, logs, observational snapshots, `Debug` or `Display`
+output, or serialized deployment plans. Plans refer to external sensitive inputs. Base64 is not
+treated as protection. A caller-declared protected inline environment value can enter inert
+deployment output only through the separate render-time authorization in decision 0018; the
+ordinary public-value constructor must never be used as a cast for observed sensitive values.
 
 ## Consequences
 

@@ -1167,11 +1167,13 @@ impl DeploymentPlan {
 
 /// Validates explicit typed intent and returns its deterministic semantic deployment plan.
 ///
-/// The plan never contains a shell fragment, HTTP request, or secret payload. It may retain typed
-/// caller-declared public and sensitive environment intent so a later renderer can make an explicit
-/// output decision. Sensitive values and references remain redacted from diagnostics, `Debug`,
-/// observational snapshots, and serialized deployment artifacts; renderers must block them until a
-/// safe output representation is available. Every operation is ordered after its declared
+/// The plan never contains a shell fragment, HTTP request, or Podman secret payload. It may retain
+/// typed caller-declared public and protected inline environment intent so rendering can make a
+/// separate output decision. Diagnostics, `Debug`, and observational snapshots stay redacted.
+/// `render_deployment` rejects protected inline and unresolved external environment values by
+/// default. Only `render_deployment_with_authorization` can include protected inline values in
+/// inert output after an explicit `SensitiveInlineRenderAuthorization`; external values remain
+/// unresolved and block a complete rendering. Every operation is ordered after its declared
 /// prerequisites. M6 renders supported operations as exact CLI arguments and Libpod API requests.
 ///
 /// # Findings

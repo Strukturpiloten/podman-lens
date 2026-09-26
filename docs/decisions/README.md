@@ -22,3 +22,4 @@ do not let code silently change it.
 | [0015: Bounded creation-command evidence](0015-bounded-creation-command-evidence.md)                                       | Accepted |
 | [0016: Captured native evidence is a test-only release contract](0016-captured-native-release-evidence.md)                 | Accepted |
 | [0017: Isolated native service conformance gates release](0017-isolated-native-release-conformance.md)                     | Accepted |
+| [0018: Explicit protected inline render authorization](0018-explicit-protected-inline-render-authorization.md)             | Accepted |

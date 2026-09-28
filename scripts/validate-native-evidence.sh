@@ -16,21 +16,25 @@ source "$(dirname "${BASH_SOURCE[0]}")/native-runtime-pins.sh"
 for cell in podman-6.1-rootful podman-6.1-rootless; do
   evidence="${root}/podman-lens-native-api-${candidate}-${run_id}-${run_attempt}-${cell}/native-podman-evidence.json"
   [[ -f "${evidence}" ]] || {
-    echo "Missing current-run evidence for ${cell}." >&2
+    echo "Missing current-attempt native evidence for ${cell}; start a fresh full Release validation run. Rerunning failed jobs alone cannot supply every cell for the new attempt." >&2
     exit 1
   }
   root_mode=${cell##*-}
   case "${root_mode}" in rootful) state_key=rf ;; rootless) state_key=rl ;; esac
   image="localhost/podman-lens-native:${PODMAN_NATIVE_VERSION}-${state_key}"
   podman_nevra="podman 5:${PODMAN_NATIVE_VERSION#v}-${PODMAN_NATIVE_RPM_RELEASE}.x86_64"
-  jq -e --arg sha "${candidate}" --arg run "${run_id}" --arg attempt "${run_attempt}" --arg cell "${cell}" \
+  if ! jq -e --arg sha "${candidate}" --arg run "${run_id}" --arg attempt "${run_attempt}" --arg cell "${cell}" \
     --arg root_mode "${root_mode}" --arg image "${image}" --arg base_image "${PODMAN_NATIVE_BASE_IMAGE}" \
     --arg expected_version "${PODMAN_NATIVE_VERSION#v}" --arg rpm_sha256 "${PODMAN_NATIVE_RPM_SHA256}" \
     --arg source_revision "${PODMAN_NATIVE_SOURCE_REVISION}" \
     --arg source_rpm_sha256 "${PODMAN_NATIVE_SOURCE_RPM_SHA256}" \
     --arg source_archive_sha256 "${PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256}" \
     --arg repomd_sha256 "${PODMAN_NATIVE_REPOMD_SHA256}" --arg primary_sha256 "${PODMAN_NATIVE_PRIMARY_SHA256}" --arg podman_nevra "${podman_nevra}" \
-    '.candidate == $sha and .run_id == $run and .run_attempt == $attempt and .task == "native-api" and
+    'def valid_package:
+       type == "string" and
+       (test("\\A[A-Za-z0-9_+.-]+ [0-9]+:[A-Za-z0-9_+.:~-]+(\\^[A-Za-z0-9][A-Za-z0-9_+.:~-]*)?\\.[A-Za-z0-9_+-]+\\z") or
+        test("\\Agpg-pubkey [0-9]+:[A-Za-z0-9_+.:~-]+(\\^[A-Za-z0-9][A-Za-z0-9_+.:~-]*)?\\.\\(none\\)\\z"));
+     .candidate == $sha and .run_id == $run and .run_attempt == $attempt and .task == "native-api" and
      .cell == $cell and .root_mode == $root_mode and .build_outcome == "success" and .outcome == "success" and
      .socket_scope == "isolated-disposable-service" and .image == $image and
      (.api_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
@@ -46,8 +50,11 @@ for cell in podman-6.1-rootful podman-6.1-rootless; do
      (.peak_state_kib | tonumber) <= 8388608 and
      (.peak_state_kib | tonumber) == ([.build_peak_state_kib, .runtime_peak_state_kib] | map(tonumber) | max) and
      (.packages | type == "array" and length > 0 and length <= 1000 and index($podman_nevra) != null and
-       all(.[]; type == "string" and test("^[A-Za-z0-9_+.-]+ [0-9]+:[A-Za-z0-9_+.:~-]+$")))' \
-    "${evidence}" > /dev/null
+       all(.[]; valid_package))' \
+    "${evidence}" > /dev/null 2>&1; then
+    echo "Invalid current-attempt native evidence for ${cell}; review identity, package syntax, provenance, and budgets, then run full Release validation." >&2
+    exit 1
+  fi
   recorded_closure_sha="$(jq -r '.closure_sha256' "${evidence}")"
   actual_closure_sha="$(jq -r '.packages[]' "${evidence}" | sha256sum)"
   actual_closure_sha="${actual_closure_sha%% *}"

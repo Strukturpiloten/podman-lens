@@ -14,6 +14,11 @@ branch before the privileged matrix starts. The calling dispatch event cannot se
 issue-branch path. A reviewed issue-branch manual native run is useful pre-merge diagnostics but
 is validation-only; its artifacts never replace fresh SHA/run/attempt-bound Release evidence.
 
+After fixing a failure, dispatch a complete Release run on current `main`.
+"Rerun failed jobs" can omit native cells whose earlier-attempt artifacts are
+inadmissible. Never copy those artifacts or weaken validation. Use
+`validation_only` to prevent publication.
+
 ## Prepare a release-worthy change
 
 Only merged `feat`, `fix`, `perf`, `refactor`, or `revert` commits create a release

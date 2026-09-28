@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.4...v0.2.5) - 2026-09-28
+
 ### Added
 
 - Allow explicit render-time authorization of protected inline environment values in inert output.

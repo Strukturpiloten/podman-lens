@@ -5,6 +5,19 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Added
+
+- Allow explicit render-time authorization of protected inline environment values in inert output.
+  Deployment artifact v2 reports whether it contains protected values; v1 rejects such output before
+  writing bytes. Default rendering, debug output, diagnostics, and unresolved external values remain
+  protected ([#103](https://github.com/Strukturpiloten/podman-lens/issues/103)).
+
+### Changed
+
+- Refresh the active native Podman 6.1 conformance lane to 6.1.2, with separate rootful and rootless
+  acquisition checks and retained package provenance. Historical capture evidence is unchanged
+  ([#98](https://github.com/Strukturpiloten/podman-lens/issues/98)).
+
 ## [0.2.4](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.3...v0.2.4) - 2026-09-13
 
 ### Added

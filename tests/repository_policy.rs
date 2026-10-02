@@ -1702,16 +1702,17 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         "# Workspace defaults; keep primary-session overrides aligned with Sol/xhigh.",
         "model = \"gpt-6-sol\"",
         "model_reasoning_effort = \"xhigh\"",
-        "max_concurrent_threads_per_session = 9",
-        "default_subagent_model = \"gpt-6-sol\"",
+        "This limit excludes the primary manager: eight subagents means nine agents in total.",
+        "max_concurrent_threads_per_session = 8",
+        "default_subagent_model = \"gpt-6.1-sol\"",
         "default_subagent_reasoning_effort = \"medium\"",
     ] {
         assert!(config.contains(required), "missing agent default: {required}");
     }
     for (role, model, effort, sandbox) in [
-        ("implementation-worker", "gpt-6-sol", "high", "workspace-write"),
-        ("specification-researcher", "gpt-6-sol", "high", "read-only"),
-        ("reviewer", "gpt-6-sol", "high", "read-only"),
+        ("implementation-worker", "gpt-6.1-sol", "high", "workspace-write"),
+        ("specification-researcher", "gpt-6.1-sol", "high", "read-only"),
+        ("reviewer", "gpt-6.1-sol", "high", "read-only"),
         ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
         let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
@@ -1732,13 +1733,25 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = fs::read_to_string(root.join(".codex/agents/verifier.toml"))?;
     assert!(verifier.contains("./scripts/check-all.sh --check"));
     assert!(verifier.contains("never run the default formatting gate"));
-    assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6-sol agent"));
+    assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6.1-sol agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
     assert!(instructions.contains("`gpt-6-sol` with `xhigh` reasoning"));
-    assert!(instructions.contains("`gpt-6-sol` with `high` reasoning"));
-    assert!(instructions.contains("`gpt-6-luna` with"));
-    assert!(instructions.contains("up to nine concurrent subagents plus the primary manager"));
-    assert!(instructions.contains("at most one complete gate or heavy runtime suite"));
+    let policy = instructions.split_whitespace().collect::<Vec<_>>().join(" ");
+    for required in [
+        "Default subagents use `gpt-6.1-sol` with `medium` reasoning",
+        "review use `gpt-6.1-sol` with `high` reasoning",
+        "check-only verification uses `gpt-6-luna` with `high` reasoning",
+        "Task-specific subagents may use `gpt-6.1-sol` or `gpt-6-luna` with `medium`, `high`, or `xhigh` reasoning",
+        "Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult architectural questions",
+        "up to eight concurrent subagents plus the primary manager (nine agents in total)",
+        "Eight is a ceiling, not a target or eight distinct roles",
+        "subagents may use the same role for independent tasks",
+        "Do not create nested agents to evade the limit",
+        "`agents.max_concurrent_threads_per_session` excludes the primary manager",
+        "at most one complete gate or heavy runtime suite",
+    ] {
+        assert!(policy.contains(required), "missing agent policy: {required}");
+    }
     let testing = fs::read_to_string(root.join("docs/testing.md"))?;
     assert!(testing.contains("Sol/xhigh"));
     assert!(testing.contains("The primary owns final"));

@@ -14,7 +14,7 @@ ARG CARGO_DENY_VERSION=0.20.2
 # renovate: datasource=crate depName=cargo-llvm-cov
 ARG CARGO_LLVM_COV_VERSION=0.9.0
 # renovate: datasource=crate depName=cargo-semver-checks
-ARG CARGO_SEMVER_CHECKS_VERSION=0.50.0
+ARG CARGO_SEMVER_CHECKS_VERSION=0.51.0
 # renovate: datasource=crate depName=lychee
 ARG LYCHEE_VERSION=0.24.2
 # renovate: datasource=crate depName=zizmor

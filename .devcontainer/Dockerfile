@@ -1,6 +1,6 @@
 # renovate: datasource=docker depName=docker.io/library/node
 # release: 24.21.0-bookworm-slim
-FROM docker.io/library/node@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS node_toolchain
+FROM docker.io/library/node@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS node_toolchain
 
 # renovate: datasource=docker depName=mcr.microsoft.com/devcontainers/rust
 # release: 2.0.14-bookworm

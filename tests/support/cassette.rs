@@ -163,10 +163,10 @@ fn validate_captured_privacy(value: &Value) -> Result<(), CassetteError> {
         if let Some(body) = response.get("body") {
             validate_captured_value(body, None)?;
         }
-        if let Some(body) = response.get("body_text").and_then(Value::as_str) {
-            if captured_string_is_private(body, None) {
-                return Err(CassetteError::PrivacyViolation);
-            }
+        if let Some(body) = response.get("body_text").and_then(Value::as_str)
+            && captured_string_is_private(body, None)
+        {
+            return Err(CassetteError::PrivacyViolation);
         }
     }
     Ok(())
@@ -252,13 +252,12 @@ fn captured_string_is_private(value: &str, parent_key: Option<&str>) -> bool {
     {
         return true;
     }
-    if let Some((name, assigned)) = value.split_once('=') {
-        if !name.is_empty()
-            && name.bytes().all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
-            && assigned != "redacted"
-        {
-            return true;
-        }
+    if let Some((name, assigned)) = value.split_once('=')
+        && !name.is_empty()
+        && name.bytes().all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+        && assigned != "redacted"
+    {
+        return true;
     }
     if let Some(key) = parent_key {
         if key.eq_ignore_ascii_case("hostname")

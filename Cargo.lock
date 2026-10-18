@@ -705,7 +705,6 @@ dependencies = [
  "sha2",
  "tokio",
  "url",
- "yoke-derive",
 ]
 
 [[package]]

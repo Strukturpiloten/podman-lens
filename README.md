@@ -63,7 +63,7 @@ testable.
 
 ## Contributing
 
-PodmanLens requires Rust 1.85.0 or newer. The Dev Container supplies the pinned development
+PodmanLens requires Rust 1.98.1 or newer. The Dev Container supplies the pinned development
 toolchain. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop and evidence rules.
 
 ## Open source

@@ -766,15 +766,14 @@ fn reconcile_relationships(sections: &mut [InventorySection]) {
             if let (RelationshipTarget::One(configured), RelationshipTarget::One(local)) = (
                 resolve_relationship_target(&targets, &configured),
                 resolve_relationship_target(&targets, &local),
-            ) {
-                if configured != local {
-                    let identity = observation.header().identity().clone();
-                    observation.header_mut().findings_mut().push(InventoryFinding::field(
-                        DiagnosticCode::RelationshipConflict,
-                        identity,
-                        "$.ImageName",
-                    ));
-                }
+            ) && configured != local
+            {
+                let identity = observation.header().identity().clone();
+                observation.header_mut().findings_mut().push(InventoryFinding::field(
+                    DiagnosticCode::RelationshipConflict,
+                    identity,
+                    "$.ImageName",
+                ));
             }
         }
     }
@@ -5014,12 +5013,12 @@ fn decode_pod_networking(
                 ObservationOrigin::Effective,
                 findings,
             );
-            if let ObservationField::Observed(networking) = &networking {
-                if let ObservationField::Observed(networks) = networking.value().networks() {
-                    relationships.extend(networks.value().iter().map(|network| {
-                        NativeRelationship::new(ResourceKind::Network, network.reference(), network.field_path())
-                    }));
-                }
+            if let ObservationField::Observed(networking) = &networking
+                && let ObservationField::Observed(networks) = networking.value().networks()
+            {
+                relationships.extend(networks.value().iter().map(|network| {
+                    NativeRelationship::new(ResourceKind::Network, network.reference(), network.field_path())
+                }));
             }
             (create_infra, networking, relationship_decoding)
         }
@@ -5887,7 +5886,7 @@ const fn timestamp_days_in_month(year: u32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) => 29,
+        2 if year.is_multiple_of(400) || (year.is_multiple_of(4) && !year.is_multiple_of(100)) => 29,
         2 => 28,
         _ => 0,
     }

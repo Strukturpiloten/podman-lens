@@ -1361,19 +1361,12 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
         r#""compose-lens""#,
         r#""podman-lens""#,
         r#""quadlet-lens""#,
-        "Hold the known Rust-1.85-incompatible yoke-derive release",
-        r#""allowedVersions": "!/^(0\\.8\\.3)$/""#,
     ] {
         assert!(
             configuration.contains(required),
             "Renovate configuration is missing {required}"
         );
     }
-    let yoke_rule = package_rules
-        .iter()
-        .find(|rule| rule["description"] == "Hold the known Rust-1.85-incompatible yoke-derive release")
-        .ok_or_else(|| policy_error("Renovate yoke-derive compatibility rule is missing"))?;
-    assert_eq!(yoke_rule["matchPackageNames"], serde_json::json!(["yoke-derive"]));
     assert_eq!(
         configuration.matches(r#""automerge": false"#).count(),
         3,
@@ -1780,21 +1773,85 @@ fn policy_error(message: impl Into<String>) -> std::io::Error {
 }
 
 #[test]
-fn lockfile_maintenance_keeps_the_schema_test_graph_on_the_declared_msrv() -> Result<(), std::io::Error> {
+fn compiler_policy_has_one_support_floor_and_metadata_driven_consumers() -> Result<(), Box<dyn std::error::Error>> {
     let manifest = fs::read_to_string("Cargo.toml")?;
-    let lockfile = fs::read_to_string("Cargo.lock")?;
+    let msrv = manifest
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("rust-version = \"")
+                .and_then(|value| value.strip_suffix('"'))
+        })
+        .ok_or_else(|| policy_error("workspace rust-version must be an explicit compiler version"))?;
+    let minimum = Version::parse(msrv)?;
+    assert!(minimum.pre.is_empty() && minimum.build.is_empty());
+    assert!(manifest.contains("rust-version.workspace = true"));
+    assert_eq!(fs::read_to_string("clippy.toml")?, format!("msrv = \"{msrv}\"\n"));
+    assert!(fs::read_to_string("README.md")?.contains(&format!("requires Rust {msrv} or newer")));
+
+    let toolchain = fs::read_to_string("rust-toolchain.toml")?;
+    let compiler = toolchain
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("channel = \"")
+                .and_then(|value| value.strip_suffix('"'))
+        })
+        .ok_or_else(|| policy_error("development toolchain must pin an explicit compiler version"))?;
+    let development = Version::parse(compiler)?;
+    assert!(development.pre.is_empty() && development.build.is_empty());
+    assert!(
+        development >= minimum,
+        "development compiler must support the declared floor"
+    );
+
+    let ci = fs::read_to_string(".github/workflows/ci.yml")?;
+    let local = fs::read_to_string("scripts/check-all.sh")?;
+    for consumer in [&ci, &local] {
+        assert!(consumer.contains("cargo metadata --locked --no-deps --format-version 1"));
+        assert!(consumer.contains("[.packages[].rust_version] | unique"));
+    }
+    for alias in ["ci-check", "ci-policy"] {
+        assert!(ci.contains(&format!("cargo \"+${{RUST_MSRV}}\" {alias}")));
+        assert!(local.contains(&format!("cargo \"+${{msrv}}\" {alias}")));
+    }
+    assert!(fs::read_to_string(".github/workflows/release.yml")?.contains("uses: ./.github/workflows/ci.yml"));
+
+    let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)?;
+    let rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
+    let owners: Vec<_> = rules
+        .iter()
+        .filter(|rule| rule["matchManagers"] == serde_json::json!(["rust-toolchain"]))
+        .collect();
+    assert_eq!(owners.len(), 1, "the development compiler must have one Renovate group");
+    assert_eq!(owners[0]["groupName"], "Rust toolchain");
+    assert!(renovate["customManagers"].as_array().is_some_and(|managers| {
+        managers.iter().all(|manager| {
+            !manager["matchStrings"].to_string().contains("rust-version")
+                && !manager["matchStrings"].to_string().contains("rust-toolchain")
+                && !manager["matchStrings"].to_string().contains("msrv")
+        })
+    }));
+    Ok(())
+}
+
+#[test]
+fn schema_test_dependencies_have_no_obsolete_compiler_restriction() -> Result<(), std::io::Error> {
+    let manifest = fs::read_to_string("Cargo.toml")?;
+    let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)?;
 
     assert!(
-        manifest.contains("yoke-derive = \"=0.8.2\""),
-        "the temporary direct constraint must prevent lock maintenance from selecting yoke-derive 0.8.3"
+        !manifest.lines().any(|line| line.starts_with("yoke-derive =")),
+        "schema tests must use the ordinary transitive yoke-derive resolution"
     );
+    let package_rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
     assert!(
-        lockfile.contains("name = \"yoke-derive\"\nversion = \"0.8.2\""),
-        "Cargo.lock must retain the Rust-1.85-compatible yoke-derive resolution"
-    );
-    assert!(
-        !lockfile.contains("name = \"yoke-derive\"\nversion = \"0.8.3\""),
-        "Cargo.lock must not select yoke-derive 0.8.3 until upstream restores Rust 1.85 compatibility"
+        !package_rules
+            .iter()
+            .any(|rule| rule["matchPackageNames"] == serde_json::json!(["yoke-derive"])),
+        "Renovate must not retain the obsolete yoke-derive compiler restriction"
     );
 
     Ok(())

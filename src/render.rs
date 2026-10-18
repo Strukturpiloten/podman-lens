@@ -3517,13 +3517,13 @@ fn append_container_runtime_json(
             "healthconfig".to_owned(),
             health_json(health, identity, "runtime.health.command")?,
         );
-        if let crate::HealthCheck::Command(configured) = health {
-            if let Some(on_failure) = configured.on_failure() {
-                body.insert(
-                    "health_check_on_failure_action".to_owned(),
-                    json!(health_on_failure_code(on_failure)),
-                );
-            }
+        if let crate::HealthCheck::Command(configured) = health
+            && let Some(on_failure) = configured.on_failure()
+        {
+            body.insert(
+                "health_check_on_failure_action".to_owned(),
+                json!(health_on_failure_code(on_failure)),
+            );
         }
     }
     if let Some(startup) = runtime.startup_health() {

@@ -5,6 +5,11 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the minimum supported Rust version to 1.98.1. Upgrade older Rust toolchains before
+  building PodmanLens; remove the obsolete Rust 1.85-only schema-test dependency restriction.
+
 ## [0.2.5](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.4...v0.2.5) - 2026-09-28
 
 ### Added

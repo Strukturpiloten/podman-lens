@@ -1441,16 +1441,16 @@ fn validate_container(
                 None,
             ));
         }
-        if let Some(DeploymentResource::Pod(pod_resource)) = resolved(resources, pod, ResourceKind::Pod) {
-            if !pod_resource.members().contains(container.identity()) {
-                findings.push(PlanningFinding::detailed(
-                    DiagnosticCode::DeploymentPodMembership,
-                    Some(container.identity().clone()),
-                    vec![pod.clone()],
-                    Some("pod"),
-                    None,
-                ));
-            }
+        if let Some(DeploymentResource::Pod(pod_resource)) = resolved(resources, pod, ResourceKind::Pod)
+            && !pod_resource.members().contains(container.identity())
+        {
+            findings.push(PlanningFinding::detailed(
+                DiagnosticCode::DeploymentPodMembership,
+                Some(container.identity().clone()),
+                vec![pod.clone()],
+                Some("pod"),
+                None,
+            ));
         }
     }
     for network in container.networks() {
@@ -1737,33 +1737,32 @@ fn validate_secret_grants(
             "secret_grants",
             findings,
         );
-        if let Some(target) = grant.mount_target() {
-            if !mount_destinations.insert(target.as_str()) {
-                findings.push(PlanningFinding::detailed(
-                    DiagnosticCode::DeploymentDuplicateResource,
-                    Some(container.identity().clone()),
-                    vec![grant.source().clone()],
-                    Some("secret_grants.mount_target"),
-                    Some(index + 1),
-                ));
-            }
+        if let Some(target) = grant.mount_target()
+            && !mount_destinations.insert(target.as_str())
+        {
+            findings.push(PlanningFinding::detailed(
+                DiagnosticCode::DeploymentDuplicateResource,
+                Some(container.identity().clone()),
+                vec![grant.source().clone()],
+                Some("secret_grants.mount_target"),
+                Some(index + 1),
+            ));
         }
-        if let Some(target) = grant.environment_target() {
-            if !environment_targets.insert(target.as_str())
+        if let Some(target) = grant.environment_target()
+            && (!environment_targets.insert(target.as_str())
                 || container
                     .settings()
                     .environment()
                     .iter()
-                    .any(|assignment| assignment.name() == target)
-            {
-                findings.push(PlanningFinding::detailed(
-                    DiagnosticCode::DeploymentDuplicateResource,
-                    Some(container.identity().clone()),
-                    vec![grant.source().clone()],
-                    Some("secret_grants.environment_target"),
-                    Some(index + 1),
-                ));
-            }
+                    .any(|assignment| assignment.name() == target))
+        {
+            findings.push(PlanningFinding::detailed(
+                DiagnosticCode::DeploymentDuplicateResource,
+                Some(container.identity().clone()),
+                vec![grant.source().clone()],
+                Some("secret_grants.environment_target"),
+                Some(index + 1),
+            ));
         }
     }
 }
@@ -1798,10 +1797,10 @@ fn create_dependencies(
                     container.image().clone(),
                 ));
             }
-            if let Some(pod) = container.pod() {
-                if is_managed(resources, pod) {
-                    dependencies.insert(create_operation(pod));
-                }
+            if let Some(pod) = container.pod()
+                && is_managed(resources, pod)
+            {
+                dependencies.insert(create_operation(pod));
             }
             for network in container.networks() {
                 if is_managed(resources, network.network()) {

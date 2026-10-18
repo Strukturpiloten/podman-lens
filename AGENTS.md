@@ -59,6 +59,10 @@ for input, or execute a plan.
 
 ## Validation
 
+Rust 2024; the minimum supported compiler is `workspace.package.rust-version` in `Cargo.toml`.
+Keep `clippy.toml` and the README aligned with that floor. CI, local, and release checks consume
+the manifest value; the normal development compiler is pinned separately in `rust-toolchain.toml`.
+
 For development feedback, `python3 scripts/validation-plan.py run-local` selects a bounded
 profile from the complete staged, unstaged, and untracked working-tree snapshot. Public guide
 edits run file checks, offline links, and the focused guide contract; code, workflow, policy,

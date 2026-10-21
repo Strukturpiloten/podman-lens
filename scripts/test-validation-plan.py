@@ -284,6 +284,32 @@ class ValidationPlanTests(unittest.TestCase):
                 with self.assertRaises(planner.PlanError):
                     planner.verify_gate(plan, needs, POLICY, args)
 
+    def assert_required_ci_aggregate(self, workflow: str) -> None:
+        self.assertRegex(
+            workflow,
+            r"(?m)^  pr-gate:\n    name: Required CI\n    if: always\(\)$",
+        )
+        self.assertEqual(
+            re.findall(r"(?m)^    name: Required CI$", workflow),
+            ["    name: Required CI"],
+            "only the fail-closed aggregate may publish the required check name",
+        )
+
+    def test_required_ci_names_only_the_existing_fail_closed_aggregate(self) -> None:
+        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assert_required_ci_aggregate(workflow)
+        mutations = {
+            "legacy name": workflow.replace("name: Required CI", "name: PR gate"),
+            "inexact name": workflow.replace("name: Required CI", "name: Required CI (aggregate)"),
+            "different job": workflow.replace("  pr-gate:\n", "  success-stub:\n"),
+            "missing always": workflow.replace("    name: Required CI\n    if: always()", "    name: Required CI"),
+            "duplicate name": workflow.replace("  rust:\n", "  rust:\n    name: Required CI\n"),
+        }
+        for label, mutation in mutations.items():
+            with self.subTest(mutation=label):
+                with self.assertRaises(AssertionError):
+                    self.assert_required_ci_aggregate(mutation)
+
     def test_first_rollout_never_executes_candidate_classifier_or_accepts_a_skip(self) -> None:
         workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertNotIn("scripts/validation-plan.py plan --force-full", workflow)

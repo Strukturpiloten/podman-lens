@@ -15,7 +15,7 @@ For measured, change-aware feedback use `python3 scripts/validation-plan.py run-
 Every public guide edit runs file/link checks and `tests/public_guides.rs`, which checks page
 inventory and navigation; other edits use the full gate. `--full` forces it, while `--docs-only`
 rejects current guides. PRs use the trusted-base classifier and initially run full. Main, manual,
-and Release run full; Release also requires native conformance. Every selected job must pass.
+and Release run full; Release requires native conformance. `Required CI` requires selected jobs to pass.
 Both local modes reject `CARGO_TARGET_DIR` outside the worktree to avoid stale test binaries.
 Focused checks never replace final `check-all.sh`.
 

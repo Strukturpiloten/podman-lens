@@ -67,7 +67,7 @@ resolver = "3"
 members = ["."]
 
 [workspace.package]
-version = "0.2.5"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.98.1"
 homepage = "https://boxferry.dev/docs/libraries/podman-lens/"

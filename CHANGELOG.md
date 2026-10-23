@@ -5,6 +5,8 @@ All notable changes to PodmanLens are documented here. The project follows the p
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/Strukturpiloten/podman-lens/compare/v0.2.5...v0.3.0) - 2026-10-23
+
 ### Changed
 
 - Raise the minimum supported Rust version to 1.98.1. Upgrade older Rust toolchains before

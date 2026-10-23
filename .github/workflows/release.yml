@@ -31,7 +31,7 @@ jobs:
   release-metadata:
     name: Release metadata
     if: github.repository == 'Strukturpiloten/podman-lens'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -76,7 +76,7 @@ jobs:
     name: SemVer
     needs: deterministic
     if: needs.deterministic.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -108,7 +108,7 @@ jobs:
     name: Release validation gate
     needs: [deterministic, release-metadata, native-conformance, semver]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: read
       contents: read
@@ -145,7 +145,7 @@ jobs:
       inputs.validation_only != true &&
       needs.release-gate.result == 'success'
     environment: release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       artifact-metadata: write

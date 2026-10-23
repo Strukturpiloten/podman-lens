@@ -18,7 +18,7 @@ concurrency:
 jobs:
   validation-plan:
     name: Validation plan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
@@ -89,7 +89,7 @@ jobs:
     name: Rust quality
     needs: validation-plan
     if: needs.validation-plan.outputs.select_rust == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,7 +111,7 @@ jobs:
     name: Coverage measurement
     needs: validation-plan
     if: needs.validation-plan.outputs.select_coverage == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - *checkout
       - run: rustup component add llvm-tools-preview
@@ -124,7 +124,7 @@ jobs:
     name: MSRV
     needs: validation-plan
     if: needs.validation-plan.outputs.select_msrv == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - *checkout
       - id: metadata
@@ -146,7 +146,7 @@ jobs:
     name: Dependency and license policy
     needs: validation-plan
     if: needs.validation-plan.outputs.select_dependencies == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - *checkout
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
@@ -157,7 +157,7 @@ jobs:
     name: Public API compatibility
     needs: validation-plan
     if: needs.validation-plan.outputs.select_api == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,7 +185,7 @@ jobs:
     name: Repository files and documentation
     needs: validation-plan
     if: needs.validation-plan.outputs.select_documentation == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -222,7 +222,7 @@ jobs:
     name: Lockfile release age
     needs: validation-plan
     if: needs.validation-plan.outputs.select_lockfile_release_age == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Preserve the aggregate result outside pull requests
@@ -269,7 +269,7 @@ jobs:
         documentation,
         lockfile-release-age,
       ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out candidate aggregate verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

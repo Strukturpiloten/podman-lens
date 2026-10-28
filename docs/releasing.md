@@ -39,13 +39,17 @@ The API check reads all Conventional Commits since the latest release tag. A `!`
 cargo-semver-checks its `major` category because that is the tool's name for an API break; this does
 not change PodmanLens's pre-1.0 versioning policy.
 
+`check-release-metadata.sh --development` permits pending notes in local/ordinary CI.
+`--release` (default) requires empty `Unreleased` for release-plz PRs and
+Release/validation-only, regardless of tags. Invalid arguments fail.
+
 ## Review the release pull request
 
 Before merging the generated `release-plz-*` pull request, verify that:
 
 - the proposed version matches the change type;
 - the newest numbered changelog section matches the crate version;
-- `Unreleased` is empty when the proposed crate version is newer than the latest release tag;
+- `Unreleased` is empty;
 - `CHANGELOG.md` contains a usable release section for that exact version;
 - breaking changes include migration guidance;
 - the package and compatibility checks pass; and

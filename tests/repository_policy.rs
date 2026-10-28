@@ -478,6 +478,30 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
 }
 
 #[test]
+fn release_metadata_context_is_explicit_for_each_validation_entry_point() -> Result<(), std::io::Error> {
+    let local = fs::read_to_string("scripts/check-all.sh")?;
+    assert!(local.contains("bash scripts/check-release-metadata.sh --development"));
+
+    let ci = fs::read_to_string(".github/workflows/ci.yml")?;
+    assert!(ci.contains(
+        "RELEASE_METADATA_MODE: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-plz-') && '--release' || '--development' }}"
+    ));
+    assert!(ci.contains(
+        "      - run: bash scripts/test-release-metadata.sh\n      - name: Check release metadata for the validation context"
+    ));
+    assert!(ci.contains("run: bash scripts/check-release-metadata.sh \"${RELEASE_METADATA_MODE}\""));
+
+    let release = fs::read_to_string(".github/workflows/release.yml")?;
+    assert!(release.contains("bash scripts/check-release-metadata.sh --release"));
+    assert!(!release.contains("check-release-metadata.sh --development"));
+
+    let validator = fs::read_to_string("scripts/check-release-metadata.sh")?;
+    assert!(!validator.contains("git describe"));
+    assert!(!validator.contains("latest_tag"));
+    Ok(())
+}
+
+#[test]
 fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::io::Error> {
     let release = fs::read_to_string(".github/workflows/release.yml")?;
     for required in [
@@ -509,7 +533,7 @@ fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::i
     for required in [
         "ref: ${{ github.sha }}",
         "persist-credentials: false",
-        "bash scripts/check-release-metadata.sh",
+        "bash scripts/check-release-metadata.sh --release",
         "bash scripts/extract-release-notes.sh",
     ] {
         assert!(

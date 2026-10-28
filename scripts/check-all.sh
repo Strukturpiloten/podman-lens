@@ -129,5 +129,5 @@ check_api_compatibility() {
 
 run_step "Check initial public API contract" check_api_compatibility
 run_step "Test release metadata policy" bash scripts/test-release-metadata.sh
-run_step "Check release metadata" bash scripts/check-release-metadata.sh
+run_step "Check release metadata" bash scripts/check-release-metadata.sh --development
 printf '\nPodmanLens local validation passed all %d steps.\n' "${total_steps}"

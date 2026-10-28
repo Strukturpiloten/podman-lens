@@ -53,7 +53,7 @@ jobs:
             echo "Run releases from the default branch (${DEFAULT_BRANCH})." >&2
             exit 1
           }
-          bash scripts/check-release-metadata.sh
+          bash scripts/check-release-metadata.sh --release
           version="$(cargo metadata --locked --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "podman-lens") | .version')"
           notes="${RUNNER_TEMP}/podman-lens-release-notes-${version}.md"
           bash scripts/extract-release-notes.sh "${version}" > "${notes}"

@@ -209,7 +209,11 @@ jobs:
           printf '%s\n' "${file_tool_bin}" >> "${GITHUB_PATH}"
       - run: bash scripts/check-files.sh --check
       - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
-      - run: bash scripts/check-release-metadata.sh
+      - run: bash scripts/test-release-metadata.sh
+      - name: Check release metadata for the validation context
+        env:
+          RELEASE_METADATA_MODE: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-plz-') && '--release' || '--development' }}
+        run: bash scripts/check-release-metadata.sh "${RELEASE_METADATA_MODE}"
       - name: Check changed public guides
         if: fromJSON(needs.validation-plan.outputs.plan).profile == 'executable-docs'
         run: cargo test --locked --test public_guides

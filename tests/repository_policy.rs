@@ -1129,10 +1129,7 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
         .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?;
     let managers = all_managers
         .iter()
-        .filter(|manager| {
-            manager["description"]
-                == "Signal current native Podman patch; checksum and conformance require manual review"
-        })
+        .filter(|manager| manager["description"] == "Record the fixed native Podman version for qualification policy")
         .collect::<Vec<_>>();
     assert_eq!(managers.len(), 1, "native Podman patch needs one Renovate owner");
     let manager = managers[0];
@@ -1147,7 +1144,9 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
     assert_native_renovate_extraction(manager, "PODMAN_NATIVE_VERSION=v")?;
     let base_managers = all_managers
         .iter()
-        .filter(|manager| manager["description"] == "Update the native Fedora base tag and immutable manifest together")
+        .filter(|manager| {
+            manager["description"] == "Record the fixed native Fedora base tag and manifest for qualification policy"
+        })
         .collect::<Vec<_>>();
     assert_eq!(base_managers.len(), 1, "native Fedora base needs one Renovate owner");
     assert!(base_managers[0]["matchStrings"][0].as_str().is_some_and(|pattern| {
@@ -1164,20 +1163,7 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
             "{marker} must have one Renovate owner"
         );
     }
-    let review_rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
-        .iter()
-        .filter(|rule| rule["description"] == "Require review for native conformance runtime pins")
-        .collect::<Vec<_>>();
-    assert_eq!(review_rules.len(), 1);
-    assert_eq!(
-        review_rules[0]["matchFileNames"],
-        serde_json::json!(["scripts/native-runtime-pins.sh"])
-    );
-    assert_eq!(review_rules[0]["dependencyDashboardApproval"], true);
-    assert_eq!(review_rules[0]["automerge"], false);
-    assert_eq!(review_rules[0]["allowedVersions"], "/^(v6\\.1\\.[0-9]+|45)$/");
+    assert_native_qualification_tuple_is_fixed(&renovate)?;
     assert!(
         !release.contains("expected_rootful") && !release.contains("expected_rootless"),
         "release validation must consume candidate-bound evidence instead of duplicating Renovate-owned image pins"
@@ -1206,6 +1192,34 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
             "credentialed publish job must not rerun {forbidden}"
         );
     }
+    Ok(())
+}
+
+fn assert_native_qualification_tuple_is_fixed(renovate: &Value) -> Result<(), std::io::Error> {
+    let review_rules = renovate["packageRules"]
+        .as_array()
+        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
+        .iter()
+        .filter(|rule| rule["description"] == "Keep the coupled Podman native qualification tuple fixed")
+        .collect::<Vec<_>>();
+    assert_eq!(review_rules.len(), 1);
+    let fixed = review_rules[0];
+    assert_eq!(fixed["matchManagers"], serde_json::json!(["custom.regex"]));
+    assert_eq!(
+        fixed["matchFileNames"],
+        serde_json::json!(["scripts/native-runtime-pins.sh"])
+    );
+    assert_eq!(
+        fixed["matchDatasources"],
+        serde_json::json!(["github-releases", "docker"])
+    );
+    assert_eq!(
+        fixed["matchPackageNames"],
+        serde_json::json!(["containers/podman", "registry.fedoraproject.org/fedora"])
+    );
+    assert_eq!(fixed["enabled"], false);
+    assert!(fixed["dependencyDashboardApproval"].is_null());
+    assert!(fixed["automerge"].is_null());
     Ok(())
 }
 
@@ -1393,8 +1407,8 @@ fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std:
     }
     assert_eq!(
         configuration.matches(r#""automerge": false"#).count(),
-        3,
-        "Dev Container features, native runtimes, and checksum-pinned tools must remain manual"
+        2,
+        "legacy Dev Container and checksum-tool exceptions remain; native tuple updates are disabled"
     );
     Ok(())
 }
@@ -1710,13 +1724,19 @@ fn verify_lockfile_guard_workflow() -> Result<(), std::io::Error> {
         "lockfile-release-age:",
         "Lockfile release age",
         "fetch-depth: 0",
-        "ref: ${{ github.event.pull_request.head.sha }}",
+        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}",
         "path: .github/strukturpiloten-shared",
         "--repository-root \"${GITHUB_WORKSPACE}\"",
         "--base \"${BASE_SHA}\"",
         "--head \"${HEAD_SHA}\"",
         "--minimum-age-hours 72",
-        "if: github.event_name != 'pull_request'",
+        "if: github.event_name != 'pull_request' && github.event_name != 'merge_group'",
+        "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'",
+        "Bind exact queue candidate and ancestor",
+        "test \"${HEAD_SHA}\" = \"${GITHUB_SHA}\"",
+        "test \"$(git rev-parse HEAD)\" = \"${HEAD_SHA}\"",
+        "git cat-file -e \"${BASE_SHA}^{commit}\"",
+        "git merge-base --is-ancestor \"${BASE_SHA}\" \"${HEAD_SHA}\"",
         "python3 \"${verifier}\" gate",
     ] {
         assert!(workflow.contains(required), "CI lockfile guard is missing {required}");
@@ -2069,4 +2089,32 @@ fn reextract_shared_policy_marker<'a>(
         return None;
     }
     Some((dep_name, current_value, ref_line))
+}
+
+#[test]
+fn eligibility_prerequisite_preserves_legacy_gate_and_additive_tasks() -> Result<(), Box<dyn std::error::Error>> {
+    let workflow = fs::read_to_string(".github/workflows/dependency-eligibility.yml")?;
+    for required in [
+        "workflow_run:",
+        "schedule:",
+        "workflow_run:",
+        "shared-dependency-eligibility.yml@",
+        "statuses: write",
+    ] {
+        assert!(workflow.contains(required), "eligibility prerequisite omits {required}");
+    }
+    assert!(!workflow.contains("steps:"));
+    assert!(!workflow.contains("pull_request_target:"));
+    let manifest: Value = serde_json::from_str(&fs::read_to_string(".github/automation.json")?)?;
+    assert_eq!(manifest["repository"], "Strukturpiloten/boxferry");
+    assert_eq!(manifest["policy"], "scripts/validation-policy.json");
+    let planner = fs::read_to_string("scripts/validation-plan.py")?;
+    assert!(planner.contains("required | {\"tasks\"}"));
+    let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
+    assert!(
+        policy["tasks"]["rust-quality"]["commands"].as_array().is_some_and(
+            |commands| commands.contains(&serde_json::json!(["bash", "scripts/check-native-release-contract.sh"]))
+        )
+    );
+    Ok(())
 }

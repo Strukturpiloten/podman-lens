@@ -65,7 +65,7 @@ def policy_at(root: Path) -> dict[str, Any]:
         "documentation_examples_manifest",
         "local_commands",
     }
-    if set(policy) != required or policy["schema"] != SCHEMA:
+    if not required <= set(policy) <= required | {"tasks"} or policy["schema"] != SCHEMA:
         raise PlanError("validation policy has an unsupported schema or key set")
     jobs = policy["jobs"]
     profile_jobs = policy["profile_jobs"]

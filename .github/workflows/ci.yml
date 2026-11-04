@@ -7,6 +7,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  merge_group:
 
 permissions:
   contents: read
@@ -28,6 +29,7 @@ jobs:
       select_msrv: ${{ steps.plan.outputs.select_msrv }}
       select_dependencies: ${{ steps.plan.outputs.select_dependencies }}
       select_api: ${{ steps.plan.outputs.select_api }}
+      select_api_release_type: ${{ steps.plan.outputs.select_api_release_type }}
       select_documentation: ${{ steps.plan.outputs.select_documentation }}
       select_lockfile_release_age: ${{ steps.plan.outputs.select_lockfile_release_age }}
     steps:
@@ -52,13 +54,55 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if [[ "${EVENT_NAME}" == 'pull_request' ]]; then
-            if [[ -f .validation-base/scripts/validation-plan.py &&
-                  -f .validation-base/scripts/validation-policy.json ]]; then
+          trusted_inventory=missing
+          if [[ "${EVENT_NAME}" == 'pull_request' &&
+                ( -e .validation-base/scripts/validation-policy.json ||
+                  -L .validation-base/scripts/validation-policy.json ) ]]; then
+            trusted_inventory="$(python3 - <<'PYINVENTORY'
+          import json
+          from pathlib import Path
+
+          policy = json.loads(Path(".validation-base/scripts/validation-policy.json").read_text())
+          jobs = "rust coverage msrv dependencies api-release-type api documentation lockfile-release-age".split()
+          legacy = [job for job in jobs if job != "api-release-type"]
+          if (not isinstance(policy, dict) or policy.get("schema") != 2
+                  or policy.get("repository") != "Strukturpiloten/podman-lens"):
+              raise SystemExit("unsupported trusted bootstrap policy")
+          if policy.get("jobs") == legacy:
+              print("legacy")
+          elif policy.get("jobs") == jobs:
+              print("current")
+          else:
+              raise SystemExit("unknown trusted bootstrap job inventory")
+          PYINVENTORY
+            )"
+          fi
+          if [[ "${trusted_inventory}" == 'current' && ! -f .validation-base/scripts/validation-plan.py ]]; then
+            trusted_inventory=missing
+          fi
+          if [[ "${EVENT_NAME}" == 'merge_group' ]]; then
+            # Bootstrap queue validation remains complete until shared planner adoption.
+            python3 - <<'PYQUEUE'
+          import json, os, re
+          jobs = 'rust coverage msrv dependencies api-release-type api documentation lockfile-release-age'.split()
+          tested = os.environ["GITHUB_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", tested):
+              raise SystemExit("queue candidate must be an exact commit")
+          plan = {"schema": 2, "repository": "Strukturpiloten/podman-lens", "event": "merge_group",
+                  "base_sha": tested, "head_sha": tested, "tested_sha": tested, "profile": "full",
+                  "jobs": dict.fromkeys(jobs, True), "reasons": ["bootstrap queue runs complete validation"],
+                  "local_fingerprint": None}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("plan=" + json.dumps(plan, separators=(",", ":")) + "\nprofile=full\n")
+              for job in jobs:
+                  output.write("select_" + job.replace("-", "_") + "=true\n")
+          PYQUEUE
+          elif [[ "${EVENT_NAME}" == 'pull_request' ]]; then
+            if [[ "${trusted_inventory}" == 'current' ]]; then
               python3 .validation-base/scripts/validation-plan.py plan \
                 --repository-root "${GITHUB_WORKSPACE}" \
                 --policy-root .validation-base \
-                --event pull_request --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
+                --event pull_request --force-full --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
                 --tested-sha "${GITHUB_SHA}" --github-output "${GITHUB_OUTPUT}"
             else
               # First rollout: never execute a PR-head classifier without trusted base policy.
@@ -67,13 +111,13 @@ jobs:
           import os
           import re
 
-          jobs = "rust coverage msrv dependencies api documentation lockfile-release-age".split()
+          jobs = "rust coverage msrv dependencies api-release-type api documentation lockfile-release-age".split()
           base, head, tested = (os.environ[key] for key in ("BASE_SHA", "HEAD_SHA", "GITHUB_SHA"))
           if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (base, head, tested)):
               raise SystemExit("first-rollout comparison has an invalid SHA")
           plan = {"schema": 2, "repository": "Strukturpiloten/podman-lens", "event": "pull_request",
                   "base_sha": base, "head_sha": head, "tested_sha": tested, "profile": "full",
-                  "jobs": {job: True for job in jobs}, "reasons": ["trusted base has no classifier"],
+                  "jobs": {job: True for job in jobs}, "reasons": ["trusted base has no classifier or uses legacy seven-job inventory"],
                   "local_fingerprint": None}
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("plan=" + json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\nprofile=full\n")
@@ -181,6 +225,28 @@ jobs:
               exit 1
               ;;
           esac
+  api-release-type:
+    name: Public API release intent
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_api_release_type == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      release_type: ${{ steps.classify.outputs.release_type }}
+    steps:
+      - name: Check out exact tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve pre-1.0 breaking-change history
+        id: classify
+        run: |
+          set -euo pipefail
+          release_type="$(bash scripts/check-public-api.sh --release-type-only)"
+          printf 'release_type=%s\n' "${release_type}" >> "${GITHUB_OUTPUT}"
+
   documentation:
     name: Repository files and documentation
     needs: validation-plan
@@ -229,18 +295,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Preserve the aggregate result outside pull requests
-        if: github.event_name != 'pull_request'
-        run: echo 'Lockfile release-age comparison applies to pull requests.'
+      - name: Preserve the aggregate result outside candidate events
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        run: echo 'Lockfile release-age comparison applies to pull requests and merge groups.'
       - name: Check out the exact pull-request candidate and base history
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           persist-credentials: false
       - name: Check out the shared lockfile policy
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Strukturpiloten/.github
@@ -248,11 +314,25 @@ jobs:
           ref: e362e4564f8e3c1d9d113242e3bf34011f2d7cd7
           path: .github/strukturpiloten-shared
           persist-credentials: false
-      - name: Reject newly introduced dependencies younger than three days
-        if: github.event_name == 'pull_request'
+      - name: Bind exact queue candidate and ancestor
+        if: github.event_name == 'merge_group'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          for revision in "${BASE_SHA}" "${HEAD_SHA}" "${GITHUB_SHA}"; do
+            [[ "${revision}" =~ ^[0-9a-f]{40}$ ]]
+          done
+          test "${HEAD_SHA}" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git merge-base --is-ancestor "${BASE_SHA}" "${HEAD_SHA}"
+      - name: Reject newly introduced dependencies younger than three days
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: >-
           python3 .github/strukturpiloten-shared/scripts/lockfile_release_age.py
           --repository-root "${GITHUB_WORKSPACE}"
@@ -269,6 +349,7 @@ jobs:
         coverage,
         msrv,
         dependencies,
+        api-release-type,
         api,
         documentation,
         lockfile-release-age,
@@ -296,26 +377,73 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          trusted_inventory=missing
           if [[ "${EVENT_NAME}" == 'pull_request' &&
-                ( ! -f .validation-base/scripts/validation-plan.py ||
-                  ! -f .validation-base/scripts/validation-policy.json ) ]]; then
+                ( -e .validation-base/scripts/validation-policy.json ||
+                  -L .validation-base/scripts/validation-policy.json ) ]]; then
+            trusted_inventory="$(python3 - <<'PYINVENTORY'
+          import json
+          from pathlib import Path
+
+          policy = json.loads(Path(".validation-base/scripts/validation-policy.json").read_text())
+          jobs = "rust coverage msrv dependencies api-release-type api documentation lockfile-release-age".split()
+          legacy = [job for job in jobs if job != "api-release-type"]
+          if (not isinstance(policy, dict) or policy.get("schema") != 2
+                  or policy.get("repository") != "Strukturpiloten/podman-lens"):
+              raise SystemExit("unsupported trusted bootstrap policy")
+          if policy.get("jobs") == legacy:
+              print("legacy")
+          elif policy.get("jobs") == jobs:
+              print("current")
+          else:
+              raise SystemExit("unknown trusted bootstrap job inventory")
+          PYINVENTORY
+            )"
+          fi
+          if [[ "${trusted_inventory}" == 'current' && ! -f .validation-base/scripts/validation-plan.py ]]; then
+            trusted_inventory=missing
+          fi
+          if [[ "${EVENT_NAME}" == 'merge_group' ]]; then
+            python3 - <<'PYQUEUE'
+          import json, os
+          jobs = 'rust coverage msrv dependencies api-release-type api documentation lockfile-release-age'.split()
+          plan, needs = json.loads(os.environ["PLAN_JSON"]), json.loads(os.environ["NEEDS_JSON"])
+          tested = os.environ["GITHUB_SHA"]
+          expected = {"schema": 2, "repository": "Strukturpiloten/podman-lens", "event": "merge_group",
+                      "base_sha": tested, "head_sha": tested, "tested_sha": tested, "profile": "full",
+                      "jobs": dict.fromkeys(jobs, True), "reasons": ["bootstrap queue runs complete validation"],
+                      "local_fingerprint": None}
+          if (plan != expected or set(needs) != {"validation-plan", *jobs}
+                  or any(value is not True for value in plan["jobs"].values())):
+              raise SystemExit("bootstrap queue exact plan mismatch")
+          for name in ("validation-plan", *jobs):
+              if not isinstance(needs[name], dict) or needs[name].get("result") != "success":
+                  raise SystemExit(f"bootstrap queue required job did not succeed: {name}")
+          print("Bootstrap queue complete validation passed")
+          PYQUEUE
+          elif [[ "${EVENT_NAME}" == 'pull_request' && "${trusted_inventory}" != 'current' ]]; then
             python3 - <<'PY'
           import json
           import os
 
-          jobs = "rust coverage msrv dependencies api documentation lockfile-release-age".split()
+          jobs = "rust coverage msrv dependencies api-release-type api documentation lockfile-release-age".split()
           plan = json.loads(os.environ["PLAN_JSON"])
           needs = json.loads(os.environ["NEEDS_JSON"])
-          if (plan.get("schema") != 2 or plan.get("repository") != "Strukturpiloten/podman-lens"
+          if (set(plan) != {"schema", "repository", "event", "base_sha", "head_sha", "tested_sha",
+                           "profile", "jobs", "reasons", "local_fingerprint"}
+              or plan.get("schema") != 2 or plan.get("repository") != "Strukturpiloten/podman-lens"
                   or plan.get("event") != "pull_request" or plan.get("profile") != "full"
                   or plan.get("base_sha") != os.environ["BASE_SHA"]
                   or plan.get("head_sha") != os.environ["HEAD_SHA"]
                   or plan.get("tested_sha") != os.environ["GITHUB_SHA"]
                   or plan.get("jobs") != {job: True for job in jobs}
+                  or any(value is not True for value in plan["jobs"].values())
+                  or plan.get("reasons") != ["trusted base has no classifier or uses legacy seven-job inventory"]
+                  or plan.get("local_fingerprint") is not None
                   or set(needs) != {"validation-plan", *jobs}):
               raise SystemExit("first-rollout validation plan mismatch")
           for name in ("validation-plan", *jobs):
-              if needs[name].get("result") != "success":
+              if not isinstance(needs[name], dict) or needs[name].get("result") != "success":
                   raise SystemExit(f"first-rollout required job {name} did not succeed")
           print("First-rollout complete validation passed")
           PY
@@ -325,6 +453,14 @@ jobs:
             if [[ "${EVENT_NAME}" == 'pull_request' ]]; then
               verifier=.validation-base/scripts/validation-plan.py
               policy_root=.validation-base
+              python3 - <<'PYFULL'
+          import json, os
+          plan = json.loads(os.environ["PLAN_JSON"])
+          jobs = "rust coverage msrv dependencies api-release-type api documentation lockfile-release-age".split()
+          if (plan.get("profile") != "full" or plan.get("jobs") != dict.fromkeys(jobs, True)
+                  or any(value is not True for value in plan["jobs"].values())):
+              raise SystemExit("bootstrap PR validation must select every candidate job")
+          PYFULL
             fi
             python3 "${verifier}" gate --policy-root "${policy_root}" --event "${EVENT_NAME}" \
               --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \

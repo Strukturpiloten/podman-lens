@@ -29,6 +29,11 @@ REPOSITORY_POLICY = planner.policy_at(SOURCE_ROOT)
 POLICY = copy.deepcopy(REPOSITORY_POLICY)
 POLICY["executable_documentation_roots"] = []
 
+BOOTSTRAP_SPEC = importlib.util.spec_from_file_location("bootstrap_workflow", SOURCE_ROOT / "scripts/test-bootstrap-queue.py")
+assert BOOTSTRAP_SPEC is not None and BOOTSTRAP_SPEC.loader is not None
+bootstrap = importlib.util.module_from_spec(BOOTSTRAP_SPEC)
+BOOTSTRAP_SPEC.loader.exec_module(bootstrap)
+
 
 def git(root: Path, *args: str) -> str:
     result = subprocess.run(["git", *args], cwd=root, check=True, text=True, capture_output=True)
@@ -71,6 +76,145 @@ class ValidationPlanTests(unittest.TestCase):
 
     def plan(self, base: str, head: str) -> dict:
         return planner.make_plan(arguments(self.root, "pull_request", base, head), POLICY)
+
+    def test_fixed_native_tuple_keeps_exact_extraction_without_routine_proposals(self) -> None:
+        renovate = json.loads((SOURCE_ROOT / ".github/renovate.json").read_text())
+        rules = [rule for rule in renovate["packageRules"] if rule.get("description") == "Keep the coupled Podman native qualification tuple fixed"]
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0], {
+            "description": "Keep the coupled Podman native qualification tuple fixed",
+            "matchManagers": ["custom.regex"],
+            "matchFileNames": ["scripts/native-runtime-pins.sh"],
+            "matchDatasources": ["github-releases", "docker"],
+            "matchPackageNames": ["containers/podman", "registry.fedoraproject.org/fedora"],
+            "enabled": False,
+        })
+        pins = (SOURCE_ROOT / "scripts/native-runtime-pins.sh").read_text()
+        extracted = []
+        for manager in renovate["customManagers"]:
+            if manager.get("managerFilePatterns") != ["/^scripts/native-runtime-pins\\.sh$/"]:
+                continue
+            for regex in manager["matchStrings"]:
+                pattern = re.sub(r"\(\?<([a-zA-Z][a-zA-Z0-9_]*)>", r"(?P<\1>", regex)
+                extracted.extend(match.groupdict() for match in re.finditer(pattern, pins))
+        self.assertEqual(len(extracted), 2)
+        self.assertEqual({item["depName"] for item in extracted}, {"containers/podman", "registry.fedoraproject.org/fedora"})
+
+    def test_trusted_service_manifest_precedes_candidate_waiter(self) -> None:
+        manifest = json.loads((SOURCE_ROOT / ".github/automation.json").read_text())
+        self.assertEqual(set(manifest), {"schema", "repository", "revision", "policy", "interface"})
+        self.assertEqual(manifest["schema"], 1)
+        self.assertEqual(manifest["interface"], 1)
+        self.assertEqual(manifest["repository"], "Strukturpiloten/boxferry")
+        self.assertEqual(manifest["policy"], "scripts/validation-policy.json")
+        self.assertTrue((SOURCE_ROOT / manifest["policy"]).is_file())
+        service = (SOURCE_ROOT / ".github/workflows/dependency-eligibility.yml").read_text()
+        for event in ("workflow_run:", "schedule:"):
+            self.assertIn(event, service)
+        self.assertNotIn("pull_request_target:", service)
+        self.assertNotIn("pull_request:", service)
+        self.assertIn("@" + manifest["revision"], service)
+        renovate = json.loads((SOURCE_ROOT / ".github/renovate.json").read_text())
+        owners = [manager for manager in renovate["customManagers"] if manager.get("description") == "Track prerequisite shared dependency service, waiter and manifest revisions"]
+        self.assertEqual(len(owners), 1)
+        owner = owners[0]
+        regex = re.sub(r"\(\?<([a-zA-Z][a-zA-Z0-9_]*)>", r"(?P<\1>", owner["matchStrings"][0])
+        examples = (
+            "uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-eligibility.yml@",
+            "uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-wait.yml@",
+            "automation-sha: ", "automation_sha: ", '\"revision\": \"',
+        )
+        for prefix in examples:
+            matches = list(re.finditer(regex, prefix + "a" * 40))
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0]["currentDigest"], "a" * 40)
+        shared_actions = [rule for rule in renovate["packageRules"] if rule.get("matchManagers") == ["github-actions"] and rule.get("matchPackageNames") == ["Strukturpiloten/boxferry"]]
+        self.assertEqual(len(shared_actions), 1)
+        self.assertFalse(shared_actions[0]["enabled"])
+        # The prerequisite retains complete old checks; only the later adoption requires the reader.
+        self.assertNotIn("shared-dependency-wait.yml@", (SOURCE_ROOT / ".github/workflows/ci.yml").read_text())
+
+    def test_queue_bootstrap_remains_complete_and_fail_closed(self) -> None:
+        result = subprocess.run([sys.executable, str(SOURCE_ROOT / "scripts/test-bootstrap-queue.py")], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_additive_tasks_do_not_change_or_execute_legacy_selection(self) -> None:
+        original = planner.policy_at(SOURCE_ROOT)
+        configured = copy.deepcopy(original)
+        configured["tasks"] = {"never-run": {"commands": [["definitely-not-an-executable"]]}}
+        write(self.root, "scripts/validation-policy.json", json.dumps(configured))
+        loaded = planner.policy_at(self.root)
+        self.assertEqual(loaded["profile_jobs"], original["profile_jobs"])
+        self.assertEqual(loaded["local_commands"], original["local_commands"])
+        self.assertEqual(planner.make_plan(arguments(self.root, "push"), loaded)["profile"], "full")
+        configured["unreviewed_key"] = True
+        write(self.root, "scripts/validation-policy.json", json.dumps(configured))
+        with self.assertRaises(planner.PlanError):
+            planner.policy_at(self.root)
+
+    def test_bootstrap_modern_trusted_public_guide_plan_is_forced_complete(self) -> None:
+        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nUpdated plain guide.\n")
+        head = self.commit("public guide candidate")
+        unforced = planner.make_plan(arguments(self.root, "pull_request", self.base, head), REPOSITORY_POLICY)
+        self.assertEqual(unforced["profile"], "executable-docs")
+        harness = bootstrap.BootstrapHarness(self.root, self.root)
+        harness.install_trusted(legacy=False)
+        harness.environment.update(BASE_SHA=self.base, HEAD_SHA=head, GITHUB_SHA=head)
+        result, fields = harness.plan("pull_request")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        plan = json.loads(fields["plan"])
+        self.assertEqual(plan["profile"], "full")
+        self.assertEqual(plan["jobs"], dict.fromkeys(REPOSITORY_POLICY["jobs"], True))
+        self.assertEqual(harness.gate("pull_request", plan, bootstrap.complete_needs()).returncode, 0)
+        self.assertNotEqual(harness.gate("pull_request", unforced, bootstrap.complete_needs()).returncode, 0)
+
+    def test_queue_age_binding_requires_exact_head_valid_commits_and_ancestor(self) -> None:
+        write(self.root, "src/main.rs", "fn main() { println!(\"candidate\"); }\n")
+        head = self.commit("queue candidate")
+        harness = bootstrap.BootstrapHarness(self.root, self.root)
+        harness.environment.update(BASE_SHA=self.base, HEAD_SHA=head, GITHUB_SHA=head)
+        shell = bootstrap.workflow_shell("Bind exact queue candidate and ancestor")
+        self.assertEqual(harness.run(shell).returncode, 0)
+        for field in ("BASE_SHA", "HEAD_SHA", "GITHUB_SHA"):
+            with self.subTest(invalid_field=field):
+                self.assertNotEqual(harness.run(shell, **{field: "invalid"}).returncode, 0)
+        unrelated = git(self.root, "commit-tree", self.base + "^{tree}", "-m", "unrelated root")
+        for overrides in (
+            {"BASE_SHA": unrelated}, {"BASE_SHA": "f" * 40},
+            {"HEAD_SHA": self.base}, {"GITHUB_SHA": self.base},
+            {"HEAD_SHA": self.base, "GITHUB_SHA": self.base},
+        ):
+            with self.subTest(overrides=overrides):
+                self.assertNotEqual(harness.run(shell, **overrides).returncode, 0)
+
+    def test_queue_age_compares_actual_base_head_and_propagates_verifier_failure(self) -> None:
+        harness = bootstrap.BootstrapHarness(self.root, self.root)
+        harness.environment.update(BASE_SHA=self.base, HEAD_SHA=self.base, GITHUB_SHA=self.base)
+        log = self.root / "age-arguments.json"
+        write(self.root, ".github/strukturpiloten-shared/scripts/lockfile_release_age.py", textwrap.dedent("""\
+            import json, os, sys
+            from pathlib import Path
+            Path(os.environ["AGE_ARGUMENTS"]).write_text(json.dumps(sys.argv[1:]))
+            raise SystemExit(int(os.environ["AGE_EXIT"]))
+            """))
+        age_step = bootstrap.workflow_step("Reject newly introduced dependencies younger than three days")
+        candidate_condition = "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'"
+        self.assertIn(candidate_condition, age_step)
+        self.assertIn("github.event.merge_group.base_sha", age_step)
+        self.assertIn("github.event.merge_group.head_sha", age_step)
+        checkout = bootstrap.workflow_step("Check out the exact pull-request candidate and base history")
+        self.assertIn(candidate_condition, checkout)
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}", checkout)
+        preserve = bootstrap.workflow_step("Preserve the aggregate result outside candidate events")
+        self.assertIn("github.event_name != 'pull_request' && github.event_name != 'merge_group'", preserve)
+        shell = bootstrap.workflow_shell("Reject newly introduced dependencies younger than three days")
+        for outcome in (0, 1, 2, 23):
+            result = harness.run(shell, AGE_EXIT=str(outcome), AGE_ARGUMENTS=str(log))
+            self.assertEqual(result.returncode, outcome, result.stderr)
+            self.assertEqual(json.loads(log.read_text()), [
+                "--repository-root", str(self.root), "--base", self.base,
+                "--head", self.base, "--minimum-age-hours", "72",
+            ])
 
     def test_plain_podman_public_guide_requires_inventory_contract(self) -> None:
         write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nPlain wording changed.\n")
@@ -316,13 +460,17 @@ class ValidationPlanTests(unittest.TestCase):
         self.assertNotIn("needs.validation-plan.outputs.profile", workflow)
         self.assertIn("if: fromJSON(needs.validation-plan.outputs.plan).profile == 'executable-docs'", workflow)
         job_declaration = f'jobs = "{" ".join(POLICY["jobs"])}".split()'
-        self.assertEqual(workflow.count(job_declaration), 2)
+        inventory_blocks = re.findall(r"(?ms)^\s*trusted_inventory=\"\$\(python3 - <<'PYINVENTORY'\n(.*?)^\s*PYINVENTORY$", workflow)
+        self.assertEqual(len(inventory_blocks), 2)
+        self.assertEqual(inventory_blocks[0], inventory_blocks[1])
         blocks = re.findall(
             r"(?ms)^[ \t]+python3 - <<'PY'(?: \| tee -a \"\$\{GITHUB_STEP_SUMMARY\}\")?\n(.*?)^[ \t]+PY$",
             workflow,
         )
         self.assertEqual(len(blocks), 2)
         planner_code, gate_code = (textwrap.dedent(block) for block in blocks)
+        self.assertIn(job_declaration, planner_code)
+        self.assertIn(job_declaration, gate_code)
         with tempfile.TemporaryDirectory(prefix="boxferry-bootstrap-plan-") as directory:
             output = Path(directory) / "github-output"
             environment = {

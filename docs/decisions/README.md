@@ -23,3 +23,5 @@ do not let code silently change it.
 | [0016: Captured native evidence is a test-only release contract](0016-captured-native-release-evidence.md)                 | Accepted |
 | [0017: Isolated native service conformance gates release](0017-isolated-native-release-conformance.md)                     | Accepted |
 | [0018: Explicit protected inline render authorization](0018-explicit-protected-inline-render-authorization.md)             | Accepted |
+
+| [0019: Shared validation and dependency automation](0019-shared-validation-and-dependency-automation.md) | Accepted |

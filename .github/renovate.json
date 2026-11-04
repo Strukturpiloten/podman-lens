@@ -42,7 +42,7 @@
     },
     {
       "customType": "regex",
-      "description": "Signal current native Podman patch; checksum and conformance require manual review",
+      "description": "Record the fixed native Podman version for qualification policy",
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>github-releases) depName=(?<depName>containers/podman)\\nreadonly PODMAN_NATIVE_VERSION=(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
@@ -51,7 +51,7 @@
     },
     {
       "customType": "regex",
-      "description": "Update the native Fedora base tag and immutable manifest together",
+      "description": "Record the fixed native Fedora base tag and manifest for qualification policy",
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>docker) depName=(?<depName>registry\\.fedoraproject\\.org/fedora)\\nreadonly PODMAN_NATIVE_BASE_IMAGE=registry\\.fedoraproject\\.org/fedora:(?<currentValue>[0-9]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -91,6 +91,19 @@
       ],
       "datasourceTemplate": "github-digest",
       "autoReplaceStringTemplate": "{{{indentation}}}# renovate: datasource=github-digest depName={{{depName}}} currentValue={{{newValue}}}\n{{{indentation}}}ref: {{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Track prerequisite shared dependency service, waiter and manifest revisions",
+      "managerFilePatterns": [
+        "/^(?:\\.github/workflows/(?:dependency-eligibility|ci)\\.yml|\\.github/automation\\.json)$/"
+      ],
+      "matchStrings": [
+        "(?<prefix>uses: Strukturpiloten/boxferry/\\.github/workflows/shared-dependency-(?:eligibility|wait)\\.yml@|automation[-_]sha:\\s*|\"revision\"\\s*:\\s*\")(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "depNameTemplate": "Strukturpiloten/boxferry",
+      "datasourceTemplate": "github-digest",
+      "currentValueTemplate": "automation-v1"
     }
   ],
   "packageRules": [
@@ -157,14 +170,12 @@
       "automerge": false
     },
     {
-      "description": "Require review for native conformance runtime pins",
+      "description": "Keep the coupled Podman native qualification tuple fixed",
+      "matchManagers": ["custom.regex"],
       "matchFileNames": ["scripts/native-runtime-pins.sh"],
-      "dependencyDashboardApproval": true,
-      "automerge": false,
-      "allowedVersions": "/^(v6\\.1\\.[0-9]+|45)$/",
-      "prBodyNotes": [
-        "Review the Podman patch, exact Koji RPM checksum, fixed Fedora compose metadata, base-image digest, package closure, service UID, and both native root modes before accepting this signal."
-      ]
+      "matchDatasources": ["github-releases", "docker"],
+      "matchPackageNames": ["containers/podman", "registry.fedoraproject.org/fedora"],
+      "enabled": false
     },
     {
       "matchManagers": ["rust-toolchain"],
@@ -178,6 +189,18 @@
       "prBodyNotes": [
         "Review both Linux release assets and update their SHA-256 checksums before merging."
       ]
+    },
+    {
+      "description": "The prerequisite service revision has one custom owner before full shared-preset adoption",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["Strukturpiloten/boxferry"],
+      "enabled": false
+    },
+    {
+      "description": "Keep prerequisite dependency service, waiter and manifest revisions atomic",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["Strukturpiloten/boxferry"],
+      "groupName": "Shared eligibility prerequisite"
     }
   ]
 }

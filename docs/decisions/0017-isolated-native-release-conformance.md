@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-21
+- Amendment: [ADR 0019](0019-shared-validation-and-dependency-automation.md) fixes the coupled runtime tuple for the overhaul and replaces routine Renovate proposals with a narrow exclusion. Native qualification and historical evidence remain unchanged.
 
 ## Context
 

@@ -26,8 +26,16 @@ manifest_version() {
   '
 }
 
+case "${1:-}" in
+  '') release_type_only=false ;;
+  --release-type-only) release_type_only=true ;;
+  *) fail "Usage: $0 [--release-type-only]" ;;
+esac
+(($# <= 1)) || fail "Usage: $0 [--release-type-only]"
+
 release_tag="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname | sed -n '1p')"
 if [[ -z "${release_tag}" ]]; then
+  if [[ "${release_type_only}" == true ]]; then exit 0; fi
   fail 'no reachable release tag exists; use the initial public API contract check instead'
 fi
 
@@ -48,4 +56,8 @@ if [[ "${current_version%%.*}" == '0' && ${breaking_change} -eq 1 ]]; then
   arguments+=(--release-type major)
 fi
 
+if [[ "${release_type_only}" == true ]]; then
+  if [[ "${current_version%%.*}" == '0' && ${breaking_change} -eq 1 ]]; then printf 'major\n'; fi
+  exit 0
+fi
 "${CARGO:-cargo}" "${arguments[@]}"

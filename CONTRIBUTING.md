@@ -15,6 +15,13 @@ Outside VS Code, start the same environment with:
 npx --yes @devcontainers/cli@0.83.0 up --workspace-folder .
 ```
 
+Use VS Code Dev Containers with your existing Podman storage, preferably rootless. Ordinary
+validation adds no private store or host sudo requirement. Direct image-input changes and image
+updater activation remain deferred to separate fresh GitHub CI qualification (BoxFerry #563).
+Ordinary shared-tool, package and compiler updates remain automatic; the resulting image closure
+is unqualified. Host/CI file tools use `scripts/install-host-tools.sh`; the shared loader supplies
+the canonical locked Python, uv, Ruff and ty environment.
+
 ## Development loop
 
 1. Make one focused change.

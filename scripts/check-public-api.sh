@@ -12,52 +12,9 @@ fail() {
   exit 2
 }
 
-manifest_version() {
-  awk '
-    /^\[workspace\.package\]$/ { in_workspace_package = 1; next }
-    /^\[/ { in_workspace_package = 0 }
-    in_workspace_package && /^[[:space:]]*version[[:space:]]*=/ {
-      value = $0
-      sub(/^[^=]*=[[:space:]]*"/, "", value)
-      sub(/"[[:space:]]*$/, "", value)
-      print value
-      exit
-    }
-  '
-}
-
-case "${1:-}" in
-  '') release_type_only=false ;;
-  --release-type-only) release_type_only=true ;;
-  *) fail "Usage: $0 [--release-type-only]" ;;
+(($# <= 1)) || fail "Usage: $0 [--development|--published]"
+case "${1:---development}" in
+  --development) exec python3 scripts/shared-ci.py run --task api-development ;;
+  --published) exec python3 scripts/shared-ci.py run --task api-published ;;
+  *) fail "Usage: $0 [--development|--published]" ;;
 esac
-(($# <= 1)) || fail "Usage: $0 [--release-type-only]"
-
-release_tag="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname | sed -n '1p')"
-if [[ -z "${release_tag}" ]]; then
-  if [[ "${release_type_only}" == true ]]; then exit 0; fi
-  fail 'no reachable release tag exists; use the initial public API contract check instead'
-fi
-
-current_version="$(manifest_version < Cargo.toml)"
-baseline_version="$(manifest_version < <(git show "${release_tag}:Cargo.toml"))"
-[[ -n "${current_version}" && -n "${baseline_version}" ]] || fail 'workspace package version is unavailable'
-
-breaking_change=0
-if git log --format=%s "${release_tag}..HEAD" | grep -Eq '^[[:alpha:]][[:alnum:]_-]*(\([^)]*\))?!:' ||
-  git log --format=%B "${release_tag}..HEAD" | grep -Eq '^BREAKING CHANGE:'; then
-  breaking_change=1
-fi
-
-arguments=(semver-checks check-release --package podman-lens)
-if [[ "${current_version%%.*}" == '0' && ${breaking_change} -eq 1 ]]; then
-  # cargo-semver-checks uses the stable-SemVer category name for an API break. PodmanLens ships
-  # that category in the next pre-1.0 minor release, but the tool must still receive `major`.
-  arguments+=(--release-type major)
-fi
-
-if [[ "${release_type_only}" == true ]]; then
-  if [[ "${current_version%%.*}" == '0' && ${breaking_change} -eq 1 ]]; then printf 'major\n'; fi
-  exit 0
-fi
-"${CARGO:-cargo}" "${arguments[@]}"

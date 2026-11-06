@@ -11,6 +11,10 @@ on:
         description: Reserved for validation-only manual dispatch.
         required: false
         type: string
+    outputs:
+      candidate_sha:
+        description: Exact admitted candidate after both root modes and cleanup succeed.
+        value: ${{ jobs.native-gate.outputs.candidate_sha }}
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -379,3 +383,27 @@ jobs:
           set -Eeuo pipefail
           state_key="${NATIVE_STATE_KEY}"
           bash scripts/cleanup-native-runtime.sh "${state_key}"
+  native-gate:
+    name: Complete native candidate after cleanup
+    needs: [admit-candidate, native-api]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      candidate_sha: ${{ steps.binding.outputs.candidate_sha }}
+    steps:
+      - name: Require admitted candidate and every native cell successful
+        id: binding
+        shell: bash
+        env:
+          ADMISSION_RESULT: ${{ needs.admit-candidate.result }}
+          NATIVE_RESULT: ${{ needs.native-api.result }}
+          CANDIDATE_SHA: ${{ needs.admit-candidate.outputs.candidate_sha }}
+        run: |
+          set -Eeuo pipefail
+          test "${ADMISSION_RESULT}" = success
+          test "${NATIVE_RESULT}" = success
+          [[ "${CANDIDATE_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "${CANDIDATE_SHA}" = "${GITHUB_SHA}"
+          printf 'candidate_sha=%s\n' "${CANDIDATE_SHA}" >> "${GITHUB_OUTPUT}"

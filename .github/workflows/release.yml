@@ -1,6 +1,5 @@
 ---
 name: Release
-
 on:
   workflow_dispatch:
     inputs:
@@ -11,28 +10,31 @@ on:
         type: boolean
 
 permissions: {}
-
 concurrency:
   group: release
   cancel-in-progress: false
-
 env:
   CARGO_TERM_COLOR: always
   RELEASE_GITHUB_API_VERSION: "2026-03-10"
-
 jobs:
   deterministic:
     name: Complete deterministic CI
     if: github.repository == 'Strukturpiloten/podman-lens'
     uses: ./.github/workflows/ci.yml
+    with:
+      api_purpose: published
     permissions:
+      actions: read
       contents: read
-
+      pull-requests: read
+      statuses: read
   release-metadata:
     name: Release metadata
     if: github.repository == 'Strukturpiloten/podman-lens'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      candidate_sha: ${{ steps.metadata.outputs.candidate_sha }}
     permissions:
       contents: read
     steps:
@@ -61,8 +63,8 @@ jobs:
             printf 'version=%s\n' "${version}"
             printf 'tag=v%s\n' "${version}"
             printf 'notes=%s\n' "${notes}"
+            printf 'candidate_sha=%s\n' "${GITHUB_SHA}"
           } >> "${GITHUB_OUTPUT}"
-
   native-conformance:
     name: Native API conformance
     if: github.repository == 'Strukturpiloten/podman-lens'
@@ -71,56 +73,30 @@ jobs:
       release_validation: true
     permissions:
       contents: read
-
   semver:
     name: SemVer
     needs: deterministic
     if: needs.deterministic.result == 'success'
-    runs-on: ubuntu-24.04
     permissions:
       contents: read
-    steps:
-      - name: Check out exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Check published baseline
-        id: baseline
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --user-agent 'PodmanLens release workflow (+https://github.com/Strukturpiloten/podman-lens)' --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' 'https://crates.io/api/v1/crates/podman-lens')"
-          case "${status}" in
-            200) echo 'published=true' >> "${GITHUB_OUTPUT}" ;;
-            404) echo 'published=false' >> "${GITHUB_OUTPUT}" ;;
-            *) echo "Unexpected crates.io response: HTTP ${status}." >&2; exit 1 ;;
-          esac
-      - name: Check public API compatibility
-        if: steps.baseline.outputs.published == 'true'
-        shell: bash
-        run: |
-          cargo install --locked --version 0.50.0 cargo-semver-checks
-          bash scripts/check-public-api.sh
-
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@1cf96f5a667d96e66c119753cf7814e22e0dee7e # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      automation_sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+      policy_sha: ${{ github.sha }}
+      config_path: scripts/validation-policy.json
+      package: podman-lens
+      api_purpose: published
+      initial_api_contract: true
   release-gate:
     name: Release validation gate
-    needs: [deterministic, release-metadata, native-conformance, semver]
-    if: always()
+    needs: [deterministic, native-conformance, semver]
+    if: needs.native-conformance.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Require every validation prerequisite to succeed
-        shell: bash
-        env:
-          DETERMINISTIC: ${{ needs.deterministic.result }}
-          METADATA: ${{ needs.release-metadata.result }}
-          NATIVE: ${{ needs.native-conformance.result }}
-          SEMVER: ${{ needs.semver.result }}
-        run: test "${DETERMINISTIC}:${METADATA}:${NATIVE}:${SEMVER}" = 'success:success:success:success'
       - name: Check out exact candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,15 +111,32 @@ jobs:
           merge-multiple: false
       - name: Validate complete current-run native evidence
         shell: bash
-        run: bash scripts/validate-native-evidence.sh "${RUNNER_TEMP}/native-evidence" "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"
-
+        run:
+          bash scripts/validate-native-evidence.sh "${RUNNER_TEMP}/native-evidence" "${GITHUB_SHA}" "${GITHUB_RUN_ID}"
+          "${GITHUB_RUN_ATTEMPT}"
+      - name: Require exact-candidate published API evidence
+        shell: bash
+        env:
+          DETERMINISTIC_PUBLISHED_API_SHA: ${{ needs.deterministic.outputs.deterministic_published_api_candidate_sha }}
+          SEMVER_PUBLISHED_API_SHA: ${{ needs.semver.outputs.published_api_candidate_sha }}
+        run: |
+          set -euo pipefail
+          test "${DETERMINISTIC_PUBLISHED_API_SHA}" = "${GITHUB_SHA}"
+          test "${SEMVER_PUBLISHED_API_SHA}" = "${GITHUB_SHA}"
+      - name: Expose verified current-run native evidence candidate binding
+        id: binding
+        run: printf 'candidate_sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+    outputs:
+      candidate_sha: ${{ steps.binding.outputs.candidate_sha }}
   publish:
     name: Publish PodmanLens
-    needs: release-gate
+    needs: [shared-release-gate, release-preparation]
     if: >-
-      github.repository == 'Strukturpiloten/podman-lens' &&
-      inputs.validation_only != true &&
-      needs.release-gate.result == 'success'
+      github.repository == 'Strukturpiloten/podman-lens' && github.event_name == 'workflow_dispatch' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      inputs.validation_only != true && needs.shared-release-gate.result == 'success' &&
+      needs.shared-release-gate.outputs.candidate_sha == github.sha &&
+      needs.release-preparation.result == 'success'
     environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -157,6 +150,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out immutable shared automation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Strukturpiloten/boxferry
+          # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
+          ref: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+          path: _automation
+          persist-credentials: false
+      - name: Install locked shared Python tooling
+        uses: ./_automation/.github/actions/shared-python
+      - name: Check out protected exact release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
           fetch-depth: 0
           persist-credentials: false
       - name: Derive release metadata
@@ -213,29 +223,72 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.metadata.outputs.tag }}
         run: gh release upload "${TAG}" --clobber "${CRATE}" "${CRATE}.sha256"
-      - name: Check crates.io publication state
-        id: registry
-        env:
-          VERSION: ${{ steps.metadata.outputs.version }}
-        run: |
-          set -Eeuo pipefail
-          status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --user-agent 'PodmanLens release workflow (+https://github.com/Strukturpiloten/podman-lens)' --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{http_code}' "https://crates.io/api/v1/crates/podman-lens/${VERSION}")"
-          case "${status}" in
-            200) echo 'published=true' >> "${GITHUB_OUTPUT}" ;;
-            404) echo 'published=false' >> "${GITHUB_OUTPUT}" ;;
-            *) echo "Unexpected crates.io response: HTTP ${status}." >&2; exit 1 ;;
-          esac
-      - name: Authenticate crates.io trusted publishing
-        id: crates-auth
-        if: steps.registry.outputs.published != 'true'
-        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-      - name: Publish crate
-        if: steps.registry.outputs.published != 'true'
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
-        run: cargo publish --locked
+      - name: Publish exact approved crate through shared mechanics
+        uses: ./_automation/.github/actions/shared-crate-publish
+        with:
+          candidate-sha: ${{ github.sha }}
+          automation-sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+          release-config: ${{ github.workspace }}/.github/release-policy.json
+          package: podman-lens
+          validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
+          validation-result: ${{ needs.shared-release-gate.result }}
+          validation-only: ${{ inputs.validation_only }}
       - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.metadata.outputs.tag }}
         run: gh release edit "${TAG}" --draft=false --latest
+  shared-release-gate:
+    name: Shared exact-candidate release gate
+    needs: [deterministic, release-metadata, native-conformance, semver, release-gate]
+    if: always()
+    permissions:
+      contents: read
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@1cf96f5a667d96e66c119753cf7814e22e0dee7e # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      automation_sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+      policy_sha: ${{ github.sha }}
+      config_path: .github/release-policy.json
+      needs_json: ${{ toJSON(needs) }}
+  release-preparation:
+    name: Read-only exact-candidate publication inventory
+    needs: shared-release-gate
+    if: >-
+      github.repository == 'Strukturpiloten/podman-lens' && github.event_name == 'workflow_dispatch' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      needs.shared-release-gate.result == 'success' &&
+      needs.shared-release-gate.outputs.candidate_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out immutable shared automation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Strukturpiloten/boxferry
+          # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
+          ref: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+          path: _automation
+          persist-credentials: false
+      - name: Bind exact release candidate and policy
+        id: source
+        uses: ./_automation/.github/actions/shared-source
+        with:
+          candidate-sha: ${{ github.sha }}
+          automation-sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+          policy-sha: ${{ github.sha }}
+          config-path: .github/release-policy.json
+      - name: Install locked shared Python tooling
+        uses: ./_automation/.github/actions/shared-python
+      - name: Validate common inventory without publication credentials
+        uses: ./_automation/.github/actions/shared-crate-publish
+        with:
+          candidate-sha: ${{ github.sha }}
+          automation-sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+          release-config: ${{ steps.source.outputs.config }}
+          package: podman-lens
+          validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
+          validation-result: ${{ needs.shared-release-gate.result }}
+          validation-only: "true"

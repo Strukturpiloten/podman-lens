@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "repository": "Strukturpiloten/podman-lens",
+  "packages": ["podman-lens"],
+  "required_jobs": [
+    "deterministic",
+    "release-metadata",
+    "native-conformance",
+    "semver",
+    "release-gate"
+  ],
+  "publication_enabled": true
+}

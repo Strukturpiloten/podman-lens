@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Exercise actual bootstrap shells against legacy policy and failure controls."""
+"""Replay frozen pre-adoption bootstrap shells and their trust/queue failure controls."""
+
 from __future__ import annotations
 
 import copy
@@ -16,8 +17,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 # Historical repository fixture: the exact seven-job trusted base before bootstrap.
 BASELINE_SHA = "861f8cd18eb2419b3074993e2de08518861ca0ff"
-WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text()
-POLICY = json.loads((ROOT / "scripts/validation-policy.json").read_text())
+# The live caller now uses the shared schema-3 planner. Preserve the actual completed
+# bootstrap transition as immutable historical evidence, rather than executing its
+# old shell expectations against the new caller or weakening trust/queue assertions.
+BOOTSTRAP_SHA = "3783b3faf85741b88f571e8bb4fa055a461a3cb8"
+
+
+def bootstrap_source(path: str, revision: str = BOOTSTRAP_SHA) -> bytes:
+    return subprocess.check_output(["git", "show", revision + ":" + path], cwd=ROOT)
+
+
+WORKFLOW = bootstrap_source(".github/workflows/ci.yml").decode()
+POLICY = json.loads(bootstrap_source("scripts/validation-policy.json"))
 
 
 def workflow_step(name: str) -> str:
@@ -40,21 +51,29 @@ class BootstrapHarness:
     def __init__(self, directory: Path, repository: Path = ROOT) -> None:
         self.root = directory
         self.environment = {
-            **os.environ, "BASE_SHA": BASELINE_SHA, "HEAD_SHA": BASELINE_SHA,
-            "GITHUB_SHA": BASELINE_SHA, "GITHUB_WORKSPACE": str(repository),
-            "GITHUB_OUTPUT": str(directory / "output"), "PYTHONDONTWRITEBYTECODE": "1",
+            **os.environ,
+            "BASE_SHA": BASELINE_SHA,
+            "HEAD_SHA": BASELINE_SHA,
+            "GITHUB_SHA": BASELINE_SHA,
+            "GITHUB_WORKSPACE": str(repository),
+            "GITHUB_OUTPUT": str(directory / "output"),
+            "PYTHONDONTWRITEBYTECODE": "1",
         }
 
     def run(self, shell: str, **environment: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "-e", "-c", shell], cwd=self.root,
-            env={**self.environment, **environment}, capture_output=True, text=True, check=False,
+            ["bash", "-e", "-c", shell],
+            cwd=self.root,
+            env={**self.environment, **environment},
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
     def install_trusted(self, legacy: bool) -> Path:
         trusted = self.root / ".validation-base"
         for path in ("scripts/validation-plan.py", "scripts/validation-policy.json"):
-            content = subprocess.check_output(["git", "show", BASELINE_SHA + ":" + path], cwd=ROOT) if legacy else (ROOT / path).read_bytes()
+            content = bootstrap_source(path, BASELINE_SHA if legacy else BOOTSTRAP_SHA)
             target = trusted / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
@@ -64,13 +83,19 @@ class BootstrapHarness:
         output = Path(self.environment["GITHUB_OUTPUT"])
         output.unlink(missing_ok=True)
         result = self.run(workflow_shell("Select exact-revision validation plan"), EVENT_NAME=event)
-        fields = dict(line.split("=", 1) for line in output.read_text().splitlines()) if output.exists() else {}
+        fields = (
+            dict(line.split("=", 1) for line in output.read_text().splitlines())
+            if output.exists()
+            else {}
+        )
         return result, fields
 
     def gate(self, event: str, plan: dict, needs: dict) -> subprocess.CompletedProcess[str]:
         return self.run(
-            workflow_shell("Check exact-plan aggregate"), EVENT_NAME=event,
-            PLAN_JSON=json.dumps(plan), NEEDS_JSON=json.dumps(needs),
+            workflow_shell("Check exact-plan aggregate"),
+            EVENT_NAME=event,
+            PLAN_JSON=json.dumps(plan),
+            NEEDS_JSON=json.dumps(needs),
         )
 
 
@@ -109,10 +134,14 @@ class BootstrapWorkflowTests(unittest.TestCase):
         needs["unplanned"] = {"result": "success"}
         self.assertNotEqual(self.harness.gate(event, plan, needs).returncode, 0)
         for mutation in ({"tested_sha": "b" * 40}, {"profile": "prose"}):
-            self.assertNotEqual(self.harness.gate(event, {**plan, **mutation}, complete_needs()).returncode, 0)
+            self.assertNotEqual(
+                self.harness.gate(event, {**plan, **mutation}, complete_needs()).returncode, 0
+            )
         numeric_selection = copy.deepcopy(plan)
         numeric_selection["jobs"]["api-release-type"] = 1
-        self.assertNotEqual(self.harness.gate(event, numeric_selection, complete_needs()).returncode, 0)
+        self.assertNotEqual(
+            self.harness.gate(event, numeric_selection, complete_needs()).returncode, 0
+        )
 
     def test_queue_complete_plan_and_required_results(self) -> None:
         self.assert_all_results_required("merge_group", self.assert_complete_plan("merge_group"))
@@ -122,11 +151,23 @@ class BootstrapWorkflowTests(unittest.TestCase):
     def test_actual_legacy_planner_and_gate_require_transition_fallback(self) -> None:
         trusted = self.harness.install_trusted(legacy=True)
         command = [
-            sys.executable, str(trusted / "scripts/validation-plan.py"),
-            "plan", "--policy-root", str(trusted), "--repository-root", str(ROOT),
-            "--event", "pull_request", "--base-sha", BASELINE_SHA,
-            "--head-sha", BASELINE_SHA, "--tested-sha", BASELINE_SHA,
-            "--github-output", self.harness.environment["GITHUB_OUTPUT"],
+            sys.executable,
+            str(trusted / "scripts/validation-plan.py"),
+            "plan",
+            "--policy-root",
+            str(trusted),
+            "--repository-root",
+            str(ROOT),
+            "--event",
+            "pull_request",
+            "--base-sha",
+            BASELINE_SHA,
+            "--head-sha",
+            BASELINE_SHA,
+            "--tested-sha",
+            BASELINE_SHA,
+            "--github-output",
+            self.harness.environment["GITHUB_OUTPUT"],
         ]
         result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -134,12 +175,42 @@ class BootstrapWorkflowTests(unittest.TestCase):
         self.assertNotIn("select_api_release_type=", fields)
         old_plan = json.loads(result.stdout)
         self.assertEqual(set(old_plan["jobs"]), set(POLICY["jobs"]) - {"api-release-type"})
-        old_needs = {name: item for name, item in complete_needs().items() if name != "api-release-type"}
-        gate = [sys.executable, str(trusted / "scripts/validation-plan.py"), "gate", "--policy-root", str(trusted), "--event", "pull_request", "--base-sha", BASELINE_SHA, "--head-sha", BASELINE_SHA, "--tested-sha", BASELINE_SHA, "--plan-json", json.dumps(old_plan)]
-        self.assertEqual(subprocess.run([*gate, "--needs-json", json.dumps(old_needs)], capture_output=True, check=False).returncode, 0)
+        old_needs = {
+            name: item for name, item in complete_needs().items() if name != "api-release-type"
+        }
+        gate = [
+            sys.executable,
+            str(trusted / "scripts/validation-plan.py"),
+            "gate",
+            "--policy-root",
+            str(trusted),
+            "--event",
+            "pull_request",
+            "--base-sha",
+            BASELINE_SHA,
+            "--head-sha",
+            BASELINE_SHA,
+            "--tested-sha",
+            BASELINE_SHA,
+            "--plan-json",
+            json.dumps(old_plan),
+        ]
+        self.assertEqual(
+            subprocess.run(
+                [*gate, "--needs-json", json.dumps(old_needs)], capture_output=True, check=False
+            ).returncode,
+            0,
+        )
         for outcome in ("success", "skipped"):
             incompatible = {**old_needs, "api-release-type": {"result": outcome}}
-            self.assertNotEqual(subprocess.run([*gate, "--needs-json", json.dumps(incompatible)], capture_output=True, check=False).returncode, 0)
+            self.assertNotEqual(
+                subprocess.run(
+                    [*gate, "--needs-json", json.dumps(incompatible)],
+                    capture_output=True,
+                    check=False,
+                ).returncode,
+                0,
+            )
         self.assert_all_results_required("pull_request", self.assert_complete_plan("pull_request"))
 
     def test_missing_trusted_planner_remains_complete(self) -> None:
@@ -174,11 +245,18 @@ class BootstrapWorkflowTests(unittest.TestCase):
         for classifier_present in (True, False):
             if not classifier_present:
                 (trusted / "scripts/validation-plan.py").unlink()
-            for content in ("not-json", json.dumps(unknown), json.dumps(wrong_repository), json.dumps({**POLICY, "schema": 3})):
+            for content in (
+                "not-json",
+                json.dumps(unknown),
+                json.dumps(wrong_repository),
+                json.dumps({**POLICY, "schema": 3}),
+            ):
                 with self.subTest(classifier_present=classifier_present, policy=content):
                     path.write_text(content)
                     self.assertNotEqual(self.harness.plan("pull_request")[0].returncode, 0)
-                    self.assertNotEqual(self.harness.gate("pull_request", plan, complete_needs()).returncode, 0)
+                    self.assertNotEqual(
+                        self.harness.gate("pull_request", plan, complete_needs()).returncode, 0
+                    )
 
     def test_non_file_policy_cannot_be_treated_as_absent(self) -> None:
         trusted = self.harness.install_trusted(legacy=False)

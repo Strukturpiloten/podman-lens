@@ -10,7 +10,29 @@ The product library remains independent under ADR 0001. Repository-owned task ar
 Rust, package, coverage, API, MSRV, file and native contracts. Policies stay schema 2; shared
 plans use schema 3 and bind the exact tested candidate separately from trusted base policy.
 Unknown changes and main, manual, local full and release validation retain the complete gate.
-Public prose uses file and offline-link checks; executable examples retain the guide contract.
+Maintenance prose in the exact `README.md` and `docs/README.md` allowlist uses file and offline-link
+checks only when complete before/after evidence proves an unambiguous, unchanged code projection.
+Added or deleted allowlisted files, changed or ambiguous code, other maintenance paths and mixed
+source changes retain complete validation. Public guides retain the targeted guide contract;
+`docs/public/development/` retains complete validation. This changes iteration and trusted PR/queue
+selection only: main, manual, release and the final complete local gate remain complete.
+
+API validation explicitly separates purpose. Ordinary CI and local development compare with a
+trusted Git base selected by shared automation; Release and validation-only compare against the
+canonical published crate baseline, inferring the release allowance from the candidate manifest.
+Only published-purpose success exposes API proof. The CI workflow exposes its existing checked
+proof as `deterministic_published_api_candidate_sha`; its internal gate retains
+`published_api_candidate_sha`. The release aggregate receives exactly one prerequisite declaring
+`published_api_candidate_sha`, from the published-purpose SemVer job. The local release gate still
+requires both the deterministic and SemVer published proofs to match the exact candidate before
+exposing its candidate receipt. All five original release prerequisites retain their success and
+exact-candidate checks. Neither proof is derived from a generic candidate output. Local wrappers
+use the same selected shared module through declared policy tasks, without another baseline
+selector. Development uses the current event's intent and the whole proposal's trusted Git base;
+default-branch pushes compare the nonzero event `before` across the entire push. Local checks use
+the fixed minor allowance and never infer permission from historical breaking commits. Published
+checks accept no intent override; the chosen manifest version owns the release allowance.
+This refines the API task contract above without changing native qualification.
 
 A default-branch dependency eligibility service runs on CI workflow events and schedule and reads
 authoritative PR and queue metadata,
@@ -32,6 +54,31 @@ ADR 0017's routine Renovate signal/manual-review policy only. Its native admissi
 read-only acquisition, budgets, privacy, cleanup and mandatory Release qualification remain.
 Historical captures and provenance retain their original versions and hashes. Ordinary Rust,
 compiler and development-tool updates continue through automatic shared policy.
+
+Ordinary adoption preserves every existing main check and uses the strict generic Required CI
+gate. It adds no Dev Container job, seed receipt requirement, or local image leaf. Direct image
+inputs, feature declarations, lifecycle scripts and the image-only legacy tool installer retain
+their current-main bytes. Their existing extraction owners remain unique, with a late
+`enabled:false` hold until separate CI image qualification under BoxFerry #563; no manual
+approval or dependency-dashboard route replaces that hold. The coupled native tuple above remains
+fixed independently. Ordinary shared automation, package locks and compiler declarations retain
+one automatic owner even where the existing Dockerfile copies them. Such updates do not qualify
+the resulting image closure.
+
+Ordinary host and CI callers use `scripts/install-host-tools.sh` and the selected shared tool
+inventory. `scripts/install-file-tools.sh` serves only the retained image Dockerfile. Contributors
+use VS Code Dev Containers with their existing Podman storage, preferably rootless; this adoption
+adds no private store, host sudo requirement or image lifecycle. Fresh GitHub CI runners will
+qualify images with standard engine storage in the separate image work.
+
+API validation uses explicit purposes. Development compares against the trusted canonical Git
+base; published purpose compares against the canonical released crate and derives allowance from
+the candidate manifest. Release and validation-only require successful published-purpose evidence
+bound to the exact candidate from both CI and SemVer. Generic candidate outputs cannot substitute
+for published API proof. Shared release mechanics preserve PodmanLens first-publication policy.
+
+Image validation lanes and the feature updater remain deferred to separate qualified changes.
+This adoption does not build, run, publish or qualify an image, or activate the updater.
 
 ## Migration and rollback
 

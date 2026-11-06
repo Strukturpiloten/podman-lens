@@ -15,6 +15,9 @@
     "prose": ["documentation", "lockfile-release-age"],
     "executable-docs": ["documentation", "lockfile-release-age"]
   },
+  "path_profiles": {
+    "prose": ["README.md", "docs/README.md"]
+  },
   "public_documentation_root": "docs/public/",
   "full_documentation_roots": ["docs/public/development/"],
   "executable_documentation_roots": ["docs/public/"],
@@ -98,6 +101,58 @@
         ["ty", "check", "--project", ".", "scripts"]
       ],
       "timeout_seconds": 300
+    },
+    "api-development": {
+      "commands": [
+        [
+          "python",
+          "-m",
+          "boxferry_ci.api_baselines",
+          "run",
+          "--repository-root",
+          ".",
+          "--repository",
+          "Strukturpiloten/podman-lens",
+          "--api-purpose",
+          "development",
+          "--event",
+          "local",
+          "--package",
+          "podman-lens",
+          "--allow-initial",
+          "--config",
+          "scripts/validation-policy.json",
+          "--report-json",
+          "target/api-baseline-development.json"
+        ]
+      ],
+      "timeout_seconds": 1200
+    },
+    "api-published": {
+      "commands": [
+        [
+          "python",
+          "-m",
+          "boxferry_ci.api_baselines",
+          "run",
+          "--repository-root",
+          ".",
+          "--repository",
+          "Strukturpiloten/podman-lens",
+          "--api-purpose",
+          "published",
+          "--event",
+          "local",
+          "--package",
+          "podman-lens",
+          "--allow-initial",
+          "--config",
+          "scripts/validation-policy.json",
+          "--report-json",
+          "target/api-baseline-published.json"
+        ]
+      ],
+      "timeout_seconds": 1200
     }
   }
 }

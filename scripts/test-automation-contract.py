@@ -119,6 +119,31 @@ def require_release_ci_permission_ceiling(release: str, ci: str) -> None:
                 raise ValueError(f"CI job {name} exceeds release caller permission for {scope}")
 
 
+def require_eligibility_service_permissions(workflow: str) -> None:
+    """The trusted service job grants exactly the immutable callee's required scopes."""
+    if re.findall(r"(?m)^permissions:[^\n]*$", workflow) != ["permissions: {}"]:
+        raise ValueError("eligibility workflow must grant no default token scopes")
+    job = workflow_job(workflow, "eligibility")
+    declared = re.search(r"(?ms)^    permissions:\n(.*?)(?=^    [a-z][a-z-]*:|\Z)", job)
+    if declared is None or job.count("    permissions:\n") != 1:
+        raise ValueError("eligibility service must declare its job-level token grant")
+    rows = [
+        line
+        for line in declared[1].splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    scopes = re.findall(r"^      ([a-z-]+): (read|write|none)$", "\n".join(rows), re.M)
+    required = {
+        "actions": "write",
+        "checks": "read",
+        "contents": "read",
+        "pull-requests": "write",
+        "statuses": "write",
+    }
+    if len(scopes) != len(rows) or len(scopes) != len(required) or dict(scopes) != required:
+        raise ValueError("eligibility service job must retain exactly the callee's five scopes")
+
+
 def require_selected_shared_node_caller(workflow: str, automation_sha: str) -> dict[str, str]:
     """Validate caller source binding/order/cache without inventing a Node authority."""
     if re.fullmatch(r"[a-f0-9]{40}", automation_sha) is None:
@@ -1151,6 +1176,18 @@ const path = require("node:path");
         ):
             self.assertNotIn(forbidden, reader)
         service = (ROOT / ".github/workflows/dependency-eligibility.yml").read_text()
+        require_eligibility_service_permissions(service)
+        for before, after in (
+            ("permissions: {}\n", "permissions: write-all\n"),
+            ("permissions: {}\n", "permissions:\n  contents: read\n"),
+            ("      pull-requests: write\n", "      pull-requests: read\n"),
+            ("      checks: read\n", ""),
+            ("      statuses: write\n", "      statuses: write\n\n      issues: write\n"),
+        ):
+            changed = service.replace(before, after, 1)
+            self.assertNotEqual(changed, service)
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                require_eligibility_service_permissions(changed)
         for required in (
             "schedule:",
             "workflow_run:",
@@ -1158,7 +1195,8 @@ const path = require("node:path");
             "types: [requested, completed]",
             "actions: write",
             "contents: read",
-            "pull-requests: read",
+            "checks: read",
+            "pull-requests: write",
             "statuses: write",
             "shared-dependency-eligibility.yml@",
             "automation-sha:",

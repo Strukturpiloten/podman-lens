@@ -368,7 +368,7 @@ fn native_regression_fixtures_have_fixed_provenance_privacy_license_and_hashes()
         assert!(gate.contains(required), "native gate misses {required}");
     }
     assert!(!gate.contains("--ignored"), "ordinary native gate must stay offline");
-    for consumer in ["scripts/check-all.sh", ".github/workflows/ci.yml"] {
+    for consumer in ["scripts/check-all.sh", "scripts/validation-policy.json"] {
         assert!(
             fs::read_to_string(consumer)?.contains("scripts/check-native-release-contract.sh"),
             "{consumer} must invoke the named native gate"
@@ -444,7 +444,7 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
     for required in [
         "actions/workflows/release.yml/dispatches",
         "release-plz-",
-        "permission-pull-requests: write",
+        "shared-release-prepare.yml@",
         "paths:",
         "src/**",
     ] {
@@ -457,16 +457,16 @@ fn release_controls_preserve_provenance_and_automatic_dispatch() -> Result<(), s
     let release = fs::read_to_string(".github/workflows/release.yml")?;
     let ci = fs::read_to_string(".github/workflows/ci.yml")?;
     for required in [
-        "cargo llvm-cov",
-        "cargo-deny-action@",
-        "bash scripts/check-public-api.sh",
+        "shared-rust-ci.yml@",
+        "shared-rust-dependencies.yml@",
+        "shared-rust-semver.yml@",
         "lycheeverse/lychee-action@",
     ] {
         assert!(ci.contains(required), "CI workflow is missing {required}");
     }
     for required in [
         "actions/attest@",
-        "crates-io-auth-action@",
+        "./_automation/.github/actions/shared-crate-publish",
         "Create or verify annotated release tag",
         "Create or replace draft GitHub release",
         "Publish immutable GitHub release",
@@ -483,7 +483,7 @@ fn release_metadata_context_is_explicit_for_each_validation_entry_point() -> Res
     assert!(local.contains("bash scripts/check-release-metadata.sh --development"));
 
     let ci = fs::read_to_string(".github/workflows/ci.yml")?;
-    assert!(ci.contains(
+    assert!(ci.split_whitespace().collect::<Vec<_>>().join(" ").contains(
         "RELEASE_METADATA_MODE: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-plz-') && '--release' || '--development' }}"
     ));
     assert!(ci.contains(
@@ -504,13 +504,31 @@ fn release_metadata_context_is_explicit_for_each_validation_entry_point() -> Res
 #[test]
 fn native_release_conformance_is_reusable_and_fail_closed() -> Result<(), std::io::Error> {
     let release = fs::read_to_string(".github/workflows/release.yml")?;
+    let policy: Value = serde_json::from_str(&fs::read_to_string(".github/release-policy.json")?)?;
+    assert_eq!(
+        policy["required_jobs"],
+        serde_json::json!([
+            "deterministic",
+            "release-metadata",
+            "native-conformance",
+            "semver",
+            "release-gate"
+        ])
+    );
+    assert_eq!(policy["publication_enabled"], true);
+    assert!(policy["bootstrap_version"].is_null());
+    assert!(release.contains("name: Read-only exact-candidate publication inventory"));
+    assert!(
+        fs::read_to_string(".github/workflows/native-podman-conformance.yml")?
+            .contains("value: ${{ jobs.native-gate.outputs.candidate_sha }}")
+    );
     for required in [
         "validation_only",
         "release-metadata",
         "native-conformance",
         "release_validation: true",
-        "needs.release-gate.result == 'success'",
-        "needs: [deterministic, release-metadata, native-conformance, semver]",
+        "needs.shared-release-gate.result == 'success'",
+        "needs: [deterministic, release-metadata, native-conformance, semver, release-gate]",
     ] {
         assert!(release.contains(required), "release workflow is missing {required}");
     }
@@ -831,6 +849,19 @@ fn assert_native_timeout_budget(native: &str) -> Result<(), std::io::Error> {
         .split_once("\n  native-api:\n")
         .map(|(_, worker)| worker)
         .ok_or_else(|| policy_error("native worker job is missing"))?;
+    // The separate receipt gate follows native-api and has its own job budget.
+    // Keep the nine native phase steps and cleanup reserve scoped to native-api.
+    let (native_worker, native_gate) = native_worker
+        .split_once("\n  native-gate:\n")
+        .ok_or_else(|| policy_error("native receipt gate job boundary is missing"))?;
+    let native_gate_header = native_gate
+        .split_once("    steps:\n")
+        .map(|(header, _)| header)
+        .ok_or_else(|| policy_error("native receipt gate steps are missing"))?;
+    assert!(
+        native_gate_header.lines().any(|line| line == "    timeout-minutes: 5"),
+        "native receipt gate must retain its five-minute job budget"
+    );
     let job_header = native_worker
         .split_once("    steps:\n")
         .map(|(header, _)| header)
@@ -1113,12 +1144,13 @@ fn native_release_worker_and_renovate_contract_are_complete() -> Result<(), std:
 #[test]
 fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(), std::io::Error> {
     let release = fs::read_to_string(".github/workflows/release.yml")?;
+    let normalized = release.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
         "podman-lens-native-api-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-podman-6.1-*",
-        "\"${GITHUB_RUN_ID}\" \"${GITHUB_RUN_ATTEMPT}\"",
+        "bash scripts/validate-native-evidence.sh \"${RUNNER_TEMP}/native-evidence\" \"${GITHUB_SHA}\" \"${GITHUB_RUN_ID}\" \"${GITHUB_RUN_ATTEMPT}\"",
     ] {
         assert!(
-            release.contains(required),
+            normalized.contains(required),
             "release must select and validate the current native evidence attempt: {required}"
         );
     }
@@ -1129,7 +1161,10 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
         .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?;
     let managers = all_managers
         .iter()
-        .filter(|manager| manager["description"] == "Record the fixed native Podman version for qualification policy")
+        .filter(|manager| {
+            manager["description"]
+                == serde_json::json!(["Record the fixed native Podman version for qualification policy"])
+        })
         .collect::<Vec<_>>();
     assert_eq!(managers.len(), 1, "native Podman patch needs one Renovate owner");
     let manager = managers[0];
@@ -1145,7 +1180,8 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
     let base_managers = all_managers
         .iter()
         .filter(|manager| {
-            manager["description"] == "Record the fixed native Fedora base tag and manifest for qualification policy"
+            manager["description"]
+                == serde_json::json!(["Record the fixed native Fedora base tag and manifest for qualification policy"])
         })
         .collect::<Vec<_>>();
     assert_eq!(base_managers.len(), 1, "native Fedora base needs one Renovate owner");
@@ -1200,7 +1236,9 @@ fn assert_native_qualification_tuple_is_fixed(renovate: &Value) -> Result<(), st
         .as_array()
         .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
         .iter()
-        .filter(|rule| rule["description"] == "Keep the coupled Podman native qualification tuple fixed")
+        .filter(|rule| {
+            rule["description"] == serde_json::json!(["Keep the coupled Podman native qualification tuple fixed"])
+        })
         .collect::<Vec<_>>();
     assert_eq!(review_rules.len(), 1);
     let fixed = review_rules[0];
@@ -1241,7 +1279,6 @@ fn assert_release_gate_checkout_and_evidence_order(release: &str) -> Result<(), 
     }
 
     let ordered_steps = [
-        "- name: Require every validation prerequisite to succeed",
         "- name: Check out exact candidate",
         "- name: Download current-run native evidence",
         "- name: Validate complete current-run native evidence",
@@ -1275,7 +1312,7 @@ fn hosted_documentation_job_installs_file_tools_without_elevation() -> Result<()
         "npm ci --ignore-scripts",
         "${GITHUB_WORKSPACE}/node_modules/.bin",
         "mktemp -d \"${RUNNER_TEMP}/podman-lens-file-tools.XXXXXXXX\"",
-        "bash scripts/install-file-tools.sh \"${file_tool_bin}\"",
+        "bash scripts/install-host-tools.sh \"${file_tool_bin}\"",
         "printf '%s\\n' \"${file_tool_bin}\" >> \"${GITHUB_PATH}\"",
         "bash scripts/check-files.sh --check",
     ] {
@@ -1292,44 +1329,26 @@ fn hosted_documentation_job_installs_file_tools_without_elevation() -> Result<()
 }
 
 #[test]
-fn hosted_file_tools_keep_checksum_verification_for_every_pin() -> Result<(), std::io::Error> {
-    let installer = fs::read_to_string("scripts/install-file-tools.sh")?;
-    let download = installer
-        .split_once("\ndownload() {\n")
-        .and_then(|(_, remainder)| remainder.split_once("\n}\n"))
-        .map(|(body, _)| body)
-        .ok_or_else(|| policy_error("file-tool download function is missing"))?;
-    assert!(download.contains("curl --proto '=https' --tlsv1.2 --fail"));
+fn hosted_file_tools_delegate_to_the_pinned_shared_inventory() -> Result<(), std::io::Error> {
+    let installer = fs::read_to_string("scripts/install-host-tools.sh")?;
     assert!(installer.contains("set -Eeuo pipefail"));
-    assert!(download.contains("printf '%s  %s\\n' \"${checksum}\" \"${destination}\" | sha256sum --check --status"));
-
-    for tool in ["tombi", "shfmt", "shellcheck", "hadolint"] {
-        let checksum_assignment = format!("readonly {tool}_checksum=\"");
-        let checksums = installer
-            .lines()
-            .filter_map(|line| line.trim().strip_prefix(&checksum_assignment))
-            .filter_map(|value| value.strip_suffix('"'))
-            .collect::<Vec<_>>();
-        assert_eq!(checksums.len(), 2, "{tool} needs checksums for both CI architectures");
-        assert!(
-            checksums.iter().all(|checksum| checksum.len() == 64
-                && checksum
-                    .bytes()
-                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())),
-            "{tool} checksums must be lowercase SHA-256 digests"
-        );
-
-        let version_reference = format!("${{{tool}_version}}");
-        let checksum_reference = format!("\"${{{tool}_checksum}}\"");
-        let downloads = installer
-            .lines()
-            .filter(|line| line.starts_with("download \"https://") && line.contains(&version_reference))
-            .collect::<Vec<_>>();
-        assert_eq!(downloads.len(), 1, "{tool} needs one verified download");
-        assert!(
-            downloads[0].ends_with(&checksum_reference),
-            "{tool} download must pass its pinned checksum to the verifier"
-        );
+    assert!(installer.contains("shared-ci.py\" tools"));
+    assert!(installer.contains("--destination \"${1:-/usr/local/bin}\" --profile core"));
+    assert!(!installer.contains("_version="));
+    assert!(!installer.contains("_checksum="));
+    let legacy = fs::read_to_string("scripts/install-file-tools.sh")?;
+    assert!(legacy.contains("readonly tombi_version="));
+    assert!(legacy.contains("readonly tombi_checksum="));
+    let container = fs::read_to_string(".devcontainer/Dockerfile")?;
+    assert!(container.contains("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh"));
+    assert!(!container.contains("scripts/install-host-tools.sh"));
+    assert!(!container.contains("shared-ci.py"));
+    for name in ["ci.yml", "native-podman-conformance.yml"] {
+        let workflow = fs::read_to_string(format!(".github/workflows/{name}"))?;
+        if name == "ci.yml" {
+            assert!(workflow.contains("scripts/install-host-tools.sh"));
+        }
+        assert!(!workflow.contains("scripts/install-file-tools.sh"));
     }
     Ok(())
 }
@@ -1338,20 +1357,25 @@ fn hosted_file_tools_keep_checksum_verification_for_every_pin() -> Result<(), st
 fn public_api_compatibility_uses_the_repository_owned_release_policy() -> Result<(), std::io::Error> {
     let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
     let release = fs::read_to_string(".github/workflows/release.yml")?;
-    for required in ["fetch-depth: 0", "bash scripts/check-public-api.sh"] {
+    for required in ["fetch-depth: 0", "shared-rust-semver.yml@", "api_purpose:"] {
         assert!(workflow.contains(required), "CI API job is missing {required}");
         assert!(release.contains(required), "release API job is missing {required}");
     }
 
+    assert!(workflow.contains("git -C source log -1 --format=%s"));
+    assert!(!workflow.contains("scripts/check-public-api.sh --release-type-only"));
     let script = fs::read_to_string("scripts/check-public-api.sh")?;
-    for required in [
-        "git tag --merged HEAD",
-        "BREAKING CHANGE:",
-        "--release-type major",
-        "semver-checks check-release",
-    ] {
+    for required in ["--task api-development", "--task api-published"] {
         assert!(script.contains(required), "public API script is missing {required}");
     }
+    for obsolete in ["--release-type-only", "git tag", "git log", "BREAKING CHANGE:"] {
+        assert!(
+            !script.contains(obsolete),
+            "public API wrapper retains obsolete {obsolete}"
+        );
+    }
+    assert!(!release.contains("api-release-type:"));
+    assert!(!release.contains("release_type:"));
     assert!(
         !script.contains("mapfile"),
         "public API script must support the macOS Bash version"
@@ -1361,454 +1385,81 @@ fn public_api_compatibility_uses_the_repository_owned_release_policy() -> Result
 
 #[test]
 fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::io::Error> {
-    let configuration = fs::read_to_string(".github/renovate.json")?;
-    assert!(configuration.contains("currentDigest"));
-    assert!(configuration.contains("Dev Container base release and digest together"));
-    Ok(())
-}
-
-#[test]
-fn renovate_automerge_is_green_gated_with_manual_exceptions() -> Result<(), std::io::Error> {
-    let configuration = fs::read_to_string(".github/renovate.json")?;
-    let renovate: Value = serde_json::from_str(&configuration)
-        .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
-    assert_eq!(
-        renovate["minimumReleaseAge"], "3 days",
-        "Renovate must retain the three-day minimum release age"
-    );
-    let package_rules = renovate["packageRules"]
+    let configuration: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)
+        .map_err(|error| policy_error(format!("invalid Renovate JSON: {error}")))?;
+    let managers = configuration["customManagers"]
         .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
-    let lock_maintenance = package_rules
+        .ok_or_else(|| policy_error("missing custom image owners"))?;
+    let owners: Vec<_> = managers
         .iter()
-        .find(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
-        .ok_or_else(|| policy_error("Renovate lock-file maintenance rule is missing"))?;
+        .filter(|manager| {
+            manager["description"] == serde_json::json!(["Update the Dev Container base release and digest together"])
+        })
+        .collect();
+    assert_eq!(owners.len(), 1, "image declarations need a single custom owner");
+    assert_eq!(owners[0]["versioningTemplate"], "docker");
     assert_eq!(
-        lock_maintenance["matchUpdateTypes"],
-        serde_json::json!(["lockFileMaintenance"])
+        owners[0]["autoReplaceStringTemplate"],
+        "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}@{{{newDigest}}}"
     );
-    assert_eq!(lock_maintenance["automerge"], true);
-    assert_eq!(lock_maintenance["automergeType"], "pr");
-    assert_eq!(lock_maintenance["platformAutomerge"], false);
-    for required in [
-        "Automerge tested non-major dependency updates",
-        "Do not delay BoxFerry and Lens releases",
-        r#""minimumReleaseAge": "0 days""#,
-        r#""platformAutomerge": false"#,
-        r#""boxferry-model""#,
-        r#""compose-lens""#,
-        r#""podman-lens""#,
-        r#""quadlet-lens""#,
-    ] {
-        assert!(
-            configuration.contains(required),
-            "Renovate configuration is missing {required}"
-        );
-    }
-    assert_eq!(
-        configuration.matches(r#""automerge": false"#).count(),
-        2,
-        "legacy Dev Container and checksum-tool exceptions remain; native tuple updates are disabled"
-    );
-    Ok(())
-}
-
-fn verify_first_party_release_age_exception(renovate: &Value) -> Result<(), std::io::Error> {
-    if renovate["minimumReleaseAge"] != "3 days" {
-        return Err(policy_error(
-            "third-party updates must retain the global three-day minimum age",
-        ));
-    }
-    let rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
-    let expected = serde_json::json!({
-        "description": "Do not delay BoxFerry and Lens releases",
-        "matchManagers": ["cargo"],
-        "matchDatasources": ["crate"],
-        "matchPackageNames": [
-            "boxferry", "boxferry-model", "boxferry-engine", "boxferry-compose",
-            "boxferry-podman", "boxferry-quadlet", "compose-lens", "podman-lens",
-            "quadlet-lens", "docker-lens"
-        ],
-        "minimumReleaseAge": "0 days"
-    });
-    let first_party_rules = rules
-        .iter()
-        .filter(|rule| rule["description"] == expected["description"])
-        .collect::<Vec<_>>();
-    if first_party_rules.len() != 1 || first_party_rules[0] != &expected {
-        return Err(policy_error(
-            "first-party age rule must match only the exact Cargo/crate package list and change no review controls",
-        ));
-    }
-    for rule in rules {
-        if let Some(age) = rule.get("minimumReleaseAge") {
-            let lock_maintenance = rule["description"] == "Automerge green-gated lock-file maintenance"
-                && rule["matchUpdateTypes"] == serde_json::json!(["lockFileMaintenance"])
-                && age == "0 days";
-            if age != "3 days" && rule != &expected && !lock_maintenance {
-                return Err(policy_error(
-                    "an unrelated Renovate rule changes the third-party age floor",
-                ));
-            }
+    let dockerfile = fs::read_to_string(".devcontainer/Dockerfile")?;
+    let lines: Vec<_> = dockerfile.lines().collect();
+    let mut images = 0;
+    for block in lines.windows(3) {
+        if let Some(name) = block[0].strip_prefix("# renovate: datasource=docker depName=") {
+            let tag = block[1]
+                .strip_prefix("# release: ")
+                .ok_or_else(|| policy_error("missing image release annotation"))?;
+            assert!(!tag.is_empty());
+            let prefix = format!("FROM {name}@sha256:");
+            let reference = block[2]
+                .strip_prefix(&prefix)
+                .ok_or_else(|| policy_error("retained image digest must match its annotated owner"))?;
+            let digest = reference
+                .split_ascii_whitespace()
+                .next()
+                .ok_or_else(|| policy_error("missing image digest"))?;
+            assert_eq!(digest.len(), 64);
+            assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+            images += 1;
         }
     }
+    assert_eq!(images, 2);
+    assert_eq!(images, lines.iter().filter(|line| line.starts_with("FROM ")).count());
     Ok(())
 }
 
 #[test]
-fn renovate_first_party_release_age_exception_is_exact() -> Result<(), std::io::Error> {
-    let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)?;
-    verify_first_party_release_age_exception(&renovate)
-}
-
-#[test]
-fn renovate_first_party_release_age_exception_rejects_policy_mutations() -> Result<(), std::io::Error> {
-    let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)?;
-    verify_first_party_release_age_exception(&renovate)?;
-    let index = renovate["packageRules"]
-        .as_array()
-        .and_then(|rules| {
-            rules
-                .iter()
-                .position(|rule| rule["description"] == "Do not delay BoxFerry and Lens releases")
-        })
-        .ok_or_else(|| policy_error("first-party Renovate rule is missing"))?;
-    for (field, replacement) in [
-        ("matchManagers", Value::Null),
-        ("matchManagers", serde_json::json!(["cargo", "npm"])),
-        ("matchDatasources", Value::Null),
-        ("matchDatasources", serde_json::json!(["crate", "npm"])),
-        ("minimumReleaseAge", serde_json::json!("1 day")),
-        ("automerge", serde_json::json!(true)),
-        ("dependencyDashboardApproval", serde_json::json!(false)),
-    ] {
-        let mut mutated = renovate.clone();
-        mutated["packageRules"][index][field] = replacement;
-        assert!(
-            verify_first_party_release_age_exception(&mutated).is_err(),
-            "first-party rule mutation to {field} must fail"
-        );
-    }
-    for package in ["serde", "docker-lens-core", "Docker-Lens", "*-lens", "boxferry-*"] {
-        let mut mutated = renovate.clone();
-        mutated["packageRules"][index]["matchPackageNames"]
-            .as_array_mut()
-            .ok_or_else(|| policy_error("first-party packages must be an array"))?
-            .push(serde_json::json!(package));
-        assert!(
-            verify_first_party_release_age_exception(&mutated).is_err(),
-            "unlisted first-party package {package} must fail"
-        );
-    }
-    let mut missing_package = renovate.clone();
-    missing_package["packageRules"][index]["matchPackageNames"]
-        .as_array_mut()
-        .ok_or_else(|| policy_error("first-party packages must be an array"))?
-        .pop();
-    assert!(verify_first_party_release_age_exception(&missing_package).is_err());
-
-    let mut duplicate = renovate.clone();
-    duplicate["packageRules"]
-        .as_array_mut()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
-        .push(renovate["packageRules"][index].clone());
-    assert!(verify_first_party_release_age_exception(&duplicate).is_err());
-
-    let mut global = renovate.clone();
-    global["minimumReleaseAge"] = serde_json::json!("0 days");
-    assert!(verify_first_party_release_age_exception(&global).is_err());
-
-    let mut unrelated = renovate.clone();
-    unrelated["packageRules"]
-        .as_array_mut()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
-        .push(serde_json::json!({"matchPackageNames": ["serde"], "minimumReleaseAge": "0 days"}));
-    assert!(verify_first_party_release_age_exception(&unrelated).is_err());
-    Ok(())
-}
-
-#[test]
-fn lockfile_release_age_guard_is_immutable_and_complete() -> Result<(), std::io::Error> {
-    let configuration = fs::read_to_string(".github/renovate.json")?;
-    let renovate: Value = serde_json::from_str(&configuration)
-        .map_err(|error| policy_error(format!("Renovate configuration must be valid JSON: {error}")))?;
-    assert_eq!(renovate["minimumReleaseAge"], "3 days");
-    verify_first_party_release_age_exception(&renovate)?;
-    let rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
-
-    let (non_major_index, lock_index) = verify_automerge_rules(rules)?;
-    verify_manual_rule(
-        rules,
-        "Require checksum review for downloaded file-quality tools",
-        non_major_index,
-        lock_index,
-    )?;
-    verify_manual_rule(
-        rules,
-        "Require manual review for Dev Container features",
-        non_major_index,
-        lock_index,
-    )?;
-    verify_shared_policy_manager(&renovate)?;
-    verify_lockfile_guard_workflow()?;
-    Ok(())
-}
-
-fn verify_automerge_rules(rules: &[Value]) -> Result<(usize, usize), std::io::Error> {
-    let non_major_index = rules
-        .iter()
-        .position(|rule| rule["description"] == "Automerge tested non-major dependency updates")
-        .ok_or_else(|| policy_error("generic non-major automerge rule is missing"))?;
-    let non_major = &rules[non_major_index];
-    assert_eq!(
-        non_major["matchUpdateTypes"],
-        serde_json::json!(["minor", "patch", "pin", "digest", "pinDigest"]),
-        "generic automerge must cover exactly the safe non-major categories"
-    );
-    assert_eq!(non_major["automerge"], true);
-    assert_eq!(non_major["automergeType"], "pr");
-    assert_eq!(non_major["platformAutomerge"], false);
-
-    let lock = rules
-        .iter()
-        .find(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
-        .ok_or_else(|| policy_error("lock-file maintenance automerge rule is missing"))?;
-    assert_eq!(
-        rules
-            .iter()
-            .filter(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
-            .count(),
-        1,
-        "lock-file maintenance needs exactly one rule"
-    );
-    let lock_index = rules
-        .iter()
-        .position(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
-        .ok_or_else(|| policy_error("lock-file maintenance automerge rule was found above"))?;
-    assert_eq!(lock["matchUpdateTypes"], serde_json::json!(["lockFileMaintenance"]));
-    assert_eq!(lock["automerge"], true);
-    assert_eq!(lock["automergeType"], "pr");
-    assert_eq!(lock["platformAutomerge"], false);
-    assert_eq!(
-        lock["minimumReleaseAge"], "0 days",
-        "the shared guard, rather than Renovate synthetic metadata, owns lockfile age evidence"
-    );
-
-    Ok((non_major_index, lock_index))
-}
-
-fn verify_manual_rule(
-    rules: &[Value],
-    description: &str,
-    non_major_index: usize,
-    lock_index: usize,
-) -> Result<(), std::io::Error> {
-    let (index, rule) = rules
-        .iter()
-        .enumerate()
-        .find(|(_, rule)| rule["description"] == description)
-        .ok_or_else(|| policy_error(format!("manual Renovate rule is missing: {description}")))?;
-    assert!(
-        index > non_major_index && index > lock_index,
-        "manual rule {description} must follow both automerge rules"
-    );
-    assert_eq!(rule["automerge"], false, "manual rule {description} must opt out");
-    Ok(())
-}
-
-fn verify_shared_policy_manager(renovate: &Value) -> Result<(), std::io::Error> {
-    let rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
-    let non_major_index = rules
-        .iter()
-        .position(|rule| rule["description"] == "Automerge tested non-major dependency updates")
-        .ok_or_else(|| policy_error("generic non-major automerge rule is missing"))?;
-    let lock_index = rules
-        .iter()
-        .position(|rule| rule["description"] == "Automerge green-gated lock-file maintenance")
-        .ok_or_else(|| policy_error("lock-file maintenance automerge rule is missing"))?;
-    let devcontainer = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
-        .iter()
-        .enumerate()
-        .find(|(_, rule)| rule["description"] == "Require manual review for Dev Container features")
-        .ok_or_else(|| policy_error("Dev Container manual rule is missing"))?;
-    assert!(
-        devcontainer.0 > non_major_index && devcontainer.0 > lock_index,
-        "Dev Container manual rule must follow both automerge rules"
-    );
-    assert_eq!(devcontainer.1["automerge"], false);
-
-    let guard_managers = renovate["customManagers"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?
-        .iter()
-        .filter(|manager| manager["description"] == "Track the immutable Strukturpiloten shared-policy commit")
-        .collect::<Vec<_>>();
-    assert_eq!(
-        guard_managers.len(),
-        1,
-        "the shared guard pin needs exactly one Renovate owner"
-    );
-    let guard_manager = guard_managers
-        .first()
-        .ok_or_else(|| policy_error("the shared guard pin needs one Renovate owner"))?;
-    assert_eq!(
-        guard_manager["managerFilePatterns"],
-        serde_json::json!([r"/^\.github/workflows/.*\.ya?ml$/"])
-    );
-    assert_eq!(guard_manager["datasourceTemplate"], "github-digest");
-    assert!(guard_manager["matchStrings"][0].as_str().is_some_and(|pattern| {
-        pattern.contains("datasource=github-digest")
-            && pattern.contains("currentValue>main")
-            && pattern.contains("currentDigest>[a-f0-9]{40}")
-    }));
-    let manager_pattern = guard_manager["matchStrings"][0]
-        .as_str()
-        .ok_or_else(|| policy_error("shared-policy manager must include its regex"))?;
-    let template = guard_manager["autoReplaceStringTemplate"]
-        .as_str()
-        .ok_or_else(|| policy_error("shared-policy manager must include its replacement template"))?;
-    assert!(
-        template.contains('\n'),
-        "replacement template must contain a real newline"
-    );
-    assert!(
-        !template.contains(r"\n"),
-        "replacement template must not contain a literal backslash-n"
-    );
-    let expected_pattern = "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})";
-    assert_eq!(manager_pattern, expected_pattern);
-    let new_digest = "b4a7d2e8f1c903b6a5d4e2f7182930c4b6d5e7f1";
-    let rewritten = template
-        .replace("{{{indentation}}}", "      ")
-        .replace("{{{depName}}}", "Strukturpiloten/.github")
-        .replace("{{{newValue}}}", "main")
-        .replace("{{{newDigest}}}", new_digest);
-    assert_eq!(
-        reextract_shared_policy_marker(manager_pattern, &rewritten),
-        Some(("Strukturpiloten/.github", "main", new_digest)),
-        "the shared-policy regex must re-extract its rewritten adjacent marker and ref"
-    );
-
-    Ok(())
-}
-
-fn verify_lockfile_guard_workflow() -> Result<(), std::io::Error> {
+fn shared_validation_preserves_explicit_repository_contracts() -> Result<(), Box<dyn std::error::Error>> {
     let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
-    let marker = "# renovate: datasource=github-digest depName=Strukturpiloten/.github currentValue=main";
-    let lines = workflow.lines().collect::<Vec<_>>();
-    let marker_line = lines
-        .iter()
-        .position(|line| line.trim() == marker)
-        .ok_or_else(|| policy_error("CI shared-policy Renovate marker is missing"))?;
-    let shared_ref = lines
-        .get(marker_line + 1)
-        .and_then(|line| line.trim().strip_prefix("ref: "))
-        .ok_or_else(|| policy_error("CI shared-policy marker must be adjacent to its ref"))?;
-    assert_eq!(workflow.matches(marker).count(), 1);
-    assert_eq!(shared_ref.len(), 40);
-    assert!(
-        shared_ref
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()),
-        "shared-policy ref must be a full lowercase commit SHA"
-    );
-    for required in [
-        "lockfile-release-age:",
-        "Lockfile release age",
-        "fetch-depth: 0",
-        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}",
-        "path: .github/strukturpiloten-shared",
-        "--repository-root \"${GITHUB_WORKSPACE}\"",
-        "--base \"${BASE_SHA}\"",
-        "--head \"${HEAD_SHA}\"",
-        "--minimum-age-hours 72",
-        "if: github.event_name != 'pull_request' && github.event_name != 'merge_group'",
-        "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'",
-        "Bind exact queue candidate and ancestor",
-        "test \"${HEAD_SHA}\" = \"${GITHUB_SHA}\"",
-        "test \"$(git rev-parse HEAD)\" = \"${HEAD_SHA}\"",
-        "git cat-file -e \"${BASE_SHA}^{commit}\"",
-        "git merge-base --is-ancestor \"${BASE_SHA}\" \"${HEAD_SHA}\"",
-        "python3 \"${verifier}\" gate",
-    ] {
-        assert!(workflow.contains(required), "CI lockfile guard is missing {required}");
-    }
-    let lock_job = workflow
-        .split_once("\n  lockfile-release-age:\n")
-        .and_then(|(_, remainder)| remainder.split_once("\n  pr-gate:\n"))
-        .map(|(job, _)| job)
-        .ok_or_else(|| policy_error("CI lockfile release-age job boundary is missing"))?;
-    let before_steps = lock_job
-        .split_once("\n    steps:\n")
-        .map_or(lock_job, |(prefix, _)| prefix);
-    assert!(
-        before_steps.contains("if: needs.validation-plan.outputs.select_lockfile_release_age == 'true'"),
-        "CI lockfile release-age job must follow the validated plan"
-    );
-    let gate = workflow
-        .split_once("\n  pr-gate:\n")
-        .map(|(_, gate)| gate)
-        .ok_or_else(|| policy_error("CI aggregate gate is missing"))?;
-    let needs_block = gate
-        .split_once("\n    needs:\n")
-        .and_then(|(_, remainder)| remainder.split_once("\n    runs-on:"))
-        .map(|(needs, _)| needs)
-        .ok_or_else(|| policy_error("CI aggregate needs block is missing"))?;
-    let actual_needs = needs_block
-        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '-'))
-        .filter(|name| !name.is_empty())
-        .collect::<Vec<_>>();
     let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
-    let jobs = policy["jobs"]
-        .as_array()
-        .ok_or_else(|| policy_error("validation policy has no job list"))?;
-    let expected_needs = std::iter::once("validation-plan")
-        .chain(jobs.iter().map(|job| job.as_str().unwrap_or("")))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        actual_needs, expected_needs,
-        "CI aggregate must cover every planned job exactly once"
-    );
-    assert!(
-        gate.contains("if: always()"),
-        "CI aggregate must run after failed or skipped jobs"
-    );
-    assert!(
-        gate.contains("NEEDS_JSON: ${{ toJSON(needs) }}"),
-        "CI aggregate must inspect job results"
-    );
-    Ok(())
-}
-
-#[test]
-fn change_aware_validation_keeps_release_and_aggregate_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
-    let workflow = fs::read_to_string(".github/workflows/ci.yml")?;
-    let release = fs::read_to_string(".github/workflows/release.yml")?;
-    let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
-    assert_eq!(policy["repository"], "Strukturpiloten/podman-lens");
     assert_eq!(policy["schema"], 2);
-    assert_eq!(policy["documentation_examples_manifest"], Value::Null);
-    assert_eq!(
-        policy["profile_jobs"]["prose"],
-        serde_json::json!(["documentation", "lockfile-release-age"])
-    );
-    assert!(workflow.contains(".validation-base/scripts/validation-plan.py plan"));
-    assert!(workflow.contains("trusted base has no classifier"));
-    assert!(workflow.contains("first-rollout required job"));
-    assert!(workflow.contains("python3 \"${verifier}\" gate"));
-    assert!(workflow.contains("--tested-sha \"${GITHUB_SHA}\""));
-    assert!(workflow.contains("cargo test --locked --test public_guides"));
-    assert!(!workflow.contains("runs-on: macos-14"));
-    assert!(release.contains("uses: ./.github/workflows/ci.yml"));
-    assert!(release.contains("uses: ./.github/workflows/native-podman-conformance.yml"));
+    assert_eq!(policy["repository"], "Strukturpiloten/podman-lens");
+    for required in [
+        "merge_group:",
+        "name: Required CI",
+        "if: always()",
+        "--tested-sha",
+        "--policy-sha",
+        "boxferry_ci gate",
+        "shared-dependency-wait.yml@",
+        "statuses: read",
+    ] {
+        assert!(workflow.contains(required), "shared CI contract omits {required}");
+    }
+    let python = fs::read_to_string("scripts/test-automation-contract.py")?;
+    for required in [
+        "test_ordinary_adoption_preserves_every_main_job_without_image_opt_in",
+        "test_actual_maintenance_prose_reaches_pr_queue_and_local_narrow_plans",
+        "test_real_narrow_gate_rejects_unexpected_outcomes_skips_and_candidate",
+        "test_effective_renovate",
+        "test_unique_native",
+        "test_trusted_service",
+        "test_all_shared_references",
+    ] {
+        assert!(python.contains(required), "consumer regression omits {required}");
+    }
+    assert!(fs::read_to_string("scripts/check-all.sh")?.contains("scripts/shared-ci.py run --task python-quality"));
     Ok(())
 }
 
@@ -1847,28 +1498,20 @@ fn compiler_policy_has_one_support_floor_and_metadata_driven_consumers() -> Resu
         "development compiler must support the declared floor"
     );
 
-    let ci = fs::read_to_string(".github/workflows/ci.yml")?;
     let local = fs::read_to_string("scripts/check-all.sh")?;
-    for consumer in [&ci, &local] {
-        assert!(consumer.contains("cargo metadata --locked --no-deps --format-version 1"));
-        assert!(consumer.contains("[.packages[].rust_version] | unique"));
-    }
+    assert!(local.contains("cargo metadata --locked --no-deps --format-version 1"));
+    assert!(local.contains("[.packages[].rust_version] | unique"));
     for alias in ["ci-check", "ci-policy"] {
-        assert!(ci.contains(&format!("cargo \"+${{RUST_MSRV}}\" {alias}")));
         assert!(local.contains(&format!("cargo \"+${{msrv}}\" {alias}")));
     }
     assert!(fs::read_to_string(".github/workflows/release.yml")?.contains("uses: ./.github/workflows/ci.yml"));
 
     let renovate: Value = serde_json::from_str(&fs::read_to_string(".github/renovate.json")?)?;
-    let rules = renovate["packageRules"]
+    let presets = renovate["extends"]
         .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?;
-    let owners: Vec<_> = rules
-        .iter()
-        .filter(|rule| rule["matchManagers"] == serde_json::json!(["rust-toolchain"]))
-        .collect();
-    assert_eq!(owners.len(), 1, "the development compiler must have one Renovate group");
-    assert_eq!(owners[0]["groupName"], "Rust toolchain");
+        .ok_or_else(|| policy_error("shared presets missing"))?;
+    assert_eq!(presets.len(), 2);
+    assert!(presets[1].as_str().is_some_and(|preset| preset.contains("/rust#")));
     assert!(renovate["customManagers"].as_array().is_some_and(|managers| {
         managers.iter().all(|manager| {
             !manager["matchStrings"].to_string().contains("rust-version")
@@ -1985,9 +1628,8 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         assert!(policy.contains(required), "missing agent policy: {required}");
     }
     let testing = fs::read_to_string(root.join("docs/testing.md"))?;
-    assert!(testing.contains("Sol/xhigh"));
-    assert!(testing.contains("The primary owns final"));
-    assert!(testing.contains("validation and merges"));
+    assert!(testing.contains("authority is in [`AGENTS.md`](../AGENTS.md)"));
+    assert!(testing.contains("the primary owns final validation"));
     assert!(testing.contains("`./scripts/check-all.sh --check`"));
     Ok(())
 }
@@ -2059,62 +1701,6 @@ fn linux_gate_modes_and_failure_propagation_are_correct() -> Result<(), Box<dyn 
         "gate mode regression failed:\n{}\n{}",
         String::from_utf8_lossy(&result.stdout),
         String::from_utf8_lossy(&result.stderr)
-    );
-    Ok(())
-}
-fn reextract_shared_policy_marker<'a>(
-    manager_pattern: &str,
-    candidate: &'a str,
-) -> Option<(&'a str, &'a str, &'a str)> {
-    let expected_pattern = "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})";
-    if manager_pattern != expected_pattern {
-        return None;
-    }
-    let (marker_line, ref_line) = candidate.split_once('\n')?;
-    let (indentation, marker) = marker_line.split_once('#')?;
-    if !indentation.bytes().all(|byte| matches!(byte, b' ' | b'\t')) {
-        return None;
-    }
-    let marker = marker.strip_prefix(" renovate: datasource=github-digest depName=")?;
-    let (dep_name, current_value) = marker.split_once(" currentValue=")?;
-    if dep_name != "Strukturpiloten/.github" || current_value != "main" {
-        return None;
-    }
-    let ref_line = ref_line.strip_prefix(indentation)?.strip_prefix("ref: ")?;
-    if ref_line.len() != 40
-        || !ref_line
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return None;
-    }
-    Some((dep_name, current_value, ref_line))
-}
-
-#[test]
-fn eligibility_prerequisite_preserves_legacy_gate_and_additive_tasks() -> Result<(), Box<dyn std::error::Error>> {
-    let workflow = fs::read_to_string(".github/workflows/dependency-eligibility.yml")?;
-    for required in [
-        "workflow_run:",
-        "schedule:",
-        "workflow_run:",
-        "shared-dependency-eligibility.yml@",
-        "statuses: write",
-    ] {
-        assert!(workflow.contains(required), "eligibility prerequisite omits {required}");
-    }
-    assert!(!workflow.contains("steps:"));
-    assert!(!workflow.contains("pull_request_target:"));
-    let manifest: Value = serde_json::from_str(&fs::read_to_string(".github/automation.json")?)?;
-    assert_eq!(manifest["repository"], "Strukturpiloten/boxferry");
-    assert_eq!(manifest["policy"], "scripts/validation-policy.json");
-    let planner = fs::read_to_string("scripts/validation-plan.py")?;
-    assert!(planner.contains("required | {\"tasks\"}"));
-    let policy: Value = serde_json::from_str(&fs::read_to_string("scripts/validation-policy.json")?)?;
-    assert!(
-        policy["tasks"]["rust-quality"]["commands"].as_array().is_some_and(
-            |commands| commands.contains(&serde_json::json!(["bash", "scripts/check-native-release-contract.sh"]))
-        )
     );
     Ok(())
 }

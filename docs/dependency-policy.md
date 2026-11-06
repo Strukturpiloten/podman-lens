@@ -1,49 +1,55 @@
 # Dependency policy
 
-Every dependency needs one narrow, reviewed role. PodmanLens does not add a general Podman client,
-process executor, ambient connection resolver, or cross-format model through dependencies.
+Every dependency needs a narrow, reviewed role. PodmanLens adds no ambient connection resolver,
+process executor, general Podman client, or cross-format model.
 
-| Role                                    | Dependencies                                              |
-| --------------------------------------- | --------------------------------------------------------- |
-| Version parsing                         | `semver`                                                  |
-| Bounded JSON decoding and serialization | `serde`, `serde_json`                                     |
-| Explicit endpoint validation            | `url`                                                     |
-| Read-only Unix HTTP transport           | `bytes`, `tokio`, `hyper`, `hyper-util`, `http-body-util` |
-| Local schema tests only                 | `jsonschema` with retrieval features disabled             |
+| Role                | Dependencies                                              |
+| ------------------- | --------------------------------------------------------- |
+| Version parsing     | `semver`                                                  |
+| Bounded JSON        | `serde`, `serde_json`                                     |
+| Explicit endpoints  | `url`                                                     |
+| Read-only Unix HTTP | `bytes`, `tokio`, `hyper`, `hyper-util`, `http-body-util` |
+| Local schema tests  | `jsonschema`, retrieval disabled                          |
 
-The built-in transport accepts only bodyless `GET` requests over one explicit Unix socket. No
-dependency provides redirects, decompression, retries, SSH, TLS, process execution, or plan
-application.
+The built-in transport permits only bodyless `GET` requests over an explicit Unix socket.
+Dependencies provide no redirects, decompression, retries, SSH, TLS, process execution, or plan
+application. Test-only `jsonschema` validates committed local data without retrieval.
 
-`jsonschema` is test-only and validates committed local schemas and fixtures. It does not shape
-runtime types or retrieve remote schemas.
+The maintainer owns the support floor in `workspace.package.rust-version`; `clippy.toml` and
+README agree. Local and hosted validation read Cargo metadata. Renovate owns the separately
+pinned development compiler, grouped as `Rust toolchain`, without raising the support floor.
+Cargo dependencies remain locked and audited by `cargo deny`; Git dependencies and unknown
+registries are denied. Public API, decoding, serialization, runtime, and security changes require
+an ADR.
 
-The minimum supported Rust version is the maintainer-owned `workspace.package.rust-version` in
-`Cargo.toml`; `clippy.toml` and the README must agree with it. CI and the local gate read Cargo
-metadata, and Release reuses CI. Renovate's built-in `rust-toolchain` manager owns the separately
-pinned development compiler, grouped as `Rust toolchain`; it does not raise the support floor.
-The Cargo manager owns crate updates and lock-file maintenance. The schema-test graph now uses
-the ordinary transitive `yoke-derive` resolution without the obsolete compiler-compatibility
-constraint or Renovate exclusion.
+Immutable common and Rust presets in `.github/renovate.json` own routine dependency automation.
+Eligible updates merge after required integrity and compatibility checks without routine manual
+approval. Repository additions own native-runtime extraction, image declarations and nested
+GitHub CLI options. Shared inventory owns downloaded versions and verified checksums; the common
+preset couples feature declarations and lock integrity. Extraction and effective-rule regressions
+reject duplicate owners and accidental approval overrides.
 
-Dependencies are locked in `Cargo.lock`, audited by `cargo deny`, and updated through Renovate.
-Git dependencies and unknown registries are denied. A dependency that changes public types, wire
-decoding, serialization, the async runtime, or the security boundary requires an ADR.
+The default-branch eligibility service reads authoritative CI, PR and queue metadata and persists
+first-seen evidence. Candidate CI uses a read-only reader. Manifest and policy Git blobs at the
+trusted PR or queue base select authority independently of candidate-proposed automation.
+Receipts bind the exact tested SHA. Third-party updates retain 72 hours. An isolated maintained
+first-party release PR, including necessary young transitive resolution, is exempt only after
+trusted closure checks. Unavailable, malformed, future, moved, or stale evidence fails closed.
+Main, manual and release admission is explicitly inapplicable; complete integrity, audit and
+compatibility checks remain.
 
-Renovate defaults to a three-day minimum release age. Only Cargo/crate updates for the exact
-BoxFerry package list and `compose-lens`, `podman-lens`, `quadlet-lens`, and `docker-lens` receive
-the first-party zero-day override; review and automerge controls remain unchanged.
-Lock-file maintenance also uses a zero-day override because its synthetic updates lack individual
-release timestamps. Before the required aggregate PR gate succeeds, the shared, fail-closed guard
-checks each newly introduced registry version. Only the four exact Lens names from Cargo's
-canonical crates.io registry waive elapsed age, after a bounded successful registry lookup for the
-requested package/version returns a valid publication timestamp. Missing or invalid evidence,
-unavailable registry data, and future timestamps still fail. Third-party packages and their transitive
-dependencies retain the 72-hour cutoff; BoxFerry names receive no lockfile exemption. The guard's
-immutable revision has one Renovate owner. Dev Container and checksum-pinned tool updates remain
-manual.
-The PR documentation job installs those tools as the
-runner user into a unique directory under `RUNNER_TEMP`, then adds that directory to `GITHUB_PATH`.
-The installer retains its version and SHA-256 checks; this destination-only change leaves the
-existing Renovate extraction from `scripts/install-file-tools.sh` and its manual checksum-review
-rule unchanged.
+The coupled Podman qualification tuple stays fixed. Its exact Renovate owners are disabled without
+routine review proposals; target changes require separate qualification. Historical evidence stays
+unchanged. Release still requires fresh native conformance and protected environment approval.
+
+The selected shared project owns Python, uv, Ruff, ty and lock integrity. Consumers declare lint
+scope only. Ordinary host and CI tools use `scripts/install-host-tools.sh`, which delegates to the
+selected immutable inventory. The retained Dockerfile alone uses the image-only legacy
+`scripts/install-file-tools.sh`; its original versions and verified checksums keep one extractor.
+A late `enabled:false` hold covers direct image, feature, ARG and legacy-installer updates pending
+separate CI image qualification (BoxFerry #563), without manual-review proposals. Ordinary shared
+metadata, package locks and compiler updates retain one automatic owner even where the existing
+Dockerfile copies them; the resulting image closure remains unqualified. Contributors use VS Code
+Dev Containers with existing Podman storage, preferably rootless. Image validation and updater
+activation remain deferred. [ADR 0019](decisions/0019-shared-validation-and-dependency-automation.md)
+records migration and rollback.

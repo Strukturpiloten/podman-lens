@@ -1,7 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:best-practices"],
-  "dependencyDashboard": true,
+  "extends": [
+    "github>Strukturpiloten/boxferry//renovate-presets/common#1cf96f5a667d96e66c119753cf7814e22e0dee7e",
+    "github>Strukturpiloten/boxferry//renovate-presets/rust#1cf96f5a667d96e66c119753cf7814e22e0dee7e"
+  ],
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -12,23 +14,12 @@
     "**/tests/**",
     "**/fixtures/**"
   ],
-  "minimumReleaseAge": "3 days",
-  "prConcurrentLimit": 5,
-  "prHourlyLimit": 2,
-  "timezone": "Europe/Berlin",
   "customManagers": [
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.devcontainer/Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\nARG [A-Z0-9_]+_VERSION=(?<currentValue>[^\\s]+)"
-      ]
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^scripts/install-file-tools\\.sh$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\nreadonly [a-z0-9_]+_version=\\\"(?<currentValue>[^\\\"]+)\\\""
       ]
     },
     {
@@ -42,7 +33,7 @@
     },
     {
       "customType": "regex",
-      "description": "Record the fixed native Podman version for qualification policy",
+      "description": ["Record the fixed native Podman version for qualification policy"],
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>github-releases) depName=(?<depName>containers/podman)\\nreadonly PODMAN_NATIVE_VERSION=(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
@@ -51,7 +42,9 @@
     },
     {
       "customType": "regex",
-      "description": "Record the fixed native Fedora base tag and manifest for qualification policy",
+      "description": [
+        "Record the fixed native Fedora base tag and manifest for qualification policy"
+      ],
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>docker) depName=(?<depName>registry\\.fedoraproject\\.org/fedora)\\nreadonly PODMAN_NATIVE_BASE_IMAGE=registry\\.fedoraproject\\.org/fedora:(?<currentValue>[0-9]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -60,18 +53,13 @@
     },
     {
       "customType": "regex",
-      "description": "Update the Dev Container base release and digest together",
+      "description": ["Update the Dev Container base release and digest together"],
       "managerFilePatterns": ["/^\\.devcontainer/Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n# release: (?<currentValue>[^\\s]+)\\nFROM [^\\s]+@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ]
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/^docs/development-environment\\.md$/"],
-      "matchStrings": ["@devcontainers/cli@(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"],
-      "datasourceTemplate": "npm",
-      "depNameTemplate": "@devcontainers/cli"
+      ],
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}@{{{newDigest}}}"
     },
     {
       "customType": "regex",
@@ -84,93 +72,16 @@
     },
     {
       "customType": "regex",
-      "description": "Track the immutable Strukturpiloten shared-policy commit",
-      "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      "description": ["Record frozen image-only downloaded tools until image qualification #563"],
+      "managerFilePatterns": ["/^scripts/install-file-tools\\.sh$/"],
       "matchStrings": [
-        "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})"
-      ],
-      "datasourceTemplate": "github-digest",
-      "autoReplaceStringTemplate": "{{{indentation}}}# renovate: datasource=github-digest depName={{{depName}}} currentValue={{{newValue}}}\n{{{indentation}}}ref: {{{newDigest}}}"
-    },
-    {
-      "customType": "regex",
-      "description": "Track prerequisite shared dependency service, waiter and manifest revisions",
-      "managerFilePatterns": [
-        "/^(?:\\.github/workflows/(?:dependency-eligibility|ci)\\.yml|\\.github/automation\\.json)$/"
-      ],
-      "matchStrings": [
-        "(?<prefix>uses: Strukturpiloten/boxferry/\\.github/workflows/shared-dependency-(?:eligibility|wait)\\.yml@|automation[-_]sha:\\s*|\"revision\"\\s*:\\s*\")(?<currentDigest>[a-f0-9]{40})"
-      ],
-      "depNameTemplate": "Strukturpiloten/boxferry",
-      "datasourceTemplate": "github-digest",
-      "currentValueTemplate": "automation-v1"
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\nreadonly [a-z_]+_version=\"(?<currentValue>[^\\\"]+)\""
+      ]
     }
   ],
   "packageRules": [
     {
-      "matchManagers": ["cargo"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
-      "groupName": "Rust dependencies"
-    },
-    {
-      "matchManagers": ["npm"],
-      "matchDepTypes": ["devDependencies"],
-      "groupName": "Node development tools"
-    },
-    {
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["action"],
-      "pinDigests": true
-    },
-    {
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["action"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
-      "groupName": "GitHub Actions"
-    },
-    {
-      "description": "Automerge tested non-major dependency updates",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": false
-    },
-    {
-      "description": "Automerge green-gated lock-file maintenance",
-      "matchUpdateTypes": ["lockFileMaintenance"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": false,
-      "minimumReleaseAge": "0 days"
-    },
-    {
-      "description": "Do not delay BoxFerry and Lens releases",
-      "matchManagers": ["cargo"],
-      "matchDatasources": ["crate"],
-      "matchPackageNames": [
-        "boxferry",
-        "boxferry-model",
-        "boxferry-engine",
-        "boxferry-compose",
-        "boxferry-podman",
-        "boxferry-quadlet",
-        "compose-lens",
-        "podman-lens",
-        "quadlet-lens",
-        "docker-lens"
-      ],
-      "minimumReleaseAge": "0 days"
-    },
-    {
-      "description": "Require manual review for Dev Container features",
-      "matchManagers": ["devcontainer"],
-      "matchDepTypes": ["feature"],
-      "pinDigests": false,
-      "groupName": "Dev Container",
-      "automerge": false
-    },
-    {
-      "description": "Keep the coupled Podman native qualification tuple fixed",
+      "description": ["Keep the coupled Podman native qualification tuple fixed"],
       "matchManagers": ["custom.regex"],
       "matchFileNames": ["scripts/native-runtime-pins.sh"],
       "matchDatasources": ["github-releases", "docker"],
@@ -178,29 +89,14 @@
       "enabled": false
     },
     {
-      "matchManagers": ["rust-toolchain"],
-      "groupName": "Rust toolchain"
-    },
-    {
-      "description": "Require checksum review for downloaded file-quality tools",
-      "matchFileNames": ["scripts/install-file-tools.sh"],
-      "dependencyDashboardApproval": true,
-      "automerge": false,
-      "prBodyNotes": [
-        "Review both Linux release assets and update their SHA-256 checksums before merging."
-      ]
-    },
-    {
-      "description": "The prerequisite service revision has one custom owner before full shared-preset adoption",
-      "matchManagers": ["github-actions"],
-      "matchPackageNames": ["Strukturpiloten/boxferry"],
+      "description": ["Hold direct Dev Container inputs until separate image qualification #563"],
+      "matchFileNames": [
+        ".devcontainer/Dockerfile",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/devcontainer-lock.json",
+        "scripts/install-file-tools.sh"
+      ],
       "enabled": false
-    },
-    {
-      "description": "Keep prerequisite dependency service, waiter and manifest revisions atomic",
-      "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["Strukturpiloten/boxferry"],
-      "groupName": "Shared eligibility prerequisite"
     }
   ]
 }

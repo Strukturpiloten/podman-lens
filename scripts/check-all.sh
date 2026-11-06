@@ -9,7 +9,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=23
+readonly total_steps=24
 
 fail() {
   printf 'PodmanLens local validation failed: %s\n' "$1" >&2
@@ -92,6 +92,14 @@ for directory in "${coverage_target_dir}" "${semver_cargo_home}" "${semver_targe
 done
 readonly coverage_target_dir semver_cargo_home semver_target_dir
 
+# Verify the Cargo dispatch and compiler used by the trusted-base API check.
+current_step="Verify exact local Cargo SemVer selection"
+semver_selection="$(env CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${semver_target_dir}" \
+  python3 scripts/shared-ci.py cargo-tools verify \
+  --repository-root "${repository_root}" --package cargo-semver-checks)"
+semver_rust_channel="$(jq -er '.rust_channel' <<< "${semver_selection}")"
+readonly semver_rust_channel
+
 if [[ "${format_mode}" == "check" ]]; then
   run_step "Check Rust formatting" cargo fmt --all -- --check
   run_step "Check non-Rust files" bash scripts/check-files.sh --check
@@ -104,7 +112,7 @@ run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows
 run_step "Check all workspace targets and features" cargo ci-check
 run_step "Check repository policies" cargo ci-policy
-run_step "Test validation-plan regressions" env PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
+run_step "Check shared Python and automation contracts" python3 scripts/shared-ci.py run --task python-quality
 run_step "Run Clippy with warnings denied" cargo ci-clippy
 run_step "Run workspace tests" cargo ci-test
 run_step "Check captured native release contract" bash scripts/check-native-release-contract.sh
@@ -117,17 +125,10 @@ run_step "Check all targets with the MSRV" env CARGO_HOME="${rustup_cargo_home}"
 run_step "Check repository policies with the MSRV" env CARGO_HOME="${rustup_cargo_home}" cargo "+${msrv}" ci-policy
 run_step "Audit dependencies, licenses, bans, and sources" cargo deny --all-features check
 run_step "Check local documentation links" lychee --config lychee.toml --root-dir . --offline "${markdown_files[@]}"
-check_api_compatibility() {
-  if [[ "${PODMAN_LENS_SEMVER_CHECK:-0}" == "1" ]]; then
-    env CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${semver_target_dir}" \
-      bash scripts/check-public-api.sh
-    return
-  fi
-
-  cargo test --locked --test public_api
-}
-
-run_step "Check initial public API contract" check_api_compatibility
+run_step "Check initial public API contract" cargo test --locked --test public_api
+run_step "Check development public API compatibility" \
+  env CARGO=cargo CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${semver_target_dir}" \
+  RUSTUP_TOOLCHAIN="${semver_rust_channel}" bash scripts/check-public-api.sh
 run_step "Test release metadata policy" bash scripts/test-release-metadata.sh
 run_step "Check release metadata" bash scripts/check-release-metadata.sh --development
 printf '\nPodmanLens local validation passed all %d steps.\n' "${total_steps}"

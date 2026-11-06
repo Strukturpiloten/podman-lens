@@ -72,23 +72,30 @@ prose. The catalogue is the source of truth.
 
 ## Compatibility checks
 
-The complete gate runs the configured public API check:
+The complete gate runs the positive public API contract and a development-purpose comparison
+against a trusted Git base:
 
 ```console
 ./scripts/check-all.sh
 ```
 
-To compare explicitly with the published crate through `cargo-semver-checks`, run:
+The same development check can run separately with `scripts/check-public-api.sh`. It uses the
+shared baseline selector and its fixed minor allowance for compatible additions. It compares the
+whole proposal with the unique fork base against canonical default main; clean trusted-main
+candidates compare with their first parent. Dirty local main compares actual changed source with
+trusted HEAD. Historical breaking markers and manifest version increases do not authorize a new
+break. Missing or stale Git authority fails with fetch/retry guidance without changing local refs.
+
+To compare explicitly with the canonical published crate, run:
 
 ```console
-PODMAN_LENS_SEMVER_CHECK=1 ./scripts/check-all.sh
+./scripts/check-public-api.sh --published
 ```
 
-The check compares against the published baseline. A Conventional Commit breaking marker (`!` or
-`BREAKING CHANGE:`) authorizes a break in the next pre-1.0 minor release. The repository wrapper
-passes cargo-semver-checks its `major` category because that is the tool's name for an API break,
-even when the crate publishes the break as `0.x` minor. Otherwise the tool derives its release type
-from the manifest versions.
+Release and validation-only always select published purpose. Compatibility is inferred from the
+candidate manifest version, without a Conventional Commit intent override. Only successful
+published-purpose evidence bound to the exact candidate can satisfy the release guard. The
+legacy `PODMAN_LENS_SEMVER_CHECK` variable no longer skips or selects API validation.
 
 The additive bounded
 [`ContainerObservation::creation_evidence` contract](decisions/0015-bounded-creation-command-evidence.md)

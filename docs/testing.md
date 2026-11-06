@@ -1,7 +1,7 @@
 # Testing
 
-PodmanLens tests native behavior without relying on an ambient Podman installation. The ordinary
-gate is deterministic and offline. Live checks are explicit and opt-in.
+PodmanLens captured-native tests are deterministic and offline. Live API conformance remains
+explicit and opt-in for development, and mandatory for Release.
 
 ## Complete gate
 
@@ -11,16 +11,19 @@ Run this after the final edit:
 ./scripts/check-all.sh
 ```
 
-For measured, change-aware feedback use `python3 scripts/validation-plan.py run-local`.
-Every public guide edit runs file/link checks and `tests/public_guides.rs`, which checks page
-inventory and navigation; other edits use the full gate. `--full` forces it, while `--docs-only`
-rejects current guides. PRs use the trusted-base classifier and initially run full. Main, manual,
-and Release run full; Release requires native conformance. `Required CI` requires selected jobs to pass.
-Both local modes reject `CARGO_TARGET_DIR` outside the worktree to avoid stale test binaries.
-Focused checks never replace final `check-all.sh`.
+For bounded feedback use `python3 scripts/validation-plan.py run-local`. Public guides run
+file/link checks and the guide contract. Mixed, unknown, policy and code changes, plus `--full`,
+retain complete validation. `--docs-only` cannot bypass required checks. PR and queue plans use
+trusted base policy; Required CI accepts only successful selected jobs and planned skips.
+Main, manual and Release remain complete. Local modes reject external `CARGO_TARGET_DIR`.
 
-The gate checks formatting, Actions, Rust targets/tests/docs/package, coverage, MSRV,
-dependencies, links, public API, and offline captured-native evidence.
+Shared locked Python owns uv, Ruff and ty; regressions verify wiring and failures.
+Ordinary full hosted and local validation preserve existing main checks without image jobs or
+local image leaves. Direct Dev Container inputs and the legacy image installer remain held
+pending qualification (BoxFerry #563). Ordinary shared metadata,
+package and compiler updates remain automatic; their resulting image closure is unqualified.
+Use VS Code Dev Containers with existing Podman storage, preferably rootless. No private store or
+host sudo is required. GitHub CI image qualification and updater activation remain separate.
 
 ## Test layers
 
@@ -37,31 +40,21 @@ dependencies, links, public API, and offline captured-native evidence.
 | Repository policy tests      | Governance, package contents, workflows, and documentation contracts      |
 | Rustdoc and guide tests      | Compilable examples, page inventory, claims, and navigation               |
 
-Every behavior change needs focused positive and negative coverage. Prefer small unit tests plus one
-public or end-to-end case when a contract changes.
-
 ## Fixtures and cassettes
 
-All committed input fixtures are offline, deterministic, provenance-bearing, and synthetic or
-privacy-sanitized. Captured-native cassettes derive from reviewed responses, but contain only
-deterministic replacements rather than raw environment data.
+Committed fixtures are deterministic, offline, provenance-bearing, and synthetic or sanitized.
+Captured-native cassettes replace raw environment data. Complex cassettes bind each response to
+its exact Libpod method, path and query; replay rejects unexpected, repeated, reordered, missing,
+duplicate or unconsumed requests. Each reviewed version covers simulated rootless/rootful
+containers, pods, networks, volumes, images and secret metadata.
 
-The complex cassette schema binds every response to an exact Libpod method and complete path plus
-query. Replay rejects unexpected, repeated, reordered, missing, duplicate, or unconsumed requests.
-Each reviewed Podman version has simulated rootless and rootful context coverage across containers,
-pods, networks, volumes, images, and secret metadata.
+Update fixture provenance, SHA-256 manifests and focused behavioral assertions together.
+Fixtures, failures, snapshots and goldens must exclude real endpoints, environment values,
+credentials, secret payloads, protected health commands and sensitive native data.
 
-Fixture manifests pin provenance and SHA-256 digests. Never edit a fixture without updating its
-manifest and the focused behavior assertion that explains why it exists.
-
-Fixtures, failures, snapshots, and goldens must not contain real endpoints, environment values,
-credentials, secret payloads, protected health commands, or raw sensitive native data.
-
-`podman-lens-cassette-v1` and the native capture manifest are repository test formats. They are not
-public Rust APIs, trusted deserialization APIs, migration interchange formats, or compatibility
-promises. They may be packaged for auditability, but production modules do not import or parse
-them. Their strict schemas, SHA-256 registry, privacy mutations, replay behavior, and semantic
-expectations are enforced by test support and `scripts/check-native-release-contract.sh`.
+`podman-lens-cassette-v1` and native capture manifests are test formats, not public APIs or
+compatibility promises. Production modules never parse them. Test support and
+`scripts/check-native-release-contract.sh` enforce schemas, hashes, privacy, replay and semantics.
 
 ## Focused commands
 
@@ -94,11 +87,20 @@ cargo test --test public_api
 cargo test --test repository_policy
 ```
 
-These focused commands help during development but do not replace `./scripts/check-all.sh`.
+The complete local gate always runs both the positive `tests/public_api.rs` contract and the
+shared development-purpose API check against a trusted Git base. Legacy
+`PODMAN_LENS_SEMVER_CHECK` values do not disable this comparison. `scripts/check-public-api.sh`
+(or `--development`) selects the same declared shared task; `--published` explicitly checks the
+canonical published baseline with manifest-inferred release allowance for release preparation.
+The shared helper owns trusted-base selection, initial-crate absence and positive-contract proof.
+Missing or stale Git authority fails with fetch/retry guidance; local breaking-history markers do
+not waive the development check.
 
-Set `PODMAN_LENS_SEMVER_CHECK=1` to run the same repository-owned published-API command used by
-the CI API job. It requires a reachable release tag and the published crate baseline; the initial
-contract path continues to use `tests/public_api.rs`.
+Before compiler work, the shared loader verifies the declared Cargo plugin and selects its Rust
+channel. The API check uses that channel and the same isolated Cargo home and target directory.
+Unavailable or mismatched tools fail closed. `RUSTUP_CARGO_HOME` still selects the host Cargo home
+for MSRV checks. CI uses development purpose for ordinary events; Release and validation-only
+explicitly require published-purpose evidence for the exact candidate.
 
 ## Native conformance
 
@@ -120,7 +122,7 @@ keeps only a bounded ignored Unix-socket entry point for explicit consumer runs 
 discover an ambient endpoint. Privileged execution must not expose a host Podman socket to
 untrusted code.
 
-The ordinary local, CI, and release gate remains offline. The captured Podman 6.1 rootful cassettes
+The captured Podman 6.1 rootful cassettes
 anchor native response behavior without creating a second live matrix; expanding that evidence
 requires a new privacy review and immutable provenance.
 
@@ -157,25 +159,20 @@ Build storage budgets and peak evidence follow [ADR 0017](decisions/0017-isolate
 The `ubuntu-24.04` host launcher is infrastructure. Each cell builds from a pinned Fedora 45
 base, fixed Beta compose, and checksum-verified Koji RPM. Release evidence records the package
 closure and image ID. Beta is test infrastructure; native root-mode and API checks still gate
-support. Renovate updates need manual review. The 6.1.0 cassettes remain historical.
+support. The qualified runtime tuple stays fixed; target changes require separate qualification. The 6.1.0 cassettes remain historical.
 The current-patch probe simulation is synthetic; live checks cover authored hints and 404.
 
 ## Coverage and compatibility
 
-The native-field and renderer catalogues link supported fields to their public access point,
-planner, renderer, target versions, diagnostic, and focused tests. Catalogue validation includes
-mutation tests so a plausible but incorrect target or owner swap fails.
-
-Do not copy mutable catalogue row counts into prose. When a target boundary changes, update the
-catalogue, its evidence, positive and negative tests, and the public compatibility guide together.
+Machine catalogues bind fields to API accessors, planners, renderers, diagnostics and target
+versions. Mutation tests reject incorrect targets and owners. Change catalogue evidence, tests and
+public compatibility guidance together; keep mutable row counts out of prose.
 
 ## Agent-assisted verification
 
-Model defaults and roles are in [`.codex/`](../.codex/); scope and GitHub authority are in
-[`AGENTS.md`](../AGENTS.md). Keep primary overrides at Sol/xhigh. The primary owns final
-validation and merges; verifiers use `./scripts/check-all.sh --check` without source formatting.
-Default/`--fix` formats first; both run the same checks. Shell-runner tests target Linux.
-macOS client compatibility is intended but has no runner evidence.
+Role settings are in [`.codex/`](../.codex/); authority is in [`AGENTS.md`](../AGENTS.md).
+Verifiers run `./scripts/check-all.sh --check`; the primary owns final validation. Neither mode
+authorizes publication. Shell-runner tests target Linux; macOS has no runner evidence.
 
 The fuller BoxFerry consumer remains ignored and cannot discover an ambient socket. Invoke it
 only with the explicit fixture socket and one exact reviewed expected version (`5.8.6` or

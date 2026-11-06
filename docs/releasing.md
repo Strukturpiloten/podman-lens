@@ -1,76 +1,56 @@
 # Release process
 
-release-plz proposes crate versions and changelog updates. The protected `Release` workflow is
-the only publisher, tagger, attestation producer, and GitHub release creator. Its
-`validation_only` dispatch runs the identical validation path but cannot enter the publication job
-or receive its publication permissions.
+Shared release preparation runs release-plz with the repository-scoped App token to propose crate
+versions and changelog updates. The protected `Release` workflow remains the only publisher,
+tagger, attestation producer and GitHub release creator. Shared automation is development tooling;
+PodmanLens has no BoxFerry product dependency.
 
-The reusable CI caller always runs the complete candidate validation plan for Release, including
-the offline native-evidence contract. The separate live native conformance worker remains an
-additional fail-closed release gate; a focused pull-request plan never substitutes for either.
-Release calls the reusable native worker with `release_validation=true`. Its separate admission
-job checks out the exact SHA and verifies that the candidate still heads the current default
-branch before the privileged matrix starts. The calling dispatch event cannot select the manual
-issue-branch path. A reviewed issue-branch manual native run is useful pre-merge diagnostics but
-is validation-only; its artifacts never replace fresh SHA/run/attempt-bound Release evidence.
+`validation_only` executes the same validation path and read-only publication inventory without
+publication permissions or credentials. Ordinary dependency updates require no routine human
+approval; software publication still requires approval of the protected release environment.
 
-After fixing a failure, dispatch a complete Release run on current `main`.
-"Rerun failed jobs" can omit native cells whose earlier-attempt artifacts are
-inadmissible. Never copy those artifacts or weaken validation. Use
-`validation_only` to prevent publication.
+## Validate the exact candidate
 
-## Prepare a release-worthy change
+Release invokes complete reusable CI with published API purpose, release metadata checks, native
+conformance and published SemVer validation. The shared final gate directly requires all five
+repository prerequisites: deterministic CI, metadata, native conformance, SemVer and native evidence
+validation. Each successful result and evidence receipt binds the exact candidate. Native evidence
+also binds the current run and attempt; cleanup must succeed before native candidate output exists.
 
-Only merged `feat`, `fix`, `perf`, `refactor`, or `revert` commits create a release
-proposal. Documentation, tests, CI, build tooling, formatting, and other maintenance use
-`docs`, `test`, `ci`, `build`, `style`, or `chore`.
+Development CI compares against the trusted canonical Git base, without historical breaking-marker
+allowances. Release and validation-only compare against the canonical published crate. Only distinct
+successful published-purpose API evidence for the exact candidate satisfies the release guard.
+Missing published evidence never becomes proof through a generic candidate output.
 
-Use a breaking `!` only for an intentional public break that follows
-[the API stability policy](api-stability.md).
+Native release admission checks out the exact SHA and verifies the current default-branch head
+before privileged cells start. `release_validation=true` cannot select the manual issue-branch path.
+A diagnostic issue-branch run never replaces fresh Release evidence. Native qualification retains
+both root modes, pinned RPM/compose provenance, built image identity, installed package closure,
+privacy checks, budgets and cleanup.
 
-Record user-visible changes in the single `Unreleased` section. Ordinary product pull requests
-must not create a future numbered section, set its date, or bump the crate version. Release-plz
-inserts only the dated version heading, with blank lines on both sides; the curated notes below
-`Unreleased` thereby become that release's notes exactly once, without duplicate `Added`,
-`Changed`, or `Fixed` headings.
+After a failure, dispatch a complete new Release run on current `main`; rerunning failed jobs can
+omit native cells whose earlier-attempt evidence is inadmissible. Never reuse those artifacts or
+weaken validation. The ordinary `scripts/check-native-release-contract.sh` also remains mandatory.
 
-The API check reads all Conventional Commits since the latest release tag. A `!` subject marker or
-`BREAKING CHANGE:` footer authorizes a break in the next pre-1.0 minor release. The wrapper passes
-cargo-semver-checks its `major` category because that is the tool's name for an API break; this does
-not change PodmanLens's pre-1.0 versioning policy.
+## Prepare and review a release
 
-`check-release-metadata.sh --development` permits pending notes in local/ordinary CI.
-`--release` (default) requires empty `Unreleased` for release-plz PRs and
-Release/validation-only, regardless of tags. Invalid arguments fail.
+Only merged `feat`, `fix`, `perf`, `refactor` and `revert` changes create release proposals.
+Documentation, tests, CI, build tooling and maintenance use non-release commit types.
+Intentional API breaks follow [API stability](api-stability.md), including the next pre-1.0 minor
+version and migration notes.
 
-## Review the release pull request
+Keep user-visible notes in one `Unreleased` section. Product PRs neither bump versions nor create
+future dated sections. release-plz inserts the dated heading once above the curated notes.
+`check-release-metadata.sh --development` permits pending notes in ordinary CI;
+`--release` requires an empty `Unreleased` for release-plz and Release/validation-only.
 
-Before merging the generated `release-plz-*` pull request, verify that:
-
-- the proposed version matches the change type;
-- the newest numbered changelog section matches the crate version;
-- `Unreleased` is empty;
-- `CHANGELOG.md` contains a usable release section for that exact version;
-- breaking changes include migration guidance;
-- the package and compatibility checks pass; and
-- `scripts/check-native-release-contract.sh` passes its offline privacy, provenance, replay,
-  and semantic contracts;
-- the reusable `Native Podman conformance` worker passed for the exact candidate SHA, current
-  run ID, and current run attempt, with its SHA/run/attempt/task evidence artifact, pinned RPM and
-  Fedora compose provenance, built image ID, installed package closure, and both root modes;
-- the release gate checked out that exact candidate, with credentials disabled, before invoking
-  the candidate-owned native-evidence validator; and
-- no publication credential is present in repository secrets.
-
-The changelog section is a release gate, not optional metadata.
+Review the proposed version, matching changelog section, package, API compatibility, MSRV,
+dependencies, coverage and native evidence. The candidate is checked out with credentials disabled
+before its native-evidence validator runs. No publication credential belongs in repository secrets.
 
 ## Publish
 
-1. Merge the reviewed release-plz pull request.
-2. Let it dispatch the protected `Release` workflow.
-3. Review the complete verification result.
-4. Approve the protected release environment.
-
-The workflow verifies captured-native release evidence, the package, API compatibility, MSRV, dependencies, coverage, checksum,
-attestation, release tag, and draft GitHub release before publishing. crates.io authentication uses
-trusted publishing; do not bootstrap publication with a stored crates.io token.
+Merge the reviewed release PR, dispatch the protected workflow, review complete verification, then
+approve the release environment. Shared idempotent crate mechanics retain first-publication policy
+and exact-candidate checks. PodmanLens retains tags, checksum assets, attestations and GitHub release
+creation. crates.io uses trusted publishing; never bootstrap it with a stored token.

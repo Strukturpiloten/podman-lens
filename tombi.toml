@@ -17,3 +17,8 @@ tables-out-of-order = "error"
 [[schemas]]
 path = "docs/schemas/tombi-cargo-offline.schema.json"
 include = ["Cargo.toml", "**/Cargo.toml"]
+
+# Ruff and ty remain semantic validators; offline schema lookup must not require the network.
+[[schemas]]
+path = "docs/schemas/tombi-python-tools-offline.schema.json"
+include = ["pyproject.toml"]

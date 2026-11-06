@@ -1,64 +1,22 @@
 ---
 name: Release preparation
-
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".cargo/**"
-      - ".github/workflows/release-plz.yml"
-      - ".github/workflows/release.yml"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "LICENSE"
-      - "release-plz.toml"
-      - "rust-toolchain.toml"
-      - "src/**"
-  workflow_dispatch:
-
 permissions: {}
-
 env:
   RELEASE_GITHUB_API_VERSION: "2026-03-10"
-
 jobs:
   prepare-release-pr:
     if: github.repository == 'Strukturpiloten/podman-lens'
-    runs-on: ubuntu-24.04
     permissions:
       contents: read
-    concurrency:
-      group: release-plz-${{ github.repository }}-${{ github.ref }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - id: app-token
-        continue-on-error: true
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ vars.RELEASE_PLZ_APP_CLIENT_ID }}
-          owner: ${{ github.repository_owner }}
-          permission-contents: write
-          permission-pull-requests: write
-          private-key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-      - if: steps.app-token.outcome == 'failure'
-        shell: bash
-        run: |
-          echo 'GitHub could not create the release-plz App token. Grant the organization App Contents and Pull requests read/write permissions, then approve the installation.' >&2
-          exit 1
-      - uses: release-plz/action@b2baf303c463c223526d52a8a91b0777f052cf3f # v0.5.146
-        with:
-          command: release-pr
-          # renovate: datasource=crate depName=release-plz
-          version: "0.4.0"
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-prepare.yml@1cf96f5a667d96e66c119753cf7814e22e0dee7e # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      automation_sha: 1cf96f5a667d96e66c119753cf7814e22e0dee7e
+      policy_sha: ${{ github.sha }}
+      config_path: scripts/validation-policy.json
+      app_client_id: ${{ vars.RELEASE_PLZ_APP_CLIENT_ID }}
+    secrets:
+      app_private_key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}
   dispatch-release:
     name: Dispatch protected release after release-plz merge
     if: github.event_name == 'push' && github.repository == 'Strukturpiloten/podman-lens'
@@ -102,7 +60,6 @@ jobs:
             exit 1
           fi
           echo 'dispatch=true' >> "${GITHUB_OUTPUT}"
-
       - name: Dispatch protected release workflow
         if: steps.release-pr.outputs.dispatch == 'true'
         shell: bash
@@ -115,3 +72,18 @@ jobs:
             --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" \
             -f ref="${DEFAULT_BRANCH}"
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - .cargo/**
+      - .github/workflows/release-plz.yml
+      - .github/workflows/release.yml
+      - Cargo.lock
+      - Cargo.toml
+      - LICENSE
+      - release-plz.toml
+      - rust-toolchain.toml
+      - src/**
+  workflow_dispatch: null

@@ -79,6 +79,7 @@ check_yaml_document_markers() {
 }
 
 if [[ "${mode}" == "--fix" ]]; then
+  run python3 scripts/shared-ci.py run --task python-format
   printf '\nFormat Markdown\n'
   run prettier --write --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}"
   run markdownlint-cli2 --fix "${markdown_literals[@]}"

@@ -11,46 +11,39 @@ Run this after the final edit:
 ./scripts/check-all.sh
 ```
 
-For bounded feedback use `python3 scripts/validation-plan.py run-local`. Public guides run
+For feedback use `python3 scripts/validation-plan.py run-local`. Public guides run
 file/link checks and the guide contract. Mixed, unknown, policy and code changes, plus `--full`,
-retain complete validation. `--docs-only` cannot bypass required checks. PR and queue plans use
-trusted base policy; Required CI accepts only successful selected jobs and planned skips.
-Main, manual and Release remain complete. Local modes reject external `CARGO_TARGET_DIR`.
+retain complete validation; `--docs-only` cannot bypass checks. PR and queue plans use trusted
+base policy; Required CI accepts only successful selected jobs and planned skips. Main, manual and
+Release remain complete. Local modes reject external `CARGO_TARGET_DIR`.
 
-Shared locked Python owns uv, Ruff and ty; regressions verify wiring and failures.
-Ordinary full hosted and local validation preserve existing main checks without image jobs or
-local image leaves. Direct Dev Container inputs and the legacy image installer remain held
-pending qualification (BoxFerry #563). Ordinary shared metadata,
-package and compiler updates remain automatic; their resulting image closure is unqualified.
-Use VS Code Dev Containers with existing Podman storage, preferably rootless. No private store or
-host sudo is required. GitHub CI image qualification and updater activation remain separate.
+Locked Python owns uv, Ruff and ty. Hosted CI adds Dev Container qualification without
+changing existing jobs or local source checks. The trusted seed retains its plan and requires an
+exact tested-candidate image receipt; adopted policy permits only explicitly unselected skips.
+Source tests check wiring and selection; amd64/arm64 build, probe and owned-cleanup receipts
+remain required for image qualification. Direct image updates stay held. VS Code uses existing
+Podman storage, preferably rootless; no local image leaf or private store is added. Updater/App
+delivery and schedule activation remain separate.
 
 ## Test layers
 
-| Layer                        | Purpose                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| Unit tests                   | Constructors, validation, ordering, redaction, and pure conversion rules  |
-| Public API tests             | Compile supported workflows as an external crate consumer                 |
-| Fixture transport tests      | Probe, list, inspect, malformed input, and partial acquisition            |
-| Discovery tests              | Roots, closure, grouping, shared boundaries, findings, and explanations   |
-| Planning and rendering tests | Target gates, exact CLI and Libpod semantics, and all-or-nothing outcomes |
-| Schema and golden tests      | Exact snapshot and deployment artifacts plus invalid mutations            |
-| Complex cassette tests       | Complete request matching across reviewed versions and simulated contexts |
-| Captured-native tests        | Privacy admission, exact replay, provenance, and semantic regressions     |
-| Repository policy tests      | Governance, package contents, workflows, and documentation contracts      |
-| Rustdoc and guide tests      | Compilable examples, page inventory, claims, and navigation               |
+Unit and public API tests cover validation, redaction and consumer workflows. Fixture
+transport, discovery, planning and rendering tests cover acquisition, relationships, findings, target
+gates and all-or-nothing native semantics. Schema and golden tests check artifacts and invalid mutations. Cassettes
+cover replay, provenance and regressions. Repository policy, Rustdoc and guide tests check
+package contents, workflows, examples, claims and navigation.
 
 ## Fixtures and cassettes
 
-Committed fixtures are deterministic, offline, provenance-bearing, and synthetic or sanitized.
-Captured-native cassettes replace raw environment data. Complex cassettes bind each response to
-its exact Libpod method, path and query; replay rejects unexpected, repeated, reordered, missing,
-duplicate or unconsumed requests. Each reviewed version covers simulated rootless/rootful
-containers, pods, networks, volumes, images and secret metadata.
+Fixtures are deterministic, offline, provenance-bearing and synthetic or sanitized. Captured-native
+cassettes replace raw environment data. Complex replay binds exact Libpod methods, paths and
+queries and rejects unexpected, repeated, reordered, missing, duplicate or unconsumed requests.
+Reviewed versions cover simulated rootless/rootful containers, pods, networks, volumes, images and
+secret metadata.
 
-Update fixture provenance, SHA-256 manifests and focused behavioral assertions together.
-Fixtures, failures, snapshots and goldens must exclude real endpoints, environment values,
-credentials, secret payloads, protected health commands and sensitive native data.
+Update provenance, SHA-256 manifests and assertions together. Fixtures, failures,
+snapshots and goldens must exclude real endpoints, environment values, credentials, secret payloads,
+protected health commands and sensitive native data.
 
 `podman-lens-cassette-v1` and native capture manifests are test formats, not public APIs or
 compatibility promises. Production modules never parse them. Test support and
@@ -87,20 +80,18 @@ cargo test --test public_api
 cargo test --test repository_policy
 ```
 
-The complete local gate always runs both the positive `tests/public_api.rs` contract and the
-shared development-purpose API check against a trusted Git base. Legacy
-`PODMAN_LENS_SEMVER_CHECK` values do not disable this comparison. `scripts/check-public-api.sh`
-(or `--development`) selects the same declared shared task; `--published` explicitly checks the
-canonical published baseline with manifest-inferred release allowance for release preparation.
-The shared helper owns trusted-base selection, initial-crate absence and positive-contract proof.
-Missing or stale Git authority fails with fetch/retry guidance; local breaking-history markers do
-not waive the development check.
+The complete local gate runs the positive `tests/public_api.rs` contract and the shared
+development-purpose API check against a trusted Git base. Legacy `PODMAN_LENS_SEMVER_CHECK` values
+cannot disable it. `scripts/check-public-api.sh` (or `--development`) selects the same task;
+`--published` checks the published baseline with manifest-inferred release allowance. The shared
+helper owns trusted-base selection, initial-crate absence and positive-contract proof. Missing or
+stale Git authority fails with fetch/retry guidance; local breaking-history markers do not waive it.
 
-Before compiler work, the shared loader verifies the declared Cargo plugin and selects its Rust
-channel. The API check uses that channel and the same isolated Cargo home and target directory.
-Unavailable or mismatched tools fail closed. `RUSTUP_CARGO_HOME` still selects the host Cargo home
-for MSRV checks. CI uses development purpose for ordinary events; Release and validation-only
-explicitly require published-purpose evidence for the exact candidate.
+The shared loader verifies the declared Cargo plugin and Rust channel before compiler work. The
+API check uses that channel and isolated Cargo home and target directory; unavailable or mismatched
+tools fail closed. `RUSTUP_CARGO_HOME` selects the host Cargo home for MSRV checks. Ordinary CI
+uses development purpose; Release and validation-only require published-purpose evidence for the
+exact candidate.
 
 ## Native conformance
 
@@ -165,14 +156,14 @@ The current-patch probe simulation is synthetic; live checks cover authored hint
 ## Coverage and compatibility
 
 Machine catalogues bind fields to API accessors, planners, renderers, diagnostics and target
-versions. Mutation tests reject incorrect targets and owners. Change catalogue evidence, tests and
+versions; mutation tests reject incorrect targets and owners. Update catalogue evidence, tests and
 public compatibility guidance together; keep mutable row counts out of prose.
 
 ## Agent-assisted verification
 
-Role settings are in [`.codex/`](../.codex/); authority is in [`AGENTS.md`](../AGENTS.md).
-Verifiers run `./scripts/check-all.sh --check`; the primary owns final validation. Neither mode
-authorizes publication. Shell-runner tests target Linux; macOS has no runner evidence.
+[Role settings](../.codex/) define verification; authority is in [`AGENTS.md`](../AGENTS.md). Verifiers run
+`./scripts/check-all.sh --check`; the primary owns final validation. Neither authorizes publication.
+Shell-runner tests target Linux; macOS has no runner evidence.
 
 The fuller BoxFerry consumer remains ignored and cannot discover an ambient socket. Invoke it
 only with the explicit fixture socket and one exact reviewed expected version (`5.8.6` or

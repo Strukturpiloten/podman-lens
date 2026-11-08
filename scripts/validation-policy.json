@@ -9,7 +9,8 @@
     "api-release-type",
     "api",
     "documentation",
-    "lockfile-release-age"
+    "lockfile-release-age",
+    "devcontainer-validation"
   ],
   "profile_jobs": {
     "prose": ["documentation", "lockfile-release-age"],

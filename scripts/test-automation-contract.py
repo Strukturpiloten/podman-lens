@@ -25,7 +25,7 @@ from unittest.mock import patch
 
 from boxferry_ci import release as shared_release
 from boxferry_ci.contracts import ContractError
-from boxferry_ci.gate import verify_gate
+from boxferry_ci.gate import verify_devcontainer_gate, verify_gate
 from boxferry_ci.planner import Comparison, make_plan, path_profiles
 from boxferry_ci.policy import Policy, load_policy
 
@@ -90,6 +90,8 @@ def hosted_gate_case(
         job: {"result": "success" if job in selected else "skipped"} for job in policy.jobs
     }
     needs["validation-plan"] = {"result": "success"}
+    if "devcontainer-validation" in selected:
+        needs["devcontainer-validation"]["outputs"] = {"candidate_sha": tested}
     return plan, needs, comparison
 
 
@@ -223,9 +225,9 @@ def declared_devcontainer_images(source: str) -> list[tuple[str, str, str, str |
         words = declaration.split()
         if len(words) not in {2, 4} or (len(words) == 4 and words[2] != "AS"):
             raise ValueError("invalid image stage declaration")
-        prefix = f"{name}@"
+        prefix = f"{name}:{tag}@"
         if not words[1].startswith(prefix):
-            raise ValueError("legacy image declaration must retain its digest-only form")
+            raise ValueError("image tag must match its release annotation")
         digest = words[1][len(prefix) :]
         if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
             raise ValueError("image digest must be exact")
@@ -586,8 +588,8 @@ class ConsumerContracts(unittest.TestCase):
         self.assertIn(".profile == 'executable-docs'", hosted)
         self.assertIn("run: cargo test --locked --test public_guides", hosted)
 
-    def test_ordinary_adoption_preserves_every_main_job_without_image_opt_in(self) -> None:
-        expected_jobs = (
+    def test_image_qualification_preserves_original_jobs_and_local_tasks(self) -> None:
+        old_jobs = (
             "rust",
             "coverage",
             "msrv",
@@ -597,23 +599,30 @@ class ConsumerContracts(unittest.TestCase):
             "documentation",
             "lockfile-release-age",
         )
-        self.assertEqual(POLICY.jobs, expected_jobs)
+        self.assertEqual(POLICY.jobs, (*old_jobs, "devcontainer-validation"))
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         gate = workflow_job(ci, "pr-gate")
         dependencies = re.search(r"    needs:\n((?:      - [^\n]+\n)+)", gate)
         assert dependencies is not None
         self.assertEqual(
             dependencies[1].splitlines(),
-            [f"      - {job}" for job in ("validation-plan", *expected_jobs)],
+            [f"      - {job}" for job in ("validation-plan", *POLICY.jobs)],
         )
         self.assertIn("    if: always()\n", gate)
-        self.assertIn('--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}"', gate)
+        self.assertIn(
+            '--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}" --devcontainer-validation',
+            gate,
+        )
         self.assertNotIn("continue-on-error", gate)
-        self.assertNotIn("devcontainer-validation", ci)
         local = (ROOT / "scripts/check-all.sh").read_text()
         self.assertNotIn("devcontainer-local", local)
+        self.assertNotIn("--devcontainer-validation", local)
         self.assertNotIn("--outer-mode", local)
         self.assertIn("readonly total_steps=24", local)
+        self.assertNotIn("devcontainer-validation", POLICY.tasks)
+        self.assertEqual(
+            POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
+        )
         for event in ("pull_request", "merge_group", "push", "workflow_dispatch", "workflow_call"):
             for profile in (
                 ("full", "prose", "executable-docs")
@@ -621,32 +630,170 @@ class ConsumerContracts(unittest.TestCase):
                 else ("full",)
             ):
                 plan, needs, comparison = hosted_gate_case(POLICY, event, profile)
-                verify_gate(plan, needs, POLICY, comparison, expected_plan=plan)
-                for job in ("validation-plan", *expected_jobs):
+                verify_devcontainer_gate(plan, needs, POLICY, comparison, expected_plan=plan)
+                for job in ("validation-plan", *POLICY.jobs):
                     broken = copy.deepcopy(needs)
                     del broken[job]
                     with (
                         self.subTest(event=event, profile=profile, missing=job),
                         self.assertRaises(ContractError),
                     ):
-                        verify_gate(plan, broken, POLICY, comparison, expected_plan=plan)
+                        verify_devcontainer_gate(
+                            plan, broken, POLICY, comparison, expected_plan=plan
+                        )
                 if profile == "full":
-                    for job in expected_jobs:
+                    for job in POLICY.jobs:
                         for outcome in ("failure", "cancelled", "skipped"):
                             broken = {**needs, job: {"result": outcome}}
                             with (
                                 self.subTest(event=event, job=job, outcome=outcome),
                                 self.assertRaises(ContractError),
                             ):
-                                verify_gate(plan, broken, POLICY, comparison, expected_plan=plan)
+                                verify_devcontainer_gate(
+                                    plan, broken, POLICY, comparison, expected_plan=plan
+                                )
                 with self.assertRaises(ContractError):
-                    verify_gate(
+                    verify_devcontainer_gate(
                         plan,
                         {**needs, "unexpected-image-job": {"result": "success"}},
                         POLICY,
                         comparison,
                         expected_plan=plan,
                     )
+
+    def test_actual_seed_and_adopted_image_receipts_keep_the_original_plan(self) -> None:
+        import boxferry_ci
+
+        fixture = (
+            Path(boxferry_ci.__file__).resolve().parents[2]
+            / "tests/fixtures/devcontainer_seed/post-adoption-20261107/podman-lens-policy.json.txt"
+        )
+        seed = load_policy(fixture)
+        self.assertEqual(POLICY.jobs[:-1], seed.jobs)
+        self.assertEqual(POLICY.profile_jobs, seed.profile_jobs)
+        self.assertEqual(POLICY.tasks, seed.tasks)
+        self.assertEqual(POLICY.local_commands, seed.local_commands)
+        for event in ("pull_request", "merge_group"):
+            for profile in ("full", "prose", "executable-docs"):
+                plan, needs, comparison = hosted_gate_case(seed, event, profile)
+                untouched = copy.deepcopy(plan)
+                seed_jobs = plan["jobs"]
+                assert isinstance(seed_jobs, dict)
+                self.assertNotIn("devcontainer-validation", seed_jobs)
+                needs["devcontainer-validation"] = {
+                    "result": "success",
+                    "outputs": {"candidate_sha": comparison.tested_sha},
+                }
+                verify_devcontainer_gate(plan, needs, seed, comparison, expected_plan=untouched)
+                self.assertEqual(plan, untouched)
+                for outcome in (None, "failure", "cancelled", "skipped"):
+                    broken = copy.deepcopy(needs)
+                    if outcome is None:
+                        del broken["devcontainer-validation"]
+                    else:
+                        broken["devcontainer-validation"] = {"result": outcome}
+                    with (
+                        self.subTest(event=event, profile=profile, outcome=outcome),
+                        self.assertRaises(ContractError),
+                    ):
+                        verify_devcontainer_gate(
+                            plan, broken, seed, comparison, expected_plan=untouched
+                        )
+                for receipt in (
+                    {},
+                    {"candidate_sha": comparison.base_sha},
+                    {"candidate_sha": comparison.head_sha},
+                    {"candidate_sha": "malformed"},
+                ):
+                    broken = copy.deepcopy(needs)
+                    broken["devcontainer-validation"]["outputs"] = receipt
+                    with self.subTest(receipt=receipt), self.assertRaises(ContractError):
+                        verify_devcontainer_gate(
+                            plan, broken, seed, comparison, expected_plan=untouched
+                        )
+        plan, needs, comparison = hosted_gate_case(POLICY, "pull_request", "prose")
+        self.assertEqual(needs["devcontainer-validation"]["result"], "skipped")
+        for receipt in ({}, {"candidate_sha": comparison.base_sha}):
+            unexpected = {
+                **needs,
+                "devcontainer-validation": {"result": "success", "outputs": receipt},
+            }
+            with self.subTest(unexpected=receipt), self.assertRaises(ContractError):
+                verify_devcontainer_gate(plan, unexpected, POLICY, comparison, expected_plan=plan)
+
+    def test_image_caller_binds_seed_selector_and_every_recipe_input(self) -> None:
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        manifest = json.loads((ROOT / ".github/automation.json").read_text())
+        plan = workflow_job(ci, "validation-plan")
+        self.assertIn(
+            "select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}",
+            plan,
+        )
+        self.assertIn("id: plan", plan)
+        image = workflow_job(ci, "devcontainer-validation")
+        self.assertIn("needs: validation-plan", image)
+        self.assertIn(
+            "if: needs.validation-plan.outputs.select_devcontainer_validation != 'false'", image
+        )
+        self.assertIn("    permissions:\n      contents: read\n", image)
+        self.assertIn("shared-devcontainer-validation.yml@" + manifest["revision"], image)
+        inputs = dict(
+            re.findall(r"^      ([a-z_]+): ([^\n]+)$", image.split("    with:\n", 1)[1], re.M)
+        )
+        self.assertEqual(
+            inputs,
+            {
+                "candidate_sha": "${{ github.sha }}",
+                "policy_sha": "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+                "automation_sha": manifest["revision"],
+                "config_path": "scripts/validation-policy.json",
+            },
+        )
+        recipe = (ROOT / ".devcontainer/Dockerfile").read_text()
+        copied = set()
+        for line in recipe.splitlines():
+            if line.startswith(("COPY ", "ADD ")) and "--from=" not in line:
+                copied.update(line.split()[1:-1])
+        self.assertEqual(
+            copied,
+            {
+                "rust-toolchain.toml",
+                "scripts/shared-ci.py",
+                "scripts/install-host-tools.sh",
+                ".github/automation.json",
+                "package.json",
+                "package-lock.json",
+            },
+        )
+        for path in copied | {
+            ".devcontainer/Dockerfile",
+            ".devcontainer/verify-tools.sh",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/devcontainer-lock.json",
+            "scripts/validation-policy.json",
+            "Cargo.toml",
+            "Cargo.lock",
+        }:
+            self.assertTrue((ROOT / path).is_file(), path)
+            self.assertEqual(
+                path_profiles(path, (b"changed image input",), POLICY, set()), {"full"}, path
+            )
+        self.assertNotIn("install-file-tools.sh", recipe)
+        self.assertNotIn("ACTIONLINT_VERSION", recipe)
+        self.assertNotIn("LYCHEE_VERSION", recipe)
+        self.assertIn("COPY scripts/shared-ci.py scripts/install-host-tools.sh", recipe)
+        self.assertIn(
+            "bash /opt/podman-lens-tooling/scripts/install-host-tools.sh /usr/local/bin", recipe
+        )
+        self.assertIn("--destination /usr/local/bin --python-tools", recipe)
+        self.assertIn("chown -R vscode:vscode", recipe)
+        self.assertIn("chmod -R a+rX /opt/podman-lens-tooling", recipe)
+        configuration = json.loads((ROOT / ".devcontainer/devcontainer.json").read_text())
+        lock = json.loads((ROOT / ".devcontainer/devcontainer-lock.json").read_text())
+        self.assertLessEqual(set(configuration["features"]), set(lock["features"]))
+        for entry in lock["features"].values():
+            self.assertRegex(entry["integrity"], r"^sha256:[0-9a-f]{64}$")
+            self.assertTrue(entry["resolved"].endswith("@" + entry["integrity"]))
 
     def test_direct_image_inputs_are_held_without_freezing_ordinary_dependencies(self) -> None:
         import boxferry_ci
@@ -662,51 +809,59 @@ class ConsumerContracts(unittest.TestCase):
         source = (ROOT / ".devcontainer/Dockerfile").read_text()
         owners = devcontainer_image_owners(config, source)
         self.assertEqual(len(owners), 2)
+        original_images = declared_devcontainer_images(source)
+        for manager, match in owners:
+            replacement = manager["autoReplaceStringTemplate"]
+            for key, value in {
+                "datasource": match["datasource"],
+                "depName": match["depName"],
+                "newValue": "99.0.0-reviewed",
+                "newDigest": "sha256:" + "a" * 64,
+            }.items():
+                replacement = replacement.replace("{{{" + key + "}}}", value)
+            updated = source[: match.start()] + replacement + source[match.end() :]
+            projected = declared_devcontainer_images(updated)
+            changed = next(image for image in projected if image[0] == match["depName"])
+            self.assertEqual(changed[1:3], ("99.0.0-reviewed", "sha256:" + "a" * 64))
+            self.assertEqual(
+                [image[3] for image in projected], [image[3] for image in original_images]
+            )
+            self.assertEqual(len(devcontainer_image_owners(config, updated)), 2)
+        mismatched = source.replace(
+            "FROM docker.io/library/node:" + original_images[0][1] + "@",
+            "FROM docker.io/library/node:99-mismatched@",
+            1,
+        )
+        with self.assertRaisesRegex(ValueError, "tag must match"):
+            declared_devcontainer_images(mismatched)
         duplicate = copy.deepcopy(config)
         duplicate["customManagers"].append(copy.deepcopy(owners[0][0]))
         with self.assertRaisesRegex(ValueError, "exactly one"):
             devcontainer_image_owners(duplicate, source)
-        installer = (ROOT / "scripts/install-file-tools.sh").read_text()
-        legacy = []
         for manager in config["customManagers"]:
-            if not any(
-                re.search(pattern[1:-1], "scripts/install-file-tools.sh")
-                for pattern in manager["managerFilePatterns"]
-            ):
-                continue
-            for expression in manager["matchStrings"]:
-                translated = re.sub(r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", expression)
-                legacy.extend(re.finditer(translated, installer))
-        self.assertEqual(
-            {match["depName"] for match in legacy},
-            {"tombi-toml/tombi", "mvdan/sh", "koalaman/shellcheck", "hadolint/hadolint"},
-        )
-        self.assertEqual(len(legacy), 4)
-        held = (
-            [
-                ("custom.regex", "docker", match["depName"], ".devcontainer/Dockerfile")
-                for _manager, match in owners
-            ]
-            + [
-                ("custom.regex", "crate", "cargo-deny", ".devcontainer/Dockerfile"),
-                (
-                    "devcontainer",
-                    "github-tags",
-                    "ghcr.io/devcontainers/features/github-cli",
-                    ".devcontainer/devcontainer.json",
+            self.assertFalse(
+                any(
+                    re.search(pattern[1:-1], "scripts/install-file-tools.sh")
+                    for pattern in manager["managerFilePatterns"]
                 ),
-                ("custom.regex", "github-releases", "cli/cli", ".devcontainer/devcontainer.json"),
-            ]
-            + [
-                (
-                    "custom.regex",
-                    "github-releases",
-                    match["depName"],
-                    "scripts/install-file-tools.sh",
-                )
-                for match in legacy
-            ]
-        )
+                "the compatibility launcher must not retain a version-only owner",
+            )
+        installer = (ROOT / "scripts/install-file-tools.sh").read_text()
+        self.assertNotIn("_version=", installer)
+        self.assertNotIn("_checksum=", installer)
+        held = [
+            ("custom.regex", "docker", match["depName"], ".devcontainer/Dockerfile")
+            for _manager, match in owners
+        ] + [
+            ("custom.regex", "crate", "cargo-deny", ".devcontainer/Dockerfile"),
+            (
+                "devcontainer",
+                "github-tags",
+                "ghcr.io/devcontainers/features/github-cli",
+                ".devcontainer/devcontainer.json",
+            ),
+            ("custom.regex", "github-releases", "cli/cli", ".devcontainer/devcontainer.json"),
+        ]
         for manager, datasource, package, filename in held:
             effective = presets.effective(
                 config,
@@ -752,10 +907,10 @@ class ConsumerContracts(unittest.TestCase):
                 self.assertNotEqual(effective.get("enabled"), False)
                 self.assertTrue(effective["automerge"])
                 self.assertFalse(effective["dependencyDashboardApproval"])
-        self.assertIn("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh", source)
-        self.assertNotIn("shared-ci.py", source)
-        self.assertNotIn("UV_PYTHON_INSTALL_DIR", source)
-        self.assertFalse((ROOT / ".devcontainer/devcontainer-lock.json").exists())
+        self.assertNotIn("install-file-tools.sh", source)
+        self.assertIn("COPY scripts/shared-ci.py", source)
+        self.assertIn("UV_PYTHON_INSTALL_DIR", source)
+        self.assertTrue((ROOT / ".devcontainer/devcontainer-lock.json").is_file())
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertIn("scripts/install-host-tools.sh", ci)
         for workflow in (ROOT / ".github/workflows").glob("*.yml"):
@@ -1095,8 +1250,9 @@ const path = require("node:path");
             root = Path(temporary)
             scripts = root / "scripts"
             scripts.mkdir()
-            wrapper = scripts / "install-host-tools.sh"
-            shutil.copyfile(ROOT / "scripts/install-host-tools.sh", wrapper)
+            names = ("install-host-tools.sh", "install-file-tools.sh")
+            for name in names:
+                shutil.copyfile(ROOT / "scripts" / name, scripts / name)
             fake_bin = root / "bin"
             fake_bin.mkdir()
             interpreter = fake_bin / "python3"
@@ -1108,50 +1264,57 @@ const path = require("node:path");
             )
             interpreter.chmod(0o755)
             environment = {**os.environ, "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]}
-            for arguments, destination in (
-                ([], "/usr/local/bin"),
-                ([str(root / "destination spaces")], str(root / "destination spaces")),
-            ):
-                with self.subTest(arguments=arguments):
-                    result = subprocess.run(
-                        ["bash", str(wrapper), *arguments],
-                        env=environment,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        timeout=10,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(
-                        json.loads(result.stdout),
-                        [
-                            str(scripts / "shared-ci.py"),
-                            "tools",
-                            "--destination",
-                            destination,
-                            "--profile",
-                            "core",
-                        ],
-                    )
-            failed = subprocess.run(
-                ["bash", str(wrapper)],
-                env={**environment, "TOOL_STATUS": "23"},
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10,
-            )
-            self.assertEqual(failed.returncode, 23)
-            invalid = subprocess.run(
-                ["bash", str(wrapper), "one", "two"],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10,
-            )
-            self.assertEqual(invalid.returncode, 2)
-            self.assertEqual(invalid.stdout, "")
+            for name in names:
+                wrapper = scripts / name
+                for arguments, destination in (
+                    ([], "/usr/local/bin"),
+                    ([str(root / "destination spaces")], str(root / "destination spaces")),
+                ):
+                    with self.subTest(entrypoint=name, arguments=arguments):
+                        result = subprocess.run(
+                            ["bash", str(wrapper), *arguments],
+                            env=environment,
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                            timeout=10,
+                        )
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(
+                            json.loads(result.stdout),
+                            [
+                                str(scripts / "shared-ci.py"),
+                                "tools",
+                                "--destination",
+                                destination,
+                                "--tools",
+                                "tombi",
+                                "shfmt",
+                                "shellcheck",
+                                "hadolint",
+                                "actionlint",
+                                "lychee",
+                            ],
+                        )
+                failed = subprocess.run(
+                    ["bash", str(wrapper)],
+                    env={**environment, "TOOL_STATUS": "23"},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(failed.returncode, 23)
+                invalid = subprocess.run(
+                    ["bash", str(wrapper), "one", "two"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(invalid.returncode, 2)
+                self.assertEqual(invalid.stdout, "")
 
     def test_trusted_service_and_candidate_receipt_reader_have_separate_authority(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -1452,6 +1615,8 @@ const path = require("node:path");
                 "shared-dependency-eligibility.yml",
                 "shared-release-prepare.yml",
                 "shared-release-validation.yml",
+                "shared-devcontainer-validation.yml",
+                "shared-devcontainer-updates.yml",
             },
         )
         self.assertGreaterEqual(len(references), 8)
@@ -1467,6 +1632,198 @@ const path = require("node:path");
             )
             with self.subTest(workflow=path.name):
                 self.assertTrue(all(binding == manifest["revision"] for binding in bindings))
+
+    def test_devcontainer_cargo_installs_follow_candidate_toolchain_changes(self) -> None:
+        python_executable, bash_executable = shutil.which("python3"), shutil.which("bash")
+        assert python_executable is not None and bash_executable is not None
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        block = re.search(
+            r"RUN --mount=type=cache,target=/usr/local/cargo/registry \\\n"
+            r"(.*?)\n# Bootstrap only",
+            image,
+            re.DOTALL,
+        )
+        assert block is not None
+        declarations = dict(re.findall(r"^ARG ([A-Z_]+)=([^\n]+)$", image, re.MULTILINE))
+        for channel in ("9.7.6", "9.7.7"):
+            with (
+                self.subTest(channel=channel),
+                tempfile.TemporaryDirectory(prefix="podman rust install ") as temporary,
+            ):
+                root = Path(temporary)
+                binary = root / "bin"
+                binary.mkdir()
+                metadata = root / "rust-toolchain.toml"
+                metadata.write_text(f'[toolchain]\nchannel = "{channel}"\n')
+                log = root / "commands"
+                mock = binary / "mock"
+                mock.write_text(
+                    '#!/bin/bash\nset -Eeuo pipefail\nprintf "%s %s\\n" "${0##*/}" "$*" >> "${INSTALL_LOG}"\n'
+                )
+                mock.chmod(0o755)
+                for name in ("cargo", "rustup"):
+                    (binary / name).symlink_to(mock)
+                (binary / "python3").symlink_to(python_executable)
+                script = block[1].replace(
+                    "/opt/podman-lens-tooling/rust-toolchain.toml", str(metadata)
+                )
+                result = subprocess.run(
+                    [bash_executable, "-c", script],
+                    env={
+                        **os.environ,
+                        **declarations,
+                        "PATH": str(binary),
+                        "INSTALL_LOG": str(log),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = log.read_text().splitlines()
+                self.assertEqual(len(calls), 6)
+                self.assertEqual(
+                    calls[0],
+                    f"rustup toolchain install {channel} --profile minimal --component clippy --component rustfmt --component llvm-tools-preview",
+                )
+                self.assertEqual(calls[1], f"rustup default {channel}")
+                self.assertTrue(
+                    all(
+                        call.startswith(f"cargo +{channel} install --locked --version ")
+                        for call in calls[2:]
+                    )
+                )
+
+    def test_devcontainer_probes_selected_versions_help_and_installed_compiler(self) -> None:
+        python_executable, bash_executable = shutil.which("python3"), shutil.which("bash")
+        assert python_executable is not None and bash_executable is not None
+        source = (ROOT / ".devcontainer/verify-tools.sh").read_text()
+        tools = re.search(r"tools=\((.*?)\)\n", source, re.DOTALL)
+        assert tools is not None
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        node_release = re.search(r"# release: ([0-9.]+)-", image)
+        assert node_release is not None
+        node_version = node_release[1]
+        for case in (
+            "valid",
+            "wrong_ruff",
+            "wrong_node",
+            "missing_ty",
+            "help_failure",
+            "wrong_authority",
+            "wrong_rust",
+            "bare_node_image",
+            "mismatched_node_tag",
+        ):
+            with (
+                self.subTest(case=case),
+                tempfile.TemporaryDirectory(prefix="podman image probe ") as temporary,
+            ):
+                root = Path(temporary)
+                repository, tooling, binary = root / "repository", root / "tooling", root / "bin"
+                for directory in (
+                    repository / ".devcontainer",
+                    repository / ".github",
+                    tooling / ".github",
+                    binary,
+                ):
+                    directory.mkdir(parents=True)
+                manifest = json.loads((ROOT / ".github/automation.json").read_text())
+                (repository / ".github/automation.json").write_text(json.dumps(manifest))
+                retained = (
+                    {**manifest, "revision": "b" * 40} if case == "wrong_authority" else manifest
+                )
+                (tooling / ".github/automation.json").write_text(json.dumps(retained))
+                project = (
+                    tooling / "target/boxferry-automation" / manifest["revision"] / "automation"
+                )
+                project.mkdir(parents=True)
+                # Synthetic authority versions deliberately differ from installed host tools.
+                (project / "pyproject.toml").write_text(
+                    '[tool.uv]\nrequired-version = "==9.8.1"\n'
+                    '[dependency-groups]\ndev = ["ruff==9.8.2", "ty==9.8.3"]\n'
+                )
+                (repository / "rust-toolchain.toml").write_text('[toolchain]\nchannel = "9.7.6"\n')
+                candidate_image = image
+                if case == "bare_node_image":
+                    candidate_image = re.sub(
+                        r"(FROM docker\.io/library/node):[^@\s]+@", r"\1@", image, count=1
+                    )
+                elif case == "mismatched_node_tag":
+                    candidate_image = re.sub(
+                        r"(FROM docker\.io/library/node):[^@\s]+@",
+                        r"\1:99-mismatched@",
+                        image,
+                        count=1,
+                    )
+                (repository / ".devcontainer/Dockerfile").write_text(candidate_image)
+                verifier = repository / ".devcontainer/verify-tools.sh"
+                self.assertEqual(source.count('tooling_root="/opt/podman-lens-tooling"'), 1)
+                verifier.write_text(
+                    source.replace(
+                        'tooling_root="/opt/podman-lens-tooling"', f'tooling_root="{tooling}"'
+                    )
+                )
+                mock = binary / "mock"
+                mock.write_text(
+                    "#!/bin/bash\nset -Eeuo pipefail\n"
+                    'name="${0##*/}"\n'
+                    'printf "%s %s\\n" "${name}" "$*" >> "${PROBE_LOG}"\n'
+                    'if [[ "$*" == --help ]]; '
+                    'then [[ "${PROBE_CASE}" != help_failure ]]; exit; fi\n'
+                    'if [[ "${PROBE_CASE}" == "wrong_${name}" && "$*" == '
+                    '--version ]]; then printf "%s 0.0.0\\n" "${name}"; exit; fi\n'
+                    'case "${name}:$*" in\n'
+                    '  uv:--version) printf "uv 9.8.1\\n" ;;\n'
+                    '  ruff:--version) printf "ruff 9.8.2\\n" ;;\n'
+                    '  ty:--version) printf "ty 9.8.3\\n" ;;\n'
+                    f'  node:--version) printf "v{node_version}\\n" ;;\n'
+                    "  rustup:component\\ list*) "
+                    'printf "llvm-tools-x86_64-unknown-linux-gnu\\n" ;;\n'
+                    "  rustup:run\\ 9.7.6\\ rustc\\ --version)\n"
+                    '    if [[ "${PROBE_CASE}" == wrong_rust ]]; then printf "rustc 0.0.0 (fixture)\\n"'
+                    '; else printf "rustc 9.7.6 (fixture)\\n"; fi ;;\n'
+                    "esac\n"
+                )
+                mock.chmod(0o755)
+                for name in tools[1].split():
+                    (binary / name).symlink_to(python_executable if name == "python3" else mock)
+                for name in ("dirname", "chmod", "grep", "id"):
+                    executable = shutil.which(name)
+                    assert executable is not None
+                    (binary / name).symlink_to(executable)
+                if case == "missing_ty":
+                    (binary / "ty").unlink()
+                environment = {
+                    **os.environ,
+                    "PATH": str(binary),
+                    "PROBE_LOG": str(root / "probe.log"),
+                    "PROBE_CASE": case,
+                }
+                for name in ("CARGO_HOME", "CARGO_TARGET_DIR", "GH_CONFIG_DIR"):
+                    directory = root / name
+                    directory.mkdir()
+                    environment[name] = str(directory)
+                result = subprocess.run(
+                    [bash_executable, str(verifier)],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(
+                    result.returncode == 0, case == "valid", result.stdout + result.stderr
+                )
+                if case == "valid":
+                    calls = (root / "probe.log").read_text().splitlines()
+                    for name in ("uv", "ruff", "ty", "node"):
+                        self.assertIn(f"{name} --version", calls)
+                        self.assertIn(f"{name} --help", calls)
+                    self.assertIn("rustup run 9.7.6 rustc --version", calls)
+                else:
+                    self.assertNotIn("tooling is ready", result.stdout)
 
 
 class MaintenanceProsePlanningContract(unittest.TestCase):
@@ -1599,7 +1956,12 @@ class MaintenanceProsePlanningContract(unittest.TestCase):
         expected = self.plan(root, policy, base, head, tested, event)
         self.assertIsNot(expected, plan)
         comparison = Comparison(event, str(plan["base_sha"]), str(plan["head_sha"]), tested)
-        verify_gate(plan, self.outcomes(plan, policy), policy, comparison, expected_plan=expected)
+        needs = self.outcomes(plan, policy)
+        jobs = plan["jobs"]
+        assert isinstance(jobs, dict)
+        if jobs["devcontainer-validation"]:
+            needs["devcontainer-validation"]["outputs"] = {"candidate_sha": tested}
+        verify_devcontainer_gate(plan, needs, policy, comparison, expected_plan=expected)
 
     def test_actual_maintenance_prose_reaches_pr_queue_and_local_narrow_plans(self) -> None:
         self.assertEqual(POLICY.path_profiles, {"prose": ("README.md", "docs/README.md")})
@@ -1632,7 +1994,7 @@ class MaintenanceProsePlanningContract(unittest.TestCase):
                         )
                         self.assertFalse(jobs["rust"])
                         self.assertFalse(jobs["coverage"])
-                        self.assertNotIn("devcontainer-validation", jobs)
+                        self.assertFalse(jobs["devcontainer-validation"])
                         self.require_real_gate(root, policy, base, head, tested, event, plan)
 
     def test_changed_code_unknown_mixed_and_ambiguous_content_select_full(self) -> None:

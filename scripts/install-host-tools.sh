@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ordinary host/CI tooling; the separate legacy installer is image-only until #563.
+# Canonical shared file tools for local, CI and Dev Container callers.
 set -Eeuo pipefail
 
 if (($# > 1)); then
@@ -9,4 +9,4 @@ fi
 
 script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 exec python3 "${script_directory}/shared-ci.py" tools \
-  --destination "${1:-/usr/local/bin}" --profile core
+  --destination "${1:-/usr/local/bin}" --tools tombi shfmt shellcheck hadolint actionlint lychee

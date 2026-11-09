@@ -8,10 +8,10 @@ jobs:
     if: github.repository == 'Strukturpiloten/podman-lens'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-prepare.yml@48b7e97fc5e1021969a94f73b21dfc6b6c523cd5 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-prepare.yml@7b9ce867e0de8b05ee5d084581cad7de54d06459 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: 48b7e97fc5e1021969a94f73b21dfc6b6c523cd5
+      automation_sha: 7b9ce867e0de8b05ee5d084581cad7de54d06459
       policy_sha: ${{ github.sha }}
       config_path: scripts/validation-policy.json
       app_client_id: ${{ vars.RELEASE_PLZ_APP_CLIENT_ID }}

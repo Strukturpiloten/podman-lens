@@ -8,6 +8,7 @@ bash_executable="$(command -v bash)"
 # Synthetic metadata proves the gate consumes Cargo's result, not a copied compiler pin.
 readonly mock_msrv=9.8.7
 readonly mock_semver_rust=9.9.9
+readonly mock_coverage_rust=9.9.8
 test_root="$(mktemp -d)"
 trap 'rm -r -- "${test_root}"' EXIT
 mkdir -p "${test_root}/repository/scripts" "${test_root}/repository/site" "${test_root}/bin"
@@ -36,14 +37,32 @@ case "${command_name}:$*" in
   jq:*)
     if [[ "$*" == '-er .rust_channel' ]]; then
       IFS= read -r selection
-      [[ "${selection}" == "{\"rust_channel\":\"${CHECK_ALL_TEST_SEMVER_RUST}\"}" ]] || exit 18
-      printf '%s\n' "${CHECK_ALL_TEST_SEMVER_RUST}"
+      case "${selection}" in
+        "{\"rust_channel\":\"${CHECK_ALL_TEST_SEMVER_RUST}\"}") printf '%s\n' "${CHECK_ALL_TEST_SEMVER_RUST}" ;;
+        "{\"rust_channel\":\"${CHECK_ALL_TEST_COVERAGE_RUST}\"}") printf '%s\n' "${CHECK_ALL_TEST_COVERAGE_RUST}" ;;
+        *) exit 18 ;;
+      esac
     else
       printf '%s\n' "${CHECK_ALL_TEST_MSRV}"
     fi
     ;;
   rustup:run* | cargo:+*)
     [[ "${CARGO_HOME}" == "${CHECK_ALL_TEST_EXPECTED_HOST_CARGO_HOME}" ]]
+    ;;
+  python3:scripts/shared-ci.py\ cargo-tools\ verify*--package\ cargo-llvm-cov*)
+    [[ "$*" == *'--require-candidate' ]]
+    [[ "${CARGO_HOME}" == "${CHECK_ALL_TEST_COVERAGE_CARGO_HOME}" ]]
+    [[ "${RUSTUP_TOOLCHAIN}" == ambient-toolchain ]]
+    if [[ "${CHECK_ALL_TEST_BAD_COVERAGE_SELECTION:-0}" == "1" ]]; then
+      printf '{}\n'
+    else
+      printf '{"rust_channel":"%s"}\n' "${CHECK_ALL_TEST_COVERAGE_RUST}"
+    fi
+    ;;
+  cargo:llvm-cov*)
+    [[ "${CARGO_HOME}" == "${CHECK_ALL_TEST_COVERAGE_CARGO_HOME}" ]]
+    [[ "${RUSTUP_TOOLCHAIN}" == "${CHECK_ALL_TEST_COVERAGE_RUST}" ]]
+    [[ "${CARGO_TARGET_DIR}" == "${CHECK_ALL_TEST_COVERAGE_TARGET}" ]]
     ;;
   python3:scripts/shared-ci.py\ cargo-tools\ verify*)
     [[ "${CARGO_HOME}" == "${CARGO_TARGET_DIR%/cargo-semver-checks-target}/cargo-semver-home" ]]
@@ -76,9 +95,13 @@ run_gate() {
     CHECK_ALL_TEST_LOG="${test_root}/${label}.commands" \
     CHECK_ALL_TEST_MSRV="${CHECK_ALL_TEST_MSRV:-${mock_msrv}}" \
     CHECK_ALL_TEST_SEMVER_RUST="${mock_semver_rust}" \
+    CHECK_ALL_TEST_COVERAGE_RUST="${mock_coverage_rust}" \
+    CHECK_ALL_TEST_COVERAGE_CARGO_HOME="${test_root}/coverage-cargo" \
+    CHECK_ALL_TEST_COVERAGE_TARGET="${mock_target}/check-all/podman-lens/coverage" \
     CHECK_ALL_TEST_EXPECTED_HOST_CARGO_HOME="${CHECK_ALL_TEST_HOST_CARGO_HOME:-${test_root}/host-cargo}" \
     RUSTUP_CARGO_HOME="${CHECK_ALL_TEST_HOST_CARGO_HOME:-${test_root}/host-cargo}" \
-    CARGO_TARGET_DIR="${mock_target}" RUSTUP_TOOLCHAIN=ambient-toolchain CARGO=unverified-cargo \
+    CARGO_HOME="${test_root}/coverage-cargo" CARGO_TARGET_DIR="${mock_target}" \
+    RUSTUP_TOOLCHAIN=ambient-toolchain CARGO=unverified-cargo \
     BOXFERRY_SEMVER_RELEASE_TYPE="" PODMAN_LENS_SEMVER_CHECK="${CHECK_ALL_TEST_SEMVER_CHECK:-0}" \
     BOXFERRY_WEBSITE_SOURCE_MODE=local \
     "${bash_executable}" "${mock_repository}/scripts/check-all.sh" "$@" \
@@ -187,6 +210,42 @@ for mode in fix check; do
     run_gate "semver_failure_${mode}" "--${mode}" || status=$?
   [[ "${status}" == 17 ]]
   [[ "$(tail -n 1 "${test_root}/semver_failure_${mode}.commands")" == 'bash scripts/check-public-api.sh' ]]
+done
+
+# Coverage selects its own candidate channel before any formatting or compiler task.
+coverage_verify="python3 scripts/shared-ci.py cargo-tools verify --repository-root ${test_root}/repository --package cargo-llvm-cov --require-candidate"
+coverage_clean='cargo llvm-cov clean --locked'
+coverage_measure='cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only'
+for mode in default fix check; do
+  assert_contains "${mode}" "${coverage_verify}"
+  assert_contains "${mode}" "${coverage_clean}"
+  assert_contains "${mode}" "${coverage_measure}"
+  [[ "$(grep -Fxc -- "${coverage_verify}" "${test_root}/${mode}.commands")" == 1 ]]
+  [[ "$(grep -nF -- "${coverage_verify}" "${test_root}/${mode}.commands" | cut -d: -f1)" -lt "$(grep -n '^cargo fmt' "${test_root}/${mode}.commands" | cut -d: -f1)" ]]
+  [[ "$(grep -nFx -- "${coverage_clean}" "${test_root}/${mode}.commands" | cut -d: -f1)" -lt "$(grep -nFx -- "${coverage_measure}" "${test_root}/${mode}.commands" | cut -d: -f1)" ]]
+done
+for mode in fix check; do
+  for failure in refused malformed; do
+    status=0
+    if [[ "${failure}" == refused ]]; then
+      CHECK_ALL_TEST_FAIL_COMMAND="${coverage_verify}" \
+        run_gate "coverage_${failure}_${mode}" "--${mode}" || status=$?
+      [[ "${status}" == 17 ]]
+    else
+      CHECK_ALL_TEST_BAD_COVERAGE_SELECTION=1 \
+        run_gate "coverage_${failure}_${mode}" "--${mode}" || status=$?
+      [[ "${status}" == 18 ]]
+    fi
+    [[ "$(tail -n 1 "${test_root}/coverage_${failure}_${mode}.commands")" == "${coverage_verify}" ]]
+    grep -Fq 'Verify exact local Cargo coverage selection' "${test_root}/coverage_${failure}_${mode}.output"
+  done
+  # A refused cleanup must never run measurement; measurement failure stops later steps.
+  for command in "${coverage_clean}" "${coverage_measure}"; do
+    status=0
+    CHECK_ALL_TEST_FAIL_COMMAND="${command}" run_gate coverage_failure "--${mode}" || status=$?
+    [[ "${status}" == 17 ]]
+    [[ "$(tail -n 1 "${test_root}/coverage_failure.commands")" == "${command}" ]]
+  done
 done
 
 # A failed check must stop the gate and preserve its exit status in either mode.

@@ -27,8 +27,7 @@
       "managerFilePatterns": ["/^\\.github/workflows/.*\\.yml$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+version: \\\"(?<currentValue>[^\\\"]+)\\\"",
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+node-version: (?<currentValue>[^\\s]+)",
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+run: cargo install --locked --version (?<currentValue>[^\\s]+) [^\\s]+"
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+node-version: (?<currentValue>[^\\s]+)"
       ]
     },
     {
@@ -97,6 +96,16 @@
         "scripts/install-file-tools.sh"
       ],
       "enabled": false
+    },
+    {
+      "description": [
+        "Keep candidate-owned coverage tooling automatic without qualifying the image"
+      ],
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["crate"],
+      "matchFileNames": [".devcontainer/Dockerfile"],
+      "matchPackageNames": ["cargo-llvm-cov"],
+      "enabled": true
     }
   ]
 }

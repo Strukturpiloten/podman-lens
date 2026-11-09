@@ -89,6 +89,7 @@ jobs:
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: rust-quality
+      require_configured_task: true
   coverage:
     name: Coverage measurement
     needs: validation-plan
@@ -102,6 +103,7 @@ jobs:
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: coverage
+      require_configured_task: true
   msrv:
     name: MSRV
     needs: validation-plan
@@ -115,6 +117,7 @@ jobs:
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: msrv
+      require_configured_task: true
   dependencies:
     name: Dependency and license policy
     needs: validation-plan

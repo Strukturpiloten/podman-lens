@@ -1,6 +1,6 @@
 # Dependency policy
 
-Every dependency needs a narrow, reviewed role. PodmanLens adds no ambient connection resolver,
+Dependencies need narrow, reviewed roles. PodmanLens adds no ambient connection resolver,
 process executor, general Podman client, or cross-format model.
 
 | Role                | Dependencies                                              |
@@ -11,19 +11,19 @@ process executor, general Podman client, or cross-format model.
 | Read-only Unix HTTP | `bytes`, `tokio`, `hyper`, `hyper-util`, `http-body-util` |
 | Local schema tests  | `jsonschema`, retrieval disabled                          |
 
-The built-in transport permits only bodyless `GET` requests over an explicit Unix socket.
+Transport permits only bodyless `GET` over explicit Unix sockets.
 Dependencies provide no redirects, decompression, retries, SSH, TLS, process execution, or plan
-application. Test-only `jsonschema` validates committed local data without retrieval.
+application. Test-only `jsonschema` validates committed data without retrieval.
 
 The maintainer owns the support floor in `workspace.package.rust-version`; `clippy.toml` and
-README agree. Local and hosted validation read Cargo metadata. Renovate owns the separately
+README agree. Validation reads Cargo metadata. Renovate owns the separately
 pinned development compiler, grouped as `Rust toolchain`, without raising the support floor.
 Cargo dependencies remain locked and audited by `cargo deny`; Git dependencies and unknown
 registries are denied. Public API, decoding, serialization, runtime, and security changes require
 an ADR.
 
 Immutable common and Rust presets in `.github/renovate.json` own routine dependency automation.
-Eligible updates merge after required integrity and compatibility checks without routine manual
+Eligible updates merge after integrity and compatibility checks without routine manual
 approval. Repository additions own native-runtime extraction, image declarations and nested
 GitHub CLI options. Shared inventory owns downloaded versions and verified checksums; the common
 preset couples feature declarations and lock integrity. Extraction and effective-rule regressions
@@ -40,16 +40,19 @@ compatibility checks remain.
 
 The coupled Podman qualification tuple stays fixed. Its exact Renovate owners are disabled without
 routine review proposals; target changes require separate qualification. Historical evidence stays
-unchanged. Release still requires fresh native conformance and protected environment approval.
+unchanged. Release requires fresh native conformance and protected environment approval.
 
 The selected shared project owns Python, uv, Ruff, ty and lock integrity. Consumers declare lint
-scope only. Ordinary host and CI tools use `scripts/install-host-tools.sh`, which delegates to the
-selected immutable inventory. The retained Dockerfile alone uses the image-only legacy
-`scripts/install-file-tools.sh`; its original versions and verified checksums keep one extractor.
+scope only. Host/CI tools use `scripts/install-host-tools.sh`, delegating to the selected immutable inventory. Only the retained Dockerfile uses image-only legacy `scripts/install-file-tools.sh`; its original
+versions and verified checksums keep one extractor.
 A late `enabled:false` hold covers direct image, feature, ARG and legacy-installer updates pending
-separate CI image qualification (BoxFerry #563), without manual-review proposals. Ordinary shared
-metadata, package locks and compiler updates retain one automatic owner even where the existing
-Dockerfile copies them; the resulting image closure remains unqualified. Contributors use VS Code
+separate CI image qualification (BoxFerry #563), without manual-review proposals. Shared metadata, package locks and compiler updates retain one automatic owner, including
+Dockerfile copies; resulting image closure remains unqualified. Contributors use VS Code
 Dev Containers with existing Podman storage, preferably rootless. Image validation and updater
 activation remain deferred. [ADR 0019](decisions/0019-shared-validation-and-dependency-automation.md)
 records migration and rollback.
+
+Coverage's existing uniquely annotated `CARGO_LLVM_COV_VERSION` ARG owns its readable version.
+Locked crates.io installation supplies integrity. Its final exact crate/path/manager Renovate
+exception preserves automatic updates and shared age/grouping/approval policy. Other image/native
+qualification holds remain; tool updates do not qualify images.

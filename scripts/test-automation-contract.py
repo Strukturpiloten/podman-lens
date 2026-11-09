@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from boxferry_ci import cargo_tools
 from boxferry_ci import release as shared_release
 from boxferry_ci.contracts import ContractError
 from boxferry_ci.gate import verify_gate
@@ -98,6 +99,19 @@ def workflow_job(workflow: str, name: str) -> str:
     if match is None:
         raise ValueError(f"missing workflow job {name}")
     return match[0]
+
+
+def require_strict_shared_rust_tasks(workflow: str) -> None:
+    """All three Rust callers require explicit trusted policy tasks before setup."""
+    for job, task in (("rust", "rust-quality"), ("coverage", "coverage"), ("msrv", "msrv")):
+        block = workflow_job(workflow, job)
+        if not re.search(
+            r"(?m)^    uses: Strukturpiloten/boxferry/\.github/workflows/shared-rust-ci\.yml@[a-f0-9]{40} ",
+            block,
+        ) or re.findall(r"(?m)^      task: ([^\n]+)$", block) != [task]:
+            raise ValueError("shared Rust caller must retain its task and immutable workflow")
+        if re.findall(r"(?m)^      require_configured_task: ([^\n]+)$", block) != ["true"]:
+            raise ValueError("shared Rust caller must require an explicit configured task")
 
 
 def require_release_ci_permission_ceiling(release: str, ci: str) -> None:
@@ -689,6 +703,9 @@ class ConsumerContracts(unittest.TestCase):
             ]
             + [
                 ("custom.regex", "crate", "cargo-deny", ".devcontainer/Dockerfile"),
+                ("custom.regex", "crate", "cargo-semver-checks", ".devcontainer/Dockerfile"),
+                ("custom.regex", "crate", "zizmor", ".devcontainer/Dockerfile"),
+                ("custom.regex", "crate", "cargo-llvm-cov", "scripts/install-file-tools.sh"),
                 (
                     "devcontainer",
                     "github-tags",
@@ -737,6 +754,7 @@ class ConsumerContracts(unittest.TestCase):
             ("npm", "npm", "prettier", "package.json"),
             ("custom.regex", "github-tags", "rust-lang/rust", "rust-toolchain.toml"),
             ("cargo", "crate", "serde", "Cargo.toml"),
+            ("custom.regex", "crate", "cargo-llvm-cov", ".devcontainer/Dockerfile"),
         ):
             effective = presets.effective(
                 config,
@@ -752,6 +770,36 @@ class ConsumerContracts(unittest.TestCase):
                 self.assertNotEqual(effective.get("enabled"), False)
                 self.assertTrue(effective["automerge"])
                 self.assertFalse(effective["dependencyDashboardApproval"])
+        coverage_owners = []
+        for manager in config["customManagers"]:
+            if not any(
+                re.search(pattern[1:-1], ".devcontainer/Dockerfile")
+                for pattern in manager["managerFilePatterns"]
+            ):
+                continue
+            for expression in manager["matchStrings"]:
+                translated = re.sub(r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", expression)
+                coverage_owners.extend(
+                    match
+                    for match in re.finditer(translated, source)
+                    if match.groupdict().get("depName") == "cargo-llvm-cov"
+                )
+        self.assertEqual(len(coverage_owners), 1)
+        self.assertEqual(coverage_owners[0]["datasource"], "crate")
+        selected = cargo_tools.select(ROOT, "cargo-llvm-cov", require_candidate=True)
+        self.assertEqual(coverage_owners[0]["currentValue"], selected.version)
+        effective = presets.effective(
+            config,
+            {
+                "manager": "custom.regex",
+                "datasource": "crate",
+                "packageName": "cargo-llvm-cov",
+                "fileName": ".devcontainer/Dockerfile",
+                "updateType": "major",
+            },
+        )
+        self.assertEqual(effective["minimumReleaseAge"], "3 days")
+        self.assertIsNone(effective.get("groupName"))
         self.assertIn("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh", source)
         self.assertNotIn("shared-ci.py", source)
         self.assertNotIn("UV_PYTHON_INSTALL_DIR", source)
@@ -760,6 +808,56 @@ class ConsumerContracts(unittest.TestCase):
         self.assertIn("scripts/install-host-tools.sh", ci)
         for workflow in (ROOT / ".github/workflows").glob("*.yml"):
             self.assertNotIn("scripts/install-file-tools.sh", workflow.read_text())
+
+    def test_all_shared_rust_calls_require_explicit_tasks(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        require_strict_shared_rust_tasks(workflow)
+        for task in ("rust-quality", "coverage", "msrv"):
+            self.assertIn(task, POLICY.tasks)
+            self.assertEqual(POLICY.tasks[task].timeout_seconds, 1800)
+        self.assertEqual(
+            POLICY.tasks["msrv"].commands, (("cargo", "ci-check"), ("cargo", "ci-policy"))
+        )
+
+    def test_strict_task_flags_reject_missing_false_and_quoted_values(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        flag = "      require_configured_task: true\n"
+        for name in ("rust", "coverage", "msrv"):
+            original = workflow_job(workflow, name)
+            for replacement in (
+                "",
+                "      require_configured_task: false\n",
+                '      require_configured_task: "true"\n',
+            ):
+                with self.subTest(job=name, replacement=replacement), self.assertRaises(ValueError):
+                    require_strict_shared_rust_tasks(
+                        workflow.replace(original, original.replace(flag, replacement, 1), 1)
+                    )
+
+    def test_selected_producer_strict_resolver_preserves_tasks_and_rejects_absence(self) -> None:
+        import argparse
+        import dataclasses
+
+        from boxferry_ci.__main__ import _task
+
+        for name in ("rust-quality", "coverage", "msrv"):
+            for operation in ("check-task", "run"):
+                arguments = argparse.Namespace(
+                    command=operation, task=name, require_configured_task=True
+                )
+                with self.subTest(task=name, operation=operation):
+                    self.assertEqual(_task(arguments, POLICY), POLICY.tasks[name])
+                    missing = dataclasses.replace(
+                        POLICY,
+                        tasks={key: value for key, value in POLICY.tasks.items() if key != name},
+                    )
+                    with (
+                        patch(
+                            "boxferry_ci.__main__.git", side_effect=AssertionError("alias fallback")
+                        ),
+                        self.assertRaisesRegex(ContractError, "not explicitly configured"),
+                    ):
+                        _task(arguments, missing)
 
     def test_rust_coverage_and_complete_local_contract_are_preserved(self) -> None:
         calls = POLICY.task("rust-quality").commands
@@ -793,11 +891,18 @@ class ConsumerContracts(unittest.TestCase):
         self.assertEqual(
             POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
         )
+        coverage = workflow_job((ROOT / ".github/workflows/ci.yml").read_text(), "coverage")
+        self.assertIn("task: coverage", coverage)
+        self.assertNotIn("cargo install", coverage)
+
         local = (ROOT / "scripts/check-all.sh").read_text()
         self.assertIn("readonly total_steps=24", local)
         for token in (
             "CARGO_TARGET_DIR must be inside this worktree",
             "coverage_target_dir=",
+            "--package cargo-llvm-cov --require-candidate",
+            'RUSTUP_TOOLCHAIN="${coverage_rust_channel}" cargo llvm-cov clean --locked',
+            'RUSTUP_TOOLCHAIN="${coverage_rust_channel}" cargo llvm-cov --locked --no-clean',
             "semver_target_dir=",
             "cargo ci-clippy",
             "cargo ci-test",
@@ -1045,7 +1150,75 @@ const path = require("node:path");
   const actual = await verify(source);
   const literal = source + "\n  forbidden-node-fixture:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/setup-node@" + "a".repeat(40) + "\n        with:\n          node-version: 99.0.0\n";
   await assert.rejects(verify(literal));
-  console.log(JSON.stringify({ runtime: pin.image, consumerRevision: revision, declaration: file, consumerNodeRows: actual, producerCompositeLookupProof: "separate central593 qualification; no fabricated skipReason or consumer dynamic row" }));
+  const recipeFile = ".devcontainer/Dockerfile";
+  const recipe = fs.readFileSync(path.join(root, recipeFile), "utf8");
+  const coverageRows = [];
+  for (const manager of config.customManagers ?? []) {
+    if (!matchRegexOrGlobList(recipeFile, manager.managerFilePatterns ?? [])) continue;
+    const extracted = regex.extractPackageFile(recipe, recipeFile, manager);
+    for (const [depIndex, dep] of (extracted?.deps ?? []).entries()) {
+      if (dep.depName === "cargo-llvm-cov") coverageRows.push({manager, dep, depIndex});
+    }
+  }
+  assert.equal(coverageRows.length, 1, "coverage keeps its existing sole ARG extractor");
+  const {manager: coverageManager, dep: coverageDep, depIndex} = coverageRows[0];
+  assert.equal(coverageDep.datasource, "crate");
+  const scratch = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "podman-coverage-replacement-"));
+  let replacement;
+  try {
+    fs.mkdirSync(path.join(scratch, ".devcontainer"));
+    fs.writeFileSync(path.join(scratch, recipeFile), recipe);
+    require(path.join(base, "config/global.js")).GlobalConfig.set({localDir: scratch});
+    replacement = await require(path.join(base, "workers/repository/update/branch/auto-replace.js")).doAutoReplace({
+      ...coverageManager, ...coverageDep, manager: "regex", depIndex,
+      packageFile: recipeFile, newValue: "99.7.3"
+    }, recipe, false);
+  } finally {
+    require(path.join(base, "config/global.js")).GlobalConfig.set({localDir: root});
+    fs.rmSync(scratch, {recursive: true, force: true});
+  }
+  assert.equal(fs.readFileSync(path.join(root, recipeFile), "utf8"), recipe);
+  assert.equal(replacement, recipe.replace(
+    "ARG CARGO_LLVM_COV_VERSION=" + coverageDep.currentValue,
+    "ARG CARGO_LLVM_COV_VERSION=99.7.3"));
+  const normalizationPath = path.join(base, "workers/repository/extract/manager-files.js");
+  const normalizedCoverage = {...coverageDep};
+  require(normalizationPath).normalizeDepNames(normalizedCoverage);
+  const coveragePolicy = await applyPackageRules({
+    ...config, ...normalizedCoverage, manager: "custom.regex",
+    packageFile: recipeFile, updateType: "patch"
+  }, "candidate coverage policy");
+  const unnormalizedPolicy = await applyPackageRules({
+    ...config, ...coverageDep, manager: "custom.regex",
+    packageFile: recipeFile, updateType: "patch"
+  }, "negative control without real manager normalization");
+  assert.equal(unnormalizedPolicy.enabled, false);
+  assert.equal(coveragePolicy.enabled, true);
+  assert.equal(coveragePolicy.minimumReleaseAge, "3 days");
+  assert.equal(coveragePolicy.automerge, true);
+  assert.equal(coveragePolicy.dependencyDashboardApproval, false);
+  assert.equal(coveragePolicy.groupName ?? null, null, "existing coverage grouping remains unchanged");
+  for (const name of ["cargo-deny", "cargo-semver-checks", "zizmor"]) {
+    const held = await applyPackageRules({
+      ...config, manager: "custom.regex", datasource: "crate", packageName: name,
+      packageFile: recipeFile, updateType: "patch"
+    }, "other image tools retain hold");
+    assert.equal(held.enabled, false, name);
+  }
+  const obsolete = "# renovate: datasource=crate depName=cargo-llvm-cov\n" +
+    "          run: cargo install --locked --version 99.7.3 cargo-llvm-cov\n";
+  for (const manager of config.customManagers ?? []) {
+    if (!matchRegexOrGlobList(file, manager.managerFilePatterns ?? [])) continue;
+    const rows = regex.extractPackageFile(obsolete, file, manager)?.deps ?? [];
+    assert.equal(rows.filter((dep) => dep.depName === "cargo-llvm-cov").length, 0);
+  }
+  console.log(JSON.stringify({ runtime: pin.image, consumerRevision: revision, declaration: file, consumerNodeRows: actual, coverageOwners: coverageRows.length, coverageReplacement: true, obsoleteCoverageOwners: 0, coverageProof: {
+    rawDependency: coverageDep, normalizedDependency: normalizedCoverage,
+    normalizationModuleSha256: require("node:crypto").createHash("sha256").update(fs.readFileSync(normalizationPath)).digest("hex"),
+    effective: { enabled: coveragePolicy.enabled, minimumReleaseAge: coveragePolicy.minimumReleaseAge,
+      automerge: coveragePolicy.automerge, dependencyDashboardApproval: coveragePolicy.dependencyDashboardApproval,
+      groupName: coveragePolicy.groupName ?? null }, unnormalizedEnabled: unnormalizedPolicy.enabled
+  }, producerCompositeLookupProof: "separate central593 qualification; no fabricated skipReason or consumer dynamic row" }));
 })().catch((error) => { console.error(error); process.exit(1); });
 """
         result = subprocess.run(
@@ -1058,6 +1231,10 @@ const path = require("node:path");
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         proof = json.loads(result.stdout)
         self.assertEqual(proof["consumerNodeRows"], {"nativeRows": [], "customRows": []})
+        self.assertEqual(proof["coverageOwners"], 1)
+        self.assertTrue(proof["coverageReplacement"])
+        self.assertEqual(proof["obsoleteCoverageOwners"], 0)
+        print(json.dumps(proof, sort_keys=True))
 
     def test_native_owner_check_requires_an_explicit_existing_cache(self) -> None:
         import boxferry_ci
@@ -1467,6 +1644,112 @@ const path = require("node:path");
             )
             with self.subTest(workflow=path.name):
                 self.assertTrue(all(binding == manifest["revision"] for binding in bindings))
+
+
+class CandidateCoverageContract(unittest.TestCase):
+    """Exercise the selected shared verifier with this consumer's real recipe."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.candidate = self.root / "candidate"
+        (self.candidate / ".devcontainer").mkdir(parents=True)
+        self.metadata = self.candidate / cargo_tools.DOCKERFILE
+        self.metadata.write_text((ROOT / cargo_tools.DOCKERFILE).read_text())
+        shutil.copyfile(ROOT / "rust-toolchain.toml", self.candidate / "rust-toolchain.toml")
+        self.selection = cargo_tools.select(
+            self.candidate, "cargo-llvm-cov", require_candidate=True
+        )
+
+    def test_candidate_metadata_owns_version_without_producer_fallback(self) -> None:
+        original = self.metadata.read_text()
+        fallback = self.root / "producer"
+        (fallback / ".devcontainer").mkdir(parents=True)
+        (fallback / cargo_tools.DOCKERFILE).write_text(original)
+        changed = original.replace(
+            f"ARG CARGO_LLVM_COV_VERSION={self.selection.version}",
+            "ARG CARGO_LLVM_COV_VERSION=99.7.3",
+        )
+        self.metadata.write_text(changed)
+        selected = cargo_tools.select(
+            self.candidate, "cargo-llvm-cov", fallback, require_candidate=True
+        )
+        self.assertEqual(selected.version, "99.7.3")
+        for invalid in (
+            "",
+            original + "\nARG CARGO_LLVM_COV_VERSION=99.7.3\n",
+            changed.replace("=99.7.3", "=latest"),
+            original.replace("depName=cargo-llvm-cov", "depName=unrelated"),
+        ):
+            self.metadata.write_text(invalid)
+            with self.subTest(invalid=invalid), self.assertRaises(ContractError):
+                cargo_tools.select(
+                    self.candidate, "cargo-llvm-cov", fallback, require_candidate=True
+                )
+        self.metadata.unlink()
+        with self.assertRaisesRegex(ContractError, "candidate Dockerfile"):
+            cargo_tools.select(self.candidate, "cargo-llvm-cov", fallback, require_candidate=True)
+
+    def test_dispatch_version_channel_and_cargo_home_precedence(self) -> None:
+        binary = self.root / "bin"
+        binary.mkdir()
+
+        def executable(name: str, script: str) -> Path:
+            path = binary / name
+            path.write_text("#!/bin/sh\nset -eu\n" + script)
+            path.chmod(0o755)
+            return path
+
+        executable(
+            "cargo",
+            '[ "$RUSTUP_TOOLCHAIN" = "$TEST_COVERAGE_CHANNEL" ]\n'
+            'if [ "$1" = --version ]; then printf "cargo %s (fixture)\\n" "$RUSTUP_TOOLCHAIN"; '
+            'else exec cargo-llvm-cov "$@"; fi\n',
+        )
+        rustc = executable(
+            "rustc",
+            '[ "$RUSTUP_TOOLCHAIN" = "$TEST_COVERAGE_CHANNEL" ]\n'
+            'printf "rustc %s (fixture)\\n" "$RUSTUP_TOOLCHAIN"\n',
+        )
+        executable("rustup", "exit 0\n")
+        plugin = executable(
+            "cargo-llvm-cov",
+            '[ "$1" = llvm-cov ] && [ "$2" = --version ]\n'
+            f"printf 'cargo-llvm-cov {self.selection.version}\\n'\n",
+        )
+        environment = {
+            "PATH": str(binary),
+            "CARGO_HOME": str(self.root / "cargo-home"),
+            "RUSTUP_TOOLCHAIN": "ambient-toolchain",
+            "TEST_COVERAGE_CHANNEL": self.selection.rust_channel,
+        }
+        self.assertEqual(cargo_tools.verify(self.selection, self.candidate, environment), plugin)
+        later = self.root / "later"
+        later.mkdir()
+        wrong = later / plugin.name
+        wrong.write_text("#!/bin/sh\nprintf 'cargo-llvm-cov 99.7.3\\n'\n")
+        wrong.chmod(0o755)
+        environment["PATH"] += os.pathsep + str(later)
+        self.assertEqual(cargo_tools.verify(self.selection, self.candidate, environment), plugin)
+        with self.assertRaisesRegex(ContractError, "declared"):
+            cargo_tools.verify(
+                self.selection,
+                self.candidate,
+                {**environment, "PATH": str(later) + os.pathsep + environment["PATH"]},
+            )
+        shadow = Path(environment["CARGO_HOME"]) / "bin" / plugin.name
+        shadow.parent.mkdir(parents=True)
+        shutil.copyfile(plugin, shadow)
+        with self.assertRaisesRegex(ContractError, "Cargo home shadows"):
+            cargo_tools.verify(self.selection, self.candidate, environment)
+        shadow.unlink()
+        for key in ("CARGO_ALIAS_LLVM_COV", "RUSTC"):
+            with self.subTest(override=key), self.assertRaisesRegex(ContractError, "override"):
+                cargo_tools.verify(self.selection, self.candidate, {**environment, key: "false"})
+        rustc.write_text("#!/bin/sh\nprintf 'rustc 99.7.3 (fixture)\\n'\n")
+        with self.assertRaisesRegex(ContractError, "candidate Rust"):
+            cargo_tools.verify(self.selection, self.candidate, environment)
 
 
 class MaintenanceProsePlanningContract(unittest.TestCase):

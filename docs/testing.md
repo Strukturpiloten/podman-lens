@@ -1,29 +1,29 @@
 # Testing
 
-PodmanLens captured-native tests are deterministic and offline. Live API conformance remains
-explicit and opt-in for development, and mandatory for Release.
+Captured-native tests are deterministic and offline. Live API conformance is explicitly opt-in
+for development and mandatory for Release.
 
 ## Complete gate
 
-Run this after the final edit:
+Run after the final edit:
 
 ```console
 ./scripts/check-all.sh
 ```
 
-For bounded feedback use `python3 scripts/validation-plan.py run-local`. Public guides run
-file/link checks and the guide contract. Mixed, unknown, policy and code changes, plus `--full`,
-retain complete validation. `--docs-only` cannot bypass required checks. PR and queue plans use
-trusted base policy; Required CI accepts only successful selected jobs and planned skips.
-Main, manual and Release remain complete. Local modes reject external `CARGO_TARGET_DIR`.
+`python3 scripts/validation-plan.py run-local` provides bounded public-guide file/link and
+guide-contract feedback. Mixed, unknown, policy and code changes, and `--full`, retain complete
+validation; `--docs-only` cannot bypass checks. PR/queue plans use trusted-base policy; Required CI
+accepts only successful selected jobs and planned skips. Main, manual and Release remain complete.
+Local modes reject external `CARGO_TARGET_DIR`.
 
-Shared locked Python owns uv, Ruff and ty; regressions verify wiring and failures.
-Ordinary full hosted and local validation preserve existing main checks without image jobs or
-local image leaves. Direct Dev Container inputs and the legacy image installer remain held
-pending qualification (BoxFerry #563). Ordinary shared metadata,
-package and compiler updates remain automatic; their resulting image closure is unqualified.
-Use VS Code Dev Containers with existing Podman storage, preferably rootless. No private store or
-host sudo is required. GitHub CI image qualification and updater activation remain separate.
+Locked shared Python owns uv, Ruff and ty; regressions verify wiring/failures.
+Full hosted/local validation preserves main checks without image jobs or local image leaves. Direct
+Dev Container inputs and the legacy image installer remain held pending qualification
+(BoxFerry #563). Shared metadata, package/compiler updates remain automatic; resulting image
+closure stays unqualified. Use VS Code Dev Containers with existing Podman storage, preferably
+rootless; no private store or host sudo is required. GitHub CI image qualification/updater activation
+remain separate.
 
 ## Test layers
 
@@ -42,11 +42,11 @@ host sudo is required. GitHub CI image qualification and updater activation rema
 
 ## Fixtures and cassettes
 
-Committed fixtures are deterministic, offline, provenance-bearing, and synthetic or sanitized.
+Committed fixtures are deterministic, offline, provenance-bearing, synthetic or sanitized.
 Captured-native cassettes replace raw environment data. Complex cassettes bind each response to
 its exact Libpod method, path and query; replay rejects unexpected, repeated, reordered, missing,
-duplicate or unconsumed requests. Each reviewed version covers simulated rootless/rootful
-containers, pods, networks, volumes, images and secret metadata.
+duplicate or unconsumed requests. Each reviewed version simulates rootless/rootful containers, pods, networks, volumes, images and
+secret metadata.
 
 Update fixture provenance, SHA-256 manifests and focused behavioral assertions together.
 Fixtures, failures, snapshots and goldens must exclude real endpoints, environment values,
@@ -58,7 +58,7 @@ compatibility promises. Production modules never parse them. Test support and
 
 ## Focused commands
 
-Public documentation and examples:
+Public guides/examples:
 
 ```console
 cargo test --test public_guides
@@ -66,7 +66,7 @@ cargo test --doc
 cargo check --examples
 ```
 
-Complex request-aware acquisition:
+Request-aware acquisition:
 
 ```console
 cargo test --test cassette_contract
@@ -80,27 +80,29 @@ Captured-native release evidence:
 ./scripts/check-native-release-contract.sh
 ```
 
-Public API and repository contracts:
+Public API/repository contracts:
 
 ```console
 cargo test --test public_api
 cargo test --test repository_policy
 ```
 
-The complete local gate always runs both the positive `tests/public_api.rs` contract and the
-shared development-purpose API check against a trusted Git base. Legacy
-`PODMAN_LENS_SEMVER_CHECK` values do not disable this comparison. `scripts/check-public-api.sh`
-(or `--development`) selects the same declared shared task; `--published` explicitly checks the
-canonical published baseline with manifest-inferred release allowance for release preparation.
-The shared helper owns trusted-base selection, initial-crate absence and positive-contract proof.
-Missing or stale Git authority fails with fetch/retry guidance; local breaking-history markers do
-not waive the development check.
+The complete local gate always runs both the positive `tests/public_api.rs` contract and shared
+development-purpose API check against a trusted Git base. Legacy `PODMAN_LENS_SEMVER_CHECK` cannot
+disable this comparison. `scripts/check-public-api.sh` (or `--development`) selects that declared
+shared task; `--published` checks the canonical published baseline with manifest-inferred release
+allowance. The shared helper owns trusted-base selection, initial-crate absence and
+positive-contract proof. Missing/stale Git authority fails with fetch/retry guidance; local
+breaking-history markers cannot waive development checks.
 
-Before compiler work, the shared loader verifies the declared Cargo plugin and selects its Rust
-channel. The API check uses that channel and the same isolated Cargo home and target directory.
-Unavailable or mismatched tools fail closed. `RUSTUP_CARGO_HOME` still selects the host Cargo home
-for MSRV checks. CI uses development purpose for ordinary events; Release and validation-only
-explicitly require published-purpose evidence for the exact candidate.
+Before compiler work, the shared loader verifies declared Cargo plugins and selects their Rust
+channels. Coverage requires the candidate's own Dockerfile declaration and verifies the existing
+Cargo home without installation or fallback. Cleanup and measurement retain that home, selected
+channel, isolated worktree target and original arguments. Shared CI installs/verifies the same
+candidate selection before unchanged coverage; Release reuses complete CI. The API check uses
+its verified channel and the same isolated Cargo home/target. Unavailable/mismatched tools fail
+closed. `RUSTUP_CARGO_HOME` selects the host Cargo home for MSRV checks. Ordinary CI uses development
+purpose; Release and validation-only require published-purpose evidence for the exact candidate.
 
 ## Native conformance
 

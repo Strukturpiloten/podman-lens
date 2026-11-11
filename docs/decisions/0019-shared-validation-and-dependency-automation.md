@@ -55,21 +55,23 @@ read-only acquisition, budgets, privacy, cleanup and mandatory Release qualifica
 Historical captures and provenance retain their original versions and hashes. Ordinary Rust,
 compiler and development-tool updates continue through automatic shared policy.
 
-Ordinary adoption preserves every existing main check and uses the strict generic Required CI
-gate. It adds no Dev Container job, seed receipt requirement, or local image leaf. Direct image
-inputs, feature declarations, lifecycle scripts and the image-only legacy tool installer retain
-their current-main bytes. Their existing extraction owners remain unique, with a late
-`enabled:false` hold until separate CI image qualification under BoxFerry #563; no manual
-approval or dependency-dashboard route replaces that hold. The coupled native tuple above remains
-fixed independently. Ordinary shared automation, package locks and compiler declarations retain
-one automatic owner even where the existing Dockerfile copies them. Such updates do not qualify
-the resulting image closure.
+The initial ordinary stage preserved every existing main check without image qualification.
+The CI qualification stage now appends `devcontainer-validation` while preserving the old
+ordered jobs, narrow profiles and local tasks. The receipt-aware aggregate uses the exact
+trusted preseed policy without rewriting its plan; a missing selector requires qualification.
+After policy adoption, only explicit false permits an image skip. Every successful image
+result must identify the exact tested candidate. Shared native amd64/arm64 lanes, not source
+checks, establish image evidence.
 
-Ordinary host and CI callers use `scripts/install-host-tools.sh` and the selected shared tool
-inventory. `scripts/install-file-tools.sh` serves only the retained image Dockerfile. Contributors
-use VS Code Dev Containers with their existing Podman storage, preferably rootless; this adoption
-adds no private store, host sudo requirement or image lifecycle. Fresh GitHub CI runners will
-qualify images with standard engine storage in the separate image work.
+The recipe retains its reviewed base images and derives Rust from the candidate toolchain
+before Cargo installation. The manifest-selected shared inventory supplies downloaded tools
+and standalone uv/Ruff/ty, with the selected project and nonroot-readable caches retained for
+version probes. The image and host use the same canonical six-tool launcher. The historical installer
+entry point forwards to it without separate versions, checksums or a Renovate owner.
+VS Code uses conventional existing Podman storage, preferably rootless; there is no local
+image leaf, private store or host lifetime framework. Direct image updates remain held until
+separate qualification. Updater/App delivery, schedules and hold removal require later review;
+this source integration claims no native image result or updater activation.
 
 API validation uses explicit purposes. Development compares against the trusted canonical Git
 base; published purpose compares against the canonical released crate and derives allowance from
@@ -77,8 +79,8 @@ the candidate manifest. Release and validation-only require successful published
 bound to the exact candidate from both CI and SemVer. Generic candidate outputs cannot substitute
 for published API proof. Shared release mechanics preserve PodmanLens first-publication policy.
 
-Image validation lanes and the feature updater remain deferred to separate qualified changes.
-This adoption does not build, run, publish or qualify an image, or activate the updater.
+The CI caller enables qualification; actual native lane and cleanup evidence is still required.
+Feature updater activation, software publication and deployment remain separate.
 
 Coverage tool and compiler selection now use the candidate's own annotated Dockerfile ARG and
 exact Rust channel in local, shared CI and reused release validation. Local preflight verifies

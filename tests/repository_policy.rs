@@ -1333,16 +1333,23 @@ fn hosted_file_tools_delegate_to_the_pinned_shared_inventory() -> Result<(), std
     let installer = fs::read_to_string("scripts/install-host-tools.sh")?;
     assert!(installer.contains("set -Eeuo pipefail"));
     assert!(installer.contains("shared-ci.py\" tools"));
-    assert!(installer.contains("--destination \"${1:-/usr/local/bin}\" --profile core"));
+    assert!(
+        installer.contains(
+            "--destination \"${1:-/usr/local/bin}\" --tools tombi shfmt shellcheck hadolint actionlint lychee"
+        )
+    );
     assert!(!installer.contains("_version="));
     assert!(!installer.contains("_checksum="));
     let legacy = fs::read_to_string("scripts/install-file-tools.sh")?;
-    assert!(legacy.contains("readonly tombi_version="));
-    assert!(legacy.contains("readonly tombi_checksum="));
+    assert!(legacy.contains("install-host-tools.sh"));
+    assert!(!legacy.contains("_version="));
+    assert!(!legacy.contains("_checksum="));
     let container = fs::read_to_string(".devcontainer/Dockerfile")?;
-    assert!(container.contains("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh"));
-    assert!(!container.contains("scripts/install-host-tools.sh"));
-    assert!(!container.contains("shared-ci.py"));
+    assert!(!container.contains("install-file-tools.sh"));
+    assert!(container.contains("scripts/install-host-tools.sh"));
+    assert!(container.contains("COPY scripts/shared-ci.py"));
+    assert!(container.contains("bash /opt/podman-lens-tooling/scripts/install-host-tools.sh /usr/local/bin"));
+    assert!(container.contains("--destination /usr/local/bin --python-tools"));
     for name in ["ci.yml", "native-podman-conformance.yml"] {
         let workflow = fs::read_to_string(format!(".github/workflows/{name}"))?;
         if name == "ci.yml" {
@@ -1400,7 +1407,7 @@ fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::
     assert_eq!(owners[0]["versioningTemplate"], "docker");
     assert_eq!(
         owners[0]["autoReplaceStringTemplate"],
-        "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}@{{{newDigest}}}"
+        "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
     );
     let dockerfile = fs::read_to_string(".devcontainer/Dockerfile")?;
     let lines: Vec<_> = dockerfile.lines().collect();
@@ -1411,7 +1418,7 @@ fn renovate_keeps_base_image_releases_and_digests_together() -> Result<(), std::
                 .strip_prefix("# release: ")
                 .ok_or_else(|| policy_error("missing image release annotation"))?;
             assert!(!tag.is_empty());
-            let prefix = format!("FROM {name}@sha256:");
+            let prefix = format!("FROM {name}:{tag}@sha256:");
             let reference = block[2]
                 .strip_prefix(&prefix)
                 .ok_or_else(|| policy_error("retained image digest must match its annotated owner"))?;
@@ -1443,13 +1450,15 @@ fn shared_validation_preserves_explicit_repository_contracts() -> Result<(), Box
         "--policy-sha",
         "boxferry_ci gate",
         "shared-dependency-wait.yml@",
+        "shared-devcontainer-validation.yml@",
+        "--devcontainer-validation",
         "statuses: read",
     ] {
         assert!(workflow.contains(required), "shared CI contract omits {required}");
     }
     let python = fs::read_to_string("scripts/test-automation-contract.py")?;
     for required in [
-        "test_ordinary_adoption_preserves_every_main_job_without_image_opt_in",
+        "test_image_qualification_preserves_original_jobs_and_local_tasks",
         "test_actual_maintenance_prose_reaches_pr_queue_and_local_narrow_plans",
         "test_real_narrow_gate_rejects_unexpected_outcomes_skips_and_candidate",
         "test_effective_renovate",

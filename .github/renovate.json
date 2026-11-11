@@ -58,7 +58,7 @@
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n# release: (?<currentValue>[^\\s]+)\\nFROM [^\\s]+@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "versioningTemplate": "docker",
-      "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}@{{{newDigest}}}"
+      "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n# release: {{{newValue}}}\nFROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
     },
     {
       "customType": "regex",
@@ -68,14 +68,6 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "cli/cli"
-    },
-    {
-      "customType": "regex",
-      "description": ["Record frozen image-only downloaded tools until image qualification #563"],
-      "managerFilePatterns": ["/^scripts/install-file-tools\\.sh$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\nreadonly [a-z_]+_version=\"(?<currentValue>[^\\\"]+)\""
-      ]
     }
   ],
   "packageRules": [
@@ -92,8 +84,7 @@
       "matchFileNames": [
         ".devcontainer/Dockerfile",
         ".devcontainer/devcontainer.json",
-        ".devcontainer/devcontainer-lock.json",
-        "scripts/install-file-tools.sh"
+        ".devcontainer/devcontainer-lock.json"
       ],
       "enabled": false
     },

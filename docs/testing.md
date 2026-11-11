@@ -17,28 +17,21 @@ validation; `--docs-only` cannot bypass checks. PR/queue plans use trusted-base 
 accepts only successful selected jobs and planned skips. Main, manual and Release remain complete.
 Local modes reject external `CARGO_TARGET_DIR`.
 
-Locked shared Python owns uv, Ruff and ty; regressions verify wiring/failures.
-Full hosted/local validation preserves main checks without image jobs or local image leaves. Direct
-Dev Container inputs and the legacy image installer remain held pending qualification
-(BoxFerry #563). Shared metadata, package/compiler updates remain automatic; resulting image
-closure stays unqualified. Use VS Code Dev Containers with existing Podman storage, preferably
-rootless; no private store or host sudo is required. GitHub CI image qualification/updater activation
-remain separate.
+Locked Python owns uv, Ruff and ty. Hosted CI adds Dev Container qualification without
+changing existing jobs or local source checks. The trusted seed retains its plan and requires an
+exact tested-candidate image receipt; adopted policy permits only explicitly unselected skips.
+Source tests check wiring and selection; amd64/arm64 build, probe and owned-cleanup receipts
+remain required for image qualification. Direct image updates stay held. VS Code uses existing
+Podman storage, preferably rootless; no local image leaf or private store is added. Updater/App
+delivery and schedule activation remain separate.
 
 ## Test layers
 
-| Layer                        | Purpose                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| Unit tests                   | Constructors, validation, ordering, redaction, and pure conversion rules  |
-| Public API tests             | Compile supported workflows as an external crate consumer                 |
-| Fixture transport tests      | Probe, list, inspect, malformed input, and partial acquisition            |
-| Discovery tests              | Roots, closure, grouping, shared boundaries, findings, and explanations   |
-| Planning and rendering tests | Target gates, exact CLI and Libpod semantics, and all-or-nothing outcomes |
-| Schema and golden tests      | Exact snapshot and deployment artifacts plus invalid mutations            |
-| Complex cassette tests       | Complete request matching across reviewed versions and simulated contexts |
-| Captured-native tests        | Privacy admission, exact replay, provenance, and semantic regressions     |
-| Repository policy tests      | Governance, package contents, workflows, and documentation contracts      |
-| Rustdoc and guide tests      | Compilable examples, page inventory, claims, and navigation               |
+Unit and public API tests cover validation, redaction and consumer workflows. Fixture
+transport, discovery, planning and rendering tests cover acquisition, relationships, findings, target
+gates and all-or-nothing native semantics. Schema and golden tests check artifacts and invalid mutations. Cassettes
+cover replay, provenance and regressions. Repository policy, Rustdoc and guide tests check
+package contents, workflows, examples, claims and navigation.
 
 ## Fixtures and cassettes
 
@@ -48,9 +41,9 @@ its exact Libpod method, path and query; replay rejects unexpected, repeated, re
 duplicate or unconsumed requests. Each reviewed version simulates rootless/rootful containers, pods, networks, volumes, images and
 secret metadata.
 
-Update fixture provenance, SHA-256 manifests and focused behavioral assertions together.
-Fixtures, failures, snapshots and goldens must exclude real endpoints, environment values,
-credentials, secret payloads, protected health commands and sensitive native data.
+Update provenance, SHA-256 manifests and assertions together. Fixtures, failures,
+snapshots and goldens must exclude real endpoints, environment values, credentials, secret payloads,
+protected health commands and sensitive native data.
 
 `podman-lens-cassette-v1` and native capture manifests are test formats, not public APIs or
 compatibility promises. Production modules never parse them. Test support and
@@ -167,14 +160,14 @@ The current-patch probe simulation is synthetic; live checks cover authored hint
 ## Coverage and compatibility
 
 Machine catalogues bind fields to API accessors, planners, renderers, diagnostics and target
-versions. Mutation tests reject incorrect targets and owners. Change catalogue evidence, tests and
+versions; mutation tests reject incorrect targets and owners. Update catalogue evidence, tests and
 public compatibility guidance together; keep mutable row counts out of prose.
 
 ## Agent-assisted verification
 
-Role settings are in [`.codex/`](../.codex/); authority is in [`AGENTS.md`](../AGENTS.md).
-Verifiers run `./scripts/check-all.sh --check`; the primary owns final validation. Neither mode
-authorizes publication. Shell-runner tests target Linux; macOS has no runner evidence.
+[Role settings](../.codex/) define verification; authority is in [`AGENTS.md`](../AGENTS.md). Verifiers run
+`./scripts/check-all.sh --check`; the primary owns final validation. Neither authorizes publication.
+Shell-runner tests target Linux; macOS has no runner evidence.
 
 The fuller BoxFerry consumer remains ignored and cannot discover an ambient socket. Invoke it
 only with the explicit fixture socket and one exact reviewed expected version (`5.8.6` or

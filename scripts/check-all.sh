@@ -100,6 +100,13 @@ semver_selection="$(env CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${se
 semver_rust_channel="$(jq -er '.rust_channel' <<< "${semver_selection}")"
 readonly semver_rust_channel
 
+# Verify coverage in the same Cargo home and working directory used below.
+current_step="Verify exact local Cargo coverage selection"
+coverage_selection="$(python3 scripts/shared-ci.py cargo-tools verify \
+  --repository-root "${repository_root}" --package cargo-llvm-cov --require-candidate)"
+coverage_rust_channel="$(jq -er '.rust_channel' <<< "${coverage_selection}")"
+readonly coverage_rust_channel
+
 if [[ "${format_mode}" == "check" ]]; then
   run_step "Check Rust formatting" cargo fmt --all -- --check
   run_step "Check non-Rust files" bash scripts/check-files.sh --check
@@ -119,8 +126,10 @@ run_step "Check captured native release contract" bash scripts/check-native-rele
 run_step "Run documentation tests" cargo ci-doctest
 run_step "Build documentation with warnings denied" env RUSTDOCFLAGS="-D warnings" cargo ci-doc
 run_step "Verify the release package" cargo package --locked --allow-dirty
-run_step "Clean coverage artifacts" env CARGO_TARGET_DIR="${coverage_target_dir}" cargo llvm-cov clean --locked
-run_step "Measure coverage" env CARGO_TARGET_DIR="${coverage_target_dir}" cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
+run_step "Clean coverage artifacts" env CARGO_TARGET_DIR="${coverage_target_dir}" \
+  RUSTUP_TOOLCHAIN="${coverage_rust_channel}" cargo llvm-cov clean --locked
+run_step "Measure coverage" env CARGO_TARGET_DIR="${coverage_target_dir}" \
+  RUSTUP_TOOLCHAIN="${coverage_rust_channel}" cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
 run_step "Check all targets with the MSRV" env CARGO_HOME="${rustup_cargo_home}" cargo "+${msrv}" ci-check
 run_step "Check repository policies with the MSRV" env CARGO_HOME="${rustup_cargo_home}" cargo "+${msrv}" ci-policy
 run_step "Audit dependencies, licenses, bans, and sources" cargo deny --all-features check

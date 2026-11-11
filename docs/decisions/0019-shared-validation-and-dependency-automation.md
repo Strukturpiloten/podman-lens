@@ -82,6 +82,20 @@ for published API proof. Shared release mechanics preserve PodmanLens first-publ
 The CI caller enables qualification; actual native lane and cleanup evidence is still required.
 Feature updater activation, software publication and deployment remain separate.
 
+Coverage tool and compiler selection now use the candidate's own annotated Dockerfile ARG and
+exact Rust channel in local, shared CI and reused release validation. Local preflight verifies
+existing dispatch in the measurement Cargo home, without installing or using a producer fallback;
+cleanup and measurement retain that home, the selected compiler and the original argv. Shared
+CI installs and verifies that same candidate selection. The one existing coverage ARG extractor
+remains automatic under the shared age and approval policy through an exact crate/path/manager
+exception to the image hold. Other image/native holds and qualification requirements remain.
+
+Shared Rust quality, coverage and MSRV callers opt into explicit trusted tasks. Strict
+preflight rejects a missing or malformed task before Rust setup, and execution repeats that
+selection. All three tasks retain their configured command order and 1800-second budgets;
+MSRV already has an explicit policy definition. This changes no native or image qualification
+caller, coverage behavior, dependency-age policy or release prerequisite.
+
 ## Migration and rollback
 
 Land the trusted service, automation manifest and additive task policy first, preserving the legacy planner and every

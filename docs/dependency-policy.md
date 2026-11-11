@@ -1,7 +1,7 @@
 # Dependency policy
 
-Every dependency needs a narrow, reviewed role. PodmanLens adds no ambient connection resolver,
-process executor, general Podman client, or cross-format model.
+Dependencies have reviewed roles; none adds an ambient resolver, process executor, general Podman
+client, or cross-format model.
 
 | Role                | Dependencies                                              |
 | ------------------- | --------------------------------------------------------- |
@@ -11,45 +11,49 @@ process executor, general Podman client, or cross-format model.
 | Read-only Unix HTTP | `bytes`, `tokio`, `hyper`, `hyper-util`, `http-body-util` |
 | Local schema tests  | `jsonschema`, retrieval disabled                          |
 
-The built-in transport permits only bodyless `GET` requests over an explicit Unix socket.
-Dependencies provide no redirects, decompression, retries, SSH, TLS, process execution, or plan
-application. Test-only `jsonschema` validates committed local data without retrieval.
+Transport permits only bodyless `GET` over explicit Unix sockets; dependencies provide no
+redirects, decompression, retries, SSH, TLS, process execution, or plan application.
 
-The maintainer owns the support floor in `workspace.package.rust-version`; `clippy.toml` and
-README agree. Local and hosted validation read Cargo metadata. Renovate owns the separately
-pinned development compiler, grouped as `Rust toolchain`, without raising the support floor.
+The maintainer owns `workspace.package.rust-version`; `clippy.toml` and README agree, and
+validation reads Cargo metadata. Renovate owns the separately pinned `Rust toolchain` development
+compiler without raising the support floor.
 Cargo dependencies remain locked and audited by `cargo deny`; Git dependencies and unknown
 registries are denied. Public API, decoding, serialization, runtime, and security changes require
 an ADR.
 
-Immutable common and Rust presets in `.github/renovate.json` own routine dependency automation.
-Eligible updates merge after required integrity and compatibility checks without routine manual
-approval. Repository additions own native-runtime extraction, image declarations and nested
-GitHub CLI options. Shared inventory owns downloaded versions and verified checksums; the common
-preset couples feature declarations and lock integrity. Extraction and effective-rule regressions
-reject duplicate owners and accidental approval overrides.
+Immutable common and Rust presets in `.github/renovate.json` own routine automation. Eligible
+updates merge after integrity and compatibility checks without routine approval. Repository
+additions own native-runtime extraction, image declarations and nested GitHub CLI options.
+Shared inventory owns downloaded versions and verified checksums; the common preset couples
+feature declarations and lock integrity. Regression checks reject duplicate owners and accidental
+approval overrides.
 
-The default-branch eligibility service reads authoritative CI, PR and queue metadata and persists
-first-seen evidence. Candidate CI uses a read-only reader. Manifest and policy Git blobs at the
-trusted PR or queue base select authority independently of candidate-proposed automation.
-Receipts bind the exact tested SHA. Third-party updates retain 72 hours. An isolated maintained
-first-party release PR, including necessary young transitive resolution, is exempt only after
-trusted closure checks. Unavailable, malformed, future, moved, or stale evidence fails closed.
-Main, manual and release admission is explicitly inapplicable; complete integrity, audit and
-compatibility checks remain.
+The default-branch eligibility service persists first-seen evidence from authoritative CI, PR and
+queue metadata; candidate CI has read-only access. Manifest and policy Git blobs at the trusted PR
+or queue base select authority independently of candidate automation. Receipts bind the tested SHA.
+Third-party updates wait 72 hours. An isolated maintained first-party release PR, including necessary
+young transitive resolution, is exempt only after trusted closure checks. Unavailable, malformed,
+future, moved or stale evidence fails closed. Age admission is inapplicable to main, manual and
+release runs; complete integrity, audit and compatibility checks remain.
 
-The coupled Podman qualification tuple stays fixed. Its exact Renovate owners are disabled without
-routine review proposals; target changes require separate qualification. Historical evidence stays
-unchanged. Release still requires fresh native conformance and protected environment approval.
+The Podman qualification tuple stays fixed. Its exact Renovate owners are disabled without routine
+review proposals; target changes require separate qualification. Historical evidence stays unchanged.
+Release requires fresh native conformance and protected environment approval.
 
-The selected shared project owns Python, uv, Ruff, ty and lock integrity. Consumers declare lint
-scope only. Local, CI and image file tools use `scripts/install-host-tools.sh` for the same six-tool
-inventory, including Actionlint and Lychee; the image also exports standalone uv/Ruff/ty.
-`scripts/install-file-tools.sh` is a compatibility launcher with no separate pins or owner. Feature integrity is
-generated by the locked official whole-graph CLI.
+The shared project owns Python, uv, Ruff, ty and lock integrity; consumers declare lint scope.
+Local, CI and image file tools use the six-tool `scripts/install-host-tools.sh` inventory, including
+Actionlint and Lychee; the image also exports standalone uv/Ruff/ty.
+`scripts/install-file-tools.sh` is a compatibility launcher without separate pins or owner. The
+locked official whole-graph CLI generates Feature integrity.
 
-The late `enabled:false` hold still covers direct image, Feature and ARG updates. Ordinary shared metadata, package locks and compiler updates retain one automatic
-owner and select image qualification when part of its input closure. Required native CI image
-lanes must establish fresh qualification; source checks do not. VS Code uses existing Podman
-storage, preferably rootless. Updater/App delivery, schedules and hold removal remain deferred.
+The `enabled:false` hold covers direct image, Feature and ARG updates, except coverage below.
+Shared metadata, package locks and compiler updates retain one automatic owner and select image
+qualification when in its input closure. Required native CI image lanes establish fresh qualification;
+source checks do not. VS Code uses existing Podman storage, preferably rootless. Updater/App delivery,
+schedules and hold removal remain deferred.
 [ADR 0019](decisions/0019-shared-validation-and-dependency-automation.md) records this stage.
+
+Coverage's uniquely annotated `CARGO_LLVM_COV_VERSION` ARG owns its readable version; locked
+crates.io installation supplies integrity. Its exact crate/path/manager Renovate exception preserves automatic updates and shared
+age/grouping/approval policy. Other image/native qualification holds
+remain; tool updates do not qualify images.

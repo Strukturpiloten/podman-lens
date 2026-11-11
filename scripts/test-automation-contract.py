@@ -160,6 +160,24 @@ def require_eligibility_service_permissions(workflow: str) -> None:
         raise ValueError("eligibility service job must retain exactly the callee's five scopes")
 
 
+def require_feature_qualification_permissions(workflow: str) -> None:
+    """Match the selected shared feature worker's three read-only token scopes."""
+    if re.findall(r"(?m)^permissions:[^\n]*$", workflow) != ["permissions:"]:
+        raise ValueError("feature qualification must declare its workflow token scopes")
+    declared = re.search(r"(?ms)^permissions:\n(.*?)(?=^[a-z][a-z_-]*:|\Z)", workflow)
+    if declared is None or re.search(r"(?m)^    permissions:", workflow):
+        raise ValueError("feature qualification must inherit its workflow token scopes")
+    rows = [
+        line
+        for line in declared[1].splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    scopes = re.findall(r"^  ([a-z-]+): (read|write|none)$", "\n".join(rows), re.M)
+    required = {"contents": "read", "checks": "read", "statuses": "read"}
+    if len(scopes) != len(rows) or len(scopes) != len(required) or dict(scopes) != required:
+        raise ValueError("feature qualification must grant exactly contents/checks/statuses read")
+
+
 def require_selected_shared_node_caller(workflow: str, automation_sha: str) -> dict[str, str]:
     """Validate caller source binding/order/cache without inventing a Node authority."""
     if re.fullmatch(r"[a-f0-9]{40}", automation_sha) is None:
@@ -734,6 +752,45 @@ class ConsumerContracts(unittest.TestCase):
             }
             with self.subTest(unexpected=receipt), self.assertRaises(ContractError):
                 verify_devcontainer_gate(plan, unexpected, POLICY, comparison, expected_plan=plan)
+
+    def test_manual_feature_caller_preserves_least_privilege_and_held_guards(self) -> None:
+        workflow = (ROOT / ".github/workflows/devcontainer-feature-qualification.yml").read_text()
+        require_feature_qualification_permissions(workflow)
+        revision = json.loads((ROOT / ".github/automation.json").read_text())["revision"]
+        self.assertIn("on:\n  workflow_dispatch:\npermissions:\n", workflow)
+        job = workflow_job(workflow, "qualify")
+        for required in (
+            "github.repository == 'Strukturpiloten/podman-lens' &&",
+            "github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' &&",
+            "github.event_name == 'workflow_dispatch'",
+            f"shared-devcontainer-updates.yml@{revision}",
+            f"      automation-sha: {revision}\n",
+            "      app-private-key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}\n",
+        ):
+            self.assertIn(required, job)
+        self.assertNotIn("schedule:", workflow)
+        for scope in ("contents", "checks", "statuses"):
+            for replacement in ("", f"  {scope}: none\n", f"  {scope}: write\n"):
+                changed = workflow.replace(f"  {scope}: read\n", replacement, 1)
+                with (
+                    self.subTest(scope=scope, replacement=replacement),
+                    self.assertRaises(ValueError),
+                ):
+                    require_feature_qualification_permissions(changed)
+        for before, after in (
+            ("permissions:\n", "permissions: read-all\n"),
+            ("permissions:\n", "permissions: write-all\n"),
+            ("permissions:\n", "permissions: {}\n"),
+            ("  checks: read\n", "  checks: read\n  checks: read\n"),
+            ("  contents: read\n", "  contents: read\n  issues: read\n"),
+            ("  contents: read\n", "  contents: read\n  pull-requests: write\n"),
+            ("  qualify:\n", "  qualify:\n    permissions: {}\n"),
+            ("  qualify:\n", "  qualify:\n    permissions:\n      checks: write\n"),
+        ):
+            changed = workflow.replace(before, after, 1)
+            self.assertNotEqual(changed, workflow)
+            with self.subTest(before=before, after=after), self.assertRaises(ValueError):
+                require_feature_qualification_permissions(changed)
 
     def test_image_caller_binds_seed_selector_and_every_recipe_input(self) -> None:
         ci = (ROOT / ".github/workflows/ci.yml").read_text()

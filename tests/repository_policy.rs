@@ -1574,15 +1574,15 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         "model_reasoning_effort = \"xhigh\"",
         "This limit excludes the primary manager: eight subagents means nine agents in total.",
         "max_concurrent_threads_per_session = 8",
-        "default_subagent_model = \"gpt-6.1-sol\"",
+        "default_subagent_model = \"gpt-6.2-sol\"",
         "default_subagent_reasoning_effort = \"medium\"",
     ] {
         assert!(config.contains(required), "missing agent default: {required}");
     }
     for (role, model, effort, sandbox) in [
-        ("implementation-worker", "gpt-6.1-sol", "high", "workspace-write"),
-        ("specification-researcher", "gpt-6.1-sol", "high", "read-only"),
-        ("reviewer", "gpt-6.1-sol", "high", "read-only"),
+        ("implementation-worker", "gpt-6.2-sol", "high", "workspace-write"),
+        ("specification-researcher", "gpt-6.2-sol", "high", "read-only"),
+        ("reviewer", "gpt-6.2-sol", "high", "read-only"),
         ("presentation-worker", "gpt-6.1-terra", "medium", "workspace-write"),
         ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
@@ -1617,16 +1617,16 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = fs::read_to_string(root.join(".codex/agents/verifier.toml"))?;
     assert!(verifier.contains("./scripts/check-all.sh --check"));
     assert!(verifier.contains("never run the default formatting gate"));
-    assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6.1-sol agent"));
+    assert!(verifier.contains("Escalate difficult failure diagnosis to a gpt-6.2-sol agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
     assert!(instructions.contains("`gpt-6-sol` with `xhigh` reasoning"));
     let policy = instructions.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
-        "Default subagents use `gpt-6.1-sol` with `medium` reasoning",
-        "review use `gpt-6.1-sol` with `high` reasoning",
+        "Default subagents use `gpt-6.2-sol` with `medium` reasoning",
+        "review use `gpt-6.2-sol` with `high` reasoning",
         "check-only verification uses `gpt-6-luna` with `high` reasoning",
-        "Task-specific subagents may use `gpt-6.1-sol`, `gpt-6.1-terra`, or `gpt-6-luna` with `medium`, `high`, or `xhigh` reasoning",
-        "Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult architectural questions",
+        "Task-specific subagents may use `gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`, or `gpt-6.2-astra` with `medium`, `high`, or `xhigh` reasoning",
+        "Reserve Astra for particularly difficult tasks",
         "up to eight concurrent subagents plus the primary manager (nine agents in total)",
         "Eight is a ceiling, not a target or eight distinct roles",
         "subagents may use the same role for independent tasks",

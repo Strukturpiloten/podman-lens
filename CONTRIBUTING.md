@@ -21,6 +21,8 @@ updater activation remain deferred to separate fresh GitHub CI qualification (Bo
 Ordinary shared-tool, package and compiler updates remain automatic; the resulting image closure
 is unqualified. Host/CI file tools use `scripts/install-host-tools.sh`; the shared loader supplies
 the canonical locked Python, uv, Ruff and ty environment.
+The complete local gate uses the same installer and selects its checksum-verified Actionlint
+first on `PATH` before linting workflows.
 
 ## Development loop
 

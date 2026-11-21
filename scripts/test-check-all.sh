@@ -34,6 +34,11 @@ if [[ "${CHECK_ALL_TEST_FAIL:-}" == "${command_name}" ||
 fi
 case "${command_name}:$*" in
   git:ls-files*) printf 'README.md\0' ;;
+  bash:scripts/install-host-tools.sh*)
+    mkdir -p -- "$2"
+    cp -- "${0%/*}/mock" "$2/actionlint" ;;
+  actionlint:*)
+    [[ "${0%/*}" == "${PWD}/target/workflow-lint-tools" ]] ;;
   jq:*)
     if [[ "$*" == '-er .rust_channel' ]]; then
       IFS= read -r selection
@@ -134,6 +139,16 @@ grep --fixed-strings --quiet -- 'CARGO_TARGET_DIR must be inside this worktree' 
 diff -u "${test_root}/default.commands" "${test_root}/fix.commands"
 assert_contains fix "bash scripts/check-files.sh --fix"
 assert_contains check "bash scripts/check-files.sh --check"
+actionlint_install="bash scripts/install-host-tools.sh ${test_root}/repository/target/workflow-lint-tools"
+for mode in fix check; do
+  assert_contains "${mode}" "${actionlint_install}"
+  assert_contains "${mode}" "actionlint"
+  status=0
+  CHECK_ALL_TEST_FAIL_COMMAND="${actionlint_install}" run_gate lint_install_failure "--${mode}" || status=$?
+  [[ "${status}" == 17 ]]
+  [[ "$(tail -n 1 "${test_root}/lint_install_failure.commands")" == "${actionlint_install}" ]]
+  grep -Fq 'Install pinned Actionlint' "${test_root}/lint_install_failure.output"
+done
 assert_contains check "cargo +${mock_msrv} ci-check"
 assert_contains check "cargo +${mock_msrv} ci-policy"
 CHECK_ALL_TEST_MSRV=9.8.8 run_gate metadata --check

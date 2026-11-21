@@ -43,7 +43,7 @@ run_step() {
   "$@"
 }
 
-required_tools=(actionlint cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee markdownlint-cli2 prettier python3 rustup shellcheck shfmt tombi zizmor)
+required_tools=(cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee markdownlint-cli2 prettier python3 rustup shellcheck shfmt tombi zizmor)
 missing_tools=()
 for tool in "${required_tools[@]}"; do
   command -v "${tool}" > /dev/null 2>&1 || missing_tools+=("${tool}")
@@ -115,6 +115,12 @@ else
   run_step "Format and lint non-Rust files" bash scripts/check-files.sh --fix
 fi
 run_step "Check whitespace errors" git --no-pager diff --check
+current_step="Install pinned Actionlint"
+workflow_lint_tools="${repository_root}/target/workflow-lint-tools"
+bash scripts/install-host-tools.sh "${workflow_lint_tools}"
+test -x "${workflow_lint_tools}/actionlint"
+PATH="${workflow_lint_tools}:${PATH}"
+export PATH
 run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows
 run_step "Check all workspace targets and features" cargo ci-check

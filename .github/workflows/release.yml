@@ -79,10 +79,10 @@ jobs:
     if: needs.deterministic.result == 'success'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@b31291a2eaf41dac300959b1098d47f18696108a # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@09e2c1df2abe1008b1ca8acfd1f607211286f4d6 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b31291a2eaf41dac300959b1098d47f18696108a
+      automation_sha: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
       policy_sha: ${{ github.sha }}
       config_path: scripts/validation-policy.json
       package: podman-lens
@@ -157,7 +157,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b31291a2eaf41dac300959b1098d47f18696108a
+          ref: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -187,8 +187,8 @@ jobs:
         env:
           CRATE: ${{ steps.metadata.outputs.crate }}
         run: |
-          cargo ci-package
-          sha256sum "${CRATE}" > "${CRATE}.sha256"
+          uv run --locked --project "${GITHUB_WORKSPACE}/_automation/automation" \
+            python -m boxferry_ci.package_crate "${CRATE}"
       - name: Attest release package
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -227,7 +227,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b31291a2eaf41dac300959b1098d47f18696108a
+          automation-sha: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
           release-config: ${{ github.workspace }}/.github/release-policy.json
           package: podman-lens
           validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
@@ -244,10 +244,10 @@ jobs:
     if: always()
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@b31291a2eaf41dac300959b1098d47f18696108a # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@09e2c1df2abe1008b1ca8acfd1f607211286f4d6 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b31291a2eaf41dac300959b1098d47f18696108a
+      automation_sha: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
       policy_sha: ${{ github.sha }}
       config_path: .github/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -269,7 +269,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b31291a2eaf41dac300959b1098d47f18696108a
+          ref: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
           path: _automation
           persist-credentials: false
       - name: Bind exact release candidate and policy
@@ -277,7 +277,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-source
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b31291a2eaf41dac300959b1098d47f18696108a
+          automation-sha: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
           policy-sha: ${{ github.sha }}
           config-path: .github/release-policy.json
       - name: Install locked shared Python tooling
@@ -286,7 +286,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b31291a2eaf41dac300959b1098d47f18696108a
+          automation-sha: 09e2c1df2abe1008b1ca8acfd1f607211286f4d6
           release-config: ${{ steps.source.outputs.config }}
           package: podman-lens
           validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}

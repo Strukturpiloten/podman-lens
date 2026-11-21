@@ -368,6 +368,24 @@ class ConsumerContracts(unittest.TestCase):
         with self.assertRaises(shared_release.ReleaseError):
             shared_release.verify_gate(policy, {**needs, "unknown": needs[jobs[0]]}, candidate)
 
+    def test_release_packaging_keeps_root_relative_asset_paths(self) -> None:
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        publisher = workflow_job(release, "publish")
+        package = publisher.split("      - name: Build release package and checksum\n", 1)[1].split(
+            "\n      - name: ", 1
+        )[0]
+        self.assertNotIn("working-directory:", publisher)
+        self.assertIn("path: source", publisher)
+        self.assertIn("CRATE: ${{ steps.metadata.outputs.crate }}", package)
+        self.assertIn(
+            'uv run --locked --project "${GITHUB_WORKSPACE}/_automation/automation"', package
+        )
+        self.assertIn('python -m boxferry_ci.package_crate "${CRATE}"', package)
+        self.assertIn("subject-path: ${{ steps.metadata.outputs.crate }}", publisher)
+        self.assertIn(
+            'gh release upload "${TAG}" --clobber "${CRATE}" "${CRATE}.sha256"', publisher
+        )
+
     def test_release_direct_gate_and_read_only_prepare_bind_the_actual_shared_output(self) -> None:
         release = (ROOT / ".github/workflows/release.yml").read_text()
         gate = workflow_job(release, "shared-release-gate")
@@ -1017,6 +1035,8 @@ class ConsumerContracts(unittest.TestCase):
         self.assertTrue((ROOT / ".devcontainer/devcontainer-lock.json").is_file())
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertIn("scripts/install-host-tools.sh", ci)
+        self.assertIn("run: actionlint", ci)
+        self.assertLess(ci.index("scripts/install-host-tools.sh"), ci.index("run: actionlint"))
         for workflow in (ROOT / ".github/workflows").glob("*.yml"):
             self.assertNotIn("scripts/install-file-tools.sh", workflow.read_text())
 
@@ -1589,6 +1609,7 @@ const path = require("node:path");
             "workflow_run:",
             "workflows: [CI]",
             "types: [requested, completed]",
+            "cache-mode: none",
             "actions: write",
             "contents: read",
             "checks: read",

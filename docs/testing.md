@@ -151,10 +151,12 @@ launcher state.
 Cleanup derives the isolated state path from validated run, attempt, and cell IDs; it preserves
 leaks. SIGKILL cannot run traps.
 Build storage budgets and peak evidence follow [ADR 0017](decisions/0017-isolated-native-release-conformance.md).
-The `ubuntu-24.04` host launcher is infrastructure. Each cell builds from a pinned Fedora 45
-base, fixed Beta compose, and checksum-verified Koji RPM. Release evidence records the package
-closure and image ID. Beta is test infrastructure; native root-mode and API checks still gate
-support. The qualified runtime tuple stays fixed; target changes require separate qualification. The 6.1.0 cassettes remain historical.
+Each cell builds from a pinned Fedora 45 base, the fixed final release compose, and signed Fedora
+binary and source RPMs verified against the candidate's hashes. CI runs the same bounded download
+and verification step before Release. Verify the Fedora build, signatures, RPM hashes, upstream tag
+and archive, and base manifest when reviewing native dependency proposals. Verify both root modes
+on the exact candidate before merging. Release evidence records the package closure and image ID.
+The 6.1.0 cassettes remain historical.
 The current-patch probe simulation is synthetic; live checks cover authored hints and 404.
 
 ## Coverage and compatibility

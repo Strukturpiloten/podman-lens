@@ -153,8 +153,8 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
     let candidate = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let run = "12345";
     let attempt = "2";
-    let version_tag = active_pin("PODMAN_NATIVE_VERSION")?;
-    let version = version_tag.trim_start_matches('v');
+    let build = active_pin("PODMAN_NATIVE_RPM_BUILD")?;
+    let (version, rpm_release) = build.split_once('-').ok_or("missing RPM release")?;
     let base_image = active_pin("PODMAN_NATIVE_BASE_IMAGE")?;
     let rpm_sha = active_pin("PODMAN_NATIVE_RPM_SHA256")?;
     let source_revision = active_pin("PODMAN_NATIVE_SOURCE_REVISION")?;
@@ -162,7 +162,6 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
     let source_archive_sha = active_pin("PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256")?;
     let repomd_sha = active_pin("PODMAN_NATIVE_REPOMD_SHA256")?;
     let primary_sha = active_pin("PODMAN_NATIVE_PRIMARY_SHA256")?;
-    let rpm_release = active_pin("PODMAN_NATIVE_RPM_RELEASE")?;
     let write_evidence =
         |evidence_attempt: &str, cell: &str, value: &Value| -> Result<(), Box<dyn std::error::Error>> {
             let directory = root.join(format!(
@@ -191,7 +190,7 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
         serde_json::json!({
             "candidate": candidate, "run_id": run, "run_attempt": evidence_attempt, "task": "native-api", "cell": cell,
             "root_mode": root_mode, "expected_version": version, "api_version": "6.1.0",
-            "image": format!("localhost/podman-lens-native:{version_tag}-{state_key}"),
+            "image": format!("localhost/podman-lens-native:v{version}-{state_key}"),
             "image_id": format!("sha256:{}", "a".repeat(64)),
             "base_image": base_image, "rpm_sha256": rpm_sha, "source_revision": source_revision,
             "source_rpm_sha256": source_rpm_sha, "source_archive_sha256": source_archive_sha,
@@ -235,7 +234,7 @@ fn validator_rejects_missing_stale_and_failed_retry_evidence() -> Result<(), Box
         &root,
         (candidate, run, attempt),
         version,
-        &rpm_release,
+        rpm_release,
         &evidence,
         &write_evidence,
     )?;

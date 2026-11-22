@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -1159,8 +1160,8 @@ class ConsumerContracts(unittest.TestCase):
         for dependency in (
             {
                 "manager": "custom.regex",
-                "datasource": "github-releases",
-                "packageName": "containers/podman",
+                "datasource": "custom.fedora-podman",
+                "packageName": "podman-fedora-45",
                 "fileName": "scripts/native-runtime-pins.sh",
             },
             {
@@ -1184,84 +1185,21 @@ class ConsumerContracts(unittest.TestCase):
             },
         ):
             result = presets.effective(config, {**dependency, "updateType": "major"})
-            if (
-                dependency["fileName"] == "scripts/native-runtime-pins.sh"
-                or dependency.get("depType") == "feature"
-            ):
+            if dependency.get("depType") == "feature":
                 self.assertFalse(result["enabled"])
+            elif dependency["fileName"] == "scripts/native-runtime-pins.sh":
+                self.assertTrue(result.get("enabled", True))
+                self.assertFalse(result["automerge"])
+                self.assertTrue(
+                    presets.effective(
+                        config, {**dependency, "fileName": "scripts/unrelated-runtime.sh"}
+                    )["automerge"]
+                )
             else:
                 self.assertTrue(result.get("enabled", True))
                 self.assertTrue(result["automerge"])
             self.assertFalse(result["dependencyDashboardApproval"])
             self.assertEqual(result["minimumReleaseAge"], "3 days")
-
-    def test_fixed_native_tuple_extraction_and_exclusion_are_exact(self) -> None:
-        import boxferry_ci
-
-        shared = Path(boxferry_ci.__file__).resolve().parents[2]
-        spec = importlib.util.spec_from_file_location(
-            "fixed_tuple_presets", shared / "tests/test_presets.py"
-        )
-        assert spec is not None and spec.loader is not None
-        presets = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(presets)
-        local = json.loads((ROOT / ".github/renovate.json").read_text())
-        config = presets.consumer_config(ROOT / ".github/renovate.json")
-        fixed = [
-            rule
-            for rule in local["packageRules"]
-            if rule.get("description")
-            == ["Keep the coupled Podman native qualification tuple fixed"]
-        ]
-        self.assertEqual(len(fixed), 1)
-        self.assertEqual(
-            fixed[0],
-            {
-                "description": ["Keep the coupled Podman native qualification tuple fixed"],
-                "matchManagers": ["custom.regex"],
-                "matchFileNames": ["scripts/native-runtime-pins.sh"],
-                "matchDatasources": ["github-releases", "docker"],
-                "matchPackageNames": ["containers/podman", "registry.fedoraproject.org/fedora"],
-                "enabled": False,
-            },
-        )
-        pins = (ROOT / "scripts/native-runtime-pins.sh").read_text()
-        extracted = []
-        for manager in local["customManagers"]:
-            if manager.get("managerFilePatterns") != ["/^scripts/native-runtime-pins\\.sh$/"]:
-                continue
-            for regex in manager["matchStrings"]:
-                pattern = re.sub(r"\(\?<([a-zA-Z][a-zA-Z0-9_]*)>", r"(?P<\1>", regex)
-                extracted.extend(match.groupdict() for match in re.finditer(pattern, pins))
-        self.assertEqual(len(extracted), 2)
-        self.assertEqual(
-            {item["depName"] for item in extracted},
-            {"containers/podman", "registry.fedoraproject.org/fedora"},
-        )
-        for item in extracted:
-            dependency = {
-                "manager": "custom.regex",
-                "datasource": item["datasource"],
-                "packageName": item["depName"],
-                "fileName": "scripts/native-runtime-pins.sh",
-                "updateType": "digest",
-            }
-            self.assertFalse(presets.effective(config, dependency)["enabled"])
-            self.assertTrue(
-                presets.effective(
-                    config, {**dependency, "fileName": "scripts/unrelated-runtime.sh"}
-                ).get("enabled", True)
-            )
-            self.assertTrue(
-                presets.effective(config, {**dependency, "packageName": "unrelated/runtime"}).get(
-                    "enabled", True
-                )
-            )
-            self.assertTrue(
-                presets.effective(config, {**dependency, "datasource": "github-tags"}).get(
-                    "enabled", True
-                )
-            )
 
     def test_shared_node_caller_uses_same_selected_python_and_existing_cache(self) -> None:
         revision = json.loads((ROOT / ".github/automation.json").read_text())["revision"]
@@ -1308,7 +1246,7 @@ class ConsumerContracts(unittest.TestCase):
     def test_unique_native_and_local_python_pin_ownership(self) -> None:
         config = json.loads((ROOT / ".github/renovate.json").read_text())
         managers = config["customManagers"]
-        for marker in ("PODMAN_NATIVE_VERSION", "PODMAN_NATIVE_BASE_IMAGE"):
+        for marker in ("PODMAN_NATIVE_RPM_BUILD", "PODMAN_NATIVE_BASE_IMAGE"):
             self.assertEqual(sum(marker in json.dumps(manager) for manager in managers), 1)
         installer = (ROOT / "scripts/install-host-tools.sh").read_text()
         self.assertNotIn("uv_version", installer)
@@ -1317,6 +1255,105 @@ class ConsumerContracts(unittest.TestCase):
         self.assertEqual(set(tools), {"tool"})
         self.assertEqual(set(tools["tool"]), {"ruff", "ty"})
         self.assertNotIn("mypy", (ROOT / "pyproject.toml").read_text())
+
+    def test_native_input_fetch_rejects_missing_artifacts_and_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            bin_dir = work / "bin"
+            bin_dir.mkdir()
+            output = work / "output"
+            output.mkdir()
+            fetch = work / "fetch-native-runtime-inputs.sh"
+            shutil.copyfile(ROOT / "scripts" / fetch.name, fetch)
+            pins = (ROOT / "scripts/native-runtime-pins.sh").read_text()
+            artifacts = {
+                "repomd.xml": b"",
+                "primary": b"pinned primary index",
+                "binary": b"signed x86_64 RPM",
+                "source": b"signed source RPM",
+                "upstream": b"upstream source",
+                "image": b'{"manifests":[{"platform":{"os":"linux","architecture":"amd64"}}]}',
+            }
+
+            def digest(name: str) -> str:
+                return hashlib.sha256(artifacts[name]).hexdigest()
+
+            artifacts["repomd.xml"] = (
+                '<data type="primary">\n'
+                f'<location href="repodata/{digest("primary")}-primary.xml.zst"/>\n'
+                "</data>\n"
+            ).encode()
+            for name, key in {
+                "REPOMD_SHA256": "repomd.xml",
+                "PRIMARY_SHA256": "primary",
+                "RPM_SHA256": "binary",
+                "SOURCE_RPM_SHA256": "source",
+                "SOURCE_ARCHIVE_SHA256": "upstream",
+            }.items():
+                pins = re.sub(
+                    rf"(?m)^(readonly PODMAN_NATIVE_{name}=)[0-9a-f]{{64}}$",
+                    lambda match, key=key: match[1] + digest(key),
+                    pins,
+                )
+            pins = re.sub(r"@sha256:[0-9a-f]{64}", "@sha256:" + digest("image"), pins)
+            (work / "native-runtime-pins.sh").write_text(pins)
+            for name, content in artifacts.items():
+                (work / name).write_bytes(content)
+            curl = bin_dir / "curl"
+            curl.write_text(
+                textwrap.dedent("""\
+                    #!/usr/bin/env bash
+                    set -eu
+                    while [[ "$1" != --output ]]; do shift; done
+                    case "$3" in
+                      *repomd.xml) artifact=repomd.xml ;;
+                      *primary.xml.zst) artifact=primary ;;
+                      *.x86_64.rpm) artifact=binary ;;
+                      *.src.rpm)
+                        [[ "$MODE" != missing ]] || exit 22
+                        if [[ "$MODE" == drift ]]; then printf 'corrupt' > "$2"; exit 0; fi
+                        [[ "$3" == */data/signed/* ]] || exit 22
+                        artifact=source ;;
+                      *codeload.github.com*) artifact=upstream ;;
+                      */v2/fedora/manifests/*) artifact=image ;;
+                      *) exit 1 ;;
+                    esac
+                    cp -- "$FIXTURES/$artifact" "$2"
+                    """)
+            )
+            git = bin_dir / "git"
+            git.write_text('#!/usr/bin/env bash\nprintf "%s\\t%s\\n" "$SOURCE_REVISION" "$3"\n')
+            for executable in (curl, git):
+                executable.chmod(0o700)
+            revision = re.search(r"PODMAN_NATIVE_SOURCE_REVISION=([0-9a-f]{40})", pins)
+            assert revision is not None
+            for mode, expected in (
+                ("success", ""),
+                ("missing", "is unavailable from the reviewed Fedora providers"),
+                ("drift", "SHA-256 mismatch"),
+            ):
+                with self.subTest(mode=mode):
+                    result = subprocess.run(
+                        ["bash", str(fetch), str(output)],
+                        env={
+                            **os.environ,
+                            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                            "FIXTURES": str(work),
+                            "MODE": mode,
+                            "SOURCE_REVISION": revision[1],
+                        },
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,
+                    )
+                    self.assertEqual(result.returncode, int(bool(expected)), result.stderr)
+                    if expected:
+                        self.assertIn(expected, result.stderr)
+                    else:
+                        self.assertEqual(
+                            (output / "podman.src.rpm").read_bytes(), artifacts["source"]
+                        )
 
     def check_shared_node_caller_has_no_independent_node_version_owner(self) -> None:
         """Explicit --native check; ordinary caller tests never acquire this runtime."""
@@ -1443,17 +1480,81 @@ const path = require("node:path");
     const rows = regex.extractPackageFile(obsolete, file, manager)?.deps ?? [];
     assert.equal(rows.filter((dep) => dep.depName === "cargo-llvm-cov").length, 0);
   }
+  const pinsFile = "scripts/native-runtime-pins.sh";
+  const pins = fs.readFileSync(path.join(root, pinsFile), "utf8");
+  const pinRows = [];
+  for (const manager of config.customManagers ?? []) {
+    if (!matchRegexOrGlobList(pinsFile, manager.managerFilePatterns ?? [])) continue;
+    for (const [depIndex, dep] of (regex.extractPackageFile(pins, pinsFile, manager)?.deps ?? []).entries()) {
+      require(normalizationPath).normalizeDepNames(dep);
+      const policy = await applyPackageRules({
+        ...config, ...manager, ...dep, manager: "custom.regex", packageFile: pinsFile,
+        updatePinnedDependencies: true, rangeStrategy: "replace"
+      }, "native runtime policy");
+      assert.notEqual(policy.enabled, false);
+      assert.equal(policy.automerge, false);
+      assert.equal(policy.minimumReleaseAge, "3 days");
+      pinRows.push({manager, dep, depIndex, policy});
+    }
+  }
+  assert.deepEqual(pinRows.map(row => row.dep.datasource).sort(), ["custom.fedora-podman", "docker"]);
+  const build = pinRows.find(row => row.dep.datasource === "custom.fedora-podman");
+  const baseImage = pinRows.find(row => row.dep.datasource === "docker");
+  assert.equal(baseImage.dep.currentValue, "45");
+  assert.match(baseImage.dep.currentDigest, /^sha256:[a-f0-9]{64}$/);
+  const { getPkgReleases, getDigest } = require(path.join(base, "modules/datasource/index.js"));
+  const live = await getPkgReleases(build.policy);
+  assert(live.releases.some(row => row.version === build.dep.currentValue && row.releaseTimestamp));
+  assert(live.releases.every(row => row.version.startsWith("6.1.") && row.version.endsWith(".fc45")));
+  const baseDigest = await getDigest(baseImage.policy, baseImage.dep.currentValue);
+  assert.match(baseDigest, /^sha256:[a-f0-9]{64}$/);
+  const { lookupUpdates } = require(path.join(base, "workers/repository/process/lookup/index.js"));
+  // Use a historical stable rebuild to exercise ordering independently of today's greatest patch.
+  const historical = { ...build.policy, currentValue: "6.1.0-1.fc45", allowedVersions: "/^6[.]1[.]0-/" };
+  const rebuild = (await lookupUpdates(historical)).unwrap();
+  assert(rebuild.ok);
+  assert.deepEqual(rebuild.val.warnings, []);
+  assert.equal(rebuild.val.updates.length, 1);
+  const update = rebuild.val.updates[0];
+  assert.equal(update.updateType, "patch");
+  assert.equal(update.newValue, "6.1.0-2.fc45");
+  const imageLookup = (await lookupUpdates(baseImage.policy)).unwrap();
+  assert(imageLookup.ok);
+  const imageUpdate = imageLookup.val.updates.find(row => row.updateType === "digest");
+  if (baseDigest !== baseImage.dep.currentDigest) {
+    assert.equal(imageUpdate?.newDigest, baseDigest);
+    assert.notEqual(imageUpdate?.pendingChecks, true);
+  }
+  const updateScratch = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "podman-rpm-replacement-"));
+  try {
+    const seeded = pins.replace(build.dep.currentValue, historical.currentValue);
+    fs.mkdirSync(path.join(updateScratch, "scripts"));
+    fs.writeFileSync(path.join(updateScratch, pinsFile), seeded);
+    require(path.join(base, "config/global.js")).GlobalConfig.set({localDir: updateScratch});
+    const historicalDep = regex.extractPackageFile(seeded, pinsFile, build.manager).deps[build.depIndex];
+    const proposed = await require(path.join(base, "workers/repository/update/branch/auto-replace.js")).doAutoReplace({
+      ...build.manager, ...historicalDep, ...update, manager: "regex", depIndex: build.depIndex, packageFile: pinsFile
+    }, seeded, false);
+    assert.equal(proposed, seeded.replace(historical.currentValue, update.newValue));
+    assert(proposed.includes('PODMAN_NATIVE_VERSION="v${PODMAN_NATIVE_RPM_BUILD%%-*}"'));
+  } finally {
+    require(path.join(base, "config/global.js")).GlobalConfig.set({localDir: root});
+    fs.rmSync(updateScratch, {recursive: true, force: true});
+  }
+  const nativeProof = {build: build.dep.currentValue, releases: live.releases.map(row => row.version),
+    rebuild: {from: historical.currentValue, to: update.newValue}, baseDigest, currentBaseDigest: baseImage.dep.currentDigest};
   console.log(JSON.stringify({ runtime: pin.image, consumerRevision: revision, declaration: file, consumerNodeRows: actual, coverageOwners: coverageRows.length, coverageReplacement: true, obsoleteCoverageOwners: 0, coverageProof: {
     rawDependency: coverageDep, normalizedDependency: normalizedCoverage,
     normalizationModuleSha256: require("node:crypto").createHash("sha256").update(fs.readFileSync(normalizationPath)).digest("hex"),
     effective: { enabled: coveragePolicy.enabled, minimumReleaseAge: coveragePolicy.minimumReleaseAge,
       automerge: coveragePolicy.automerge, dependencyDashboardApproval: coveragePolicy.dependencyDashboardApproval,
       groupName: coveragePolicy.groupName ?? null }, unnormalizedEnabled: unnormalizedPolicy.enabled
-  }, producerCompositeLookupProof: "separate central593 qualification; no fabricated skipReason or consumer dynamic row" }));
+  }, nativeProof, producerCompositeLookupProof: "separate central593 qualification; no fabricated skipReason or consumer dynamic row" }));
 })().catch((error) => { console.error(error); process.exit(1); });
 """
         result = subprocess.run(
             [node, "-e", script, str(runtime), str(ROOT), str(shared.parent)],
+            env={**os.environ, "LOG_LEVEL": "error"},
             capture_output=True,
             text=True,
             check=False,

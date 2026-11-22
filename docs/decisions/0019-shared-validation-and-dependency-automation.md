@@ -44,7 +44,7 @@ Unavailable, malformed, stale and mismatched evidence fails closed. Dependency u
 integrity and compatibility evidence, with no routine human approval. Software releases still
 require the protected approved release environment.
 
-The maintainer keeps the qualified Podman native runtime fixed for this overhaul. The complete
+The maintainer kept the qualified Podman native runtime fixed for the initial overhaul. The complete
 coupled tuple in `scripts/native-runtime-pins.sh` covers the engine, binary/source RPMs, source
 revision/archive, base image and fixed compose metadata. Renovate records its existing extractors
 for policy validation but disables their exact package/datasource/file owners with `enabled:false`;
@@ -52,7 +52,8 @@ it creates no routine update or manual-review proposal for this tuple. Changing 
 a separate qualification change with verified provenance and both root modes. This supersedes
 ADR 0017's routine Renovate signal/manual-review policy only. Its native admission boundary,
 read-only acquisition, budgets, privacy, cleanup and mandatory Release qualification remain.
-Historical captures and provenance retain their original versions and hashes. Ordinary Rust,
+The [Fedora artifact amendment to ADR 0017](0017-isolated-native-release-conformance.md#fedora-artifact-retention-and-update-ownership)
+supersedes the update hold. Historical captures and provenance retain their original versions and hashes. Ordinary Rust,
 compiler and development-tool updates continue through automatic shared policy.
 
 The initial ordinary stage preserved every existing main check without image qualification.

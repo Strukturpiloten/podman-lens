@@ -14,6 +14,14 @@
     "**/tests/**",
     "**/fixtures/**"
   ],
+  "customDatasources": {
+    "fedora-podman": {
+      "defaultRegistryUrlTemplate": "https://bodhi.fedoraproject.org/updates/?packages=podman&releases=F45&status=stable&rows_per_page=100",
+      "transformTemplates": [
+        "{\"releases\": [updates[status = 'stable' and release.name = 'F45' and $exists(date_stable)].($update := $; builds[signed = true and epoch = 5 and $contains(nvr, /^podman-6\\.1\\.[0-9]+-[1-9][0-9]*(\\.[0-9]+)?\\.fc45$/)].{\"version\": $substringAfter(nvr, 'podman-'), \"releaseTimestamp\": $replace($update.date_stable, ' ', 'T') & 'Z', \"changelogUrl\": $update.url})]}"
+      ]
+    }
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -32,18 +40,18 @@
     },
     {
       "customType": "regex",
-      "description": ["Record the fixed native Podman version for qualification policy"],
+      "description": ["Track signed stable Fedora Podman builds, including same-version rebuilds"],
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>github-releases) depName=(?<depName>containers/podman)\\nreadonly PODMAN_NATIVE_VERSION=(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
+        "readonly PODMAN_NATIVE_RPM_BUILD=(?<currentValue>6\\.1\\.[0-9]+-[1-9][0-9]*(?:\\.[0-9]+)?\\.fc45)\\n"
       ],
-      "versioningTemplate": "semver"
+      "datasourceTemplate": "custom.fedora-podman",
+      "depNameTemplate": "podman-fedora-45",
+      "versioningTemplate": "regex:^(?<major>6)\\.(?<minor>1)\\.(?<patch>[0-9]+)-(?<build>[1-9][0-9]*)(?:\\.(?<revision>[0-9]+))?\\.fc45$"
     },
     {
       "customType": "regex",
-      "description": [
-        "Record the fixed native Fedora base tag and manifest for qualification policy"
-      ],
+      "description": ["Track the native Fedora base tag and manifest for qualification"],
       "managerFilePatterns": ["/^scripts/native-runtime-pins\\.sh$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>docker) depName=(?<depName>registry\\.fedoraproject\\.org/fedora)\\nreadonly PODMAN_NATIVE_BASE_IMAGE=registry\\.fedoraproject\\.org/fedora:(?<currentValue>[0-9]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -72,12 +80,28 @@
   ],
   "packageRules": [
     {
-      "description": ["Keep the coupled Podman native qualification tuple fixed"],
+      "description": [
+        "Propose the Fedora build and its upstream Podman patch for integrity review"
+      ],
       "matchManagers": ["custom.regex"],
       "matchFileNames": ["scripts/native-runtime-pins.sh"],
-      "matchDatasources": ["github-releases", "docker"],
-      "matchPackageNames": ["containers/podman", "registry.fedoraproject.org/fedora"],
-      "enabled": false
+      "matchDatasources": ["custom.fedora-podman"],
+      "matchPackageNames": ["podman-fedora-45"],
+      "automerge": false,
+      "prBodyNotes": [
+        "Verify both signed Fedora RPMs, the upstream tag and archive, and refresh the associated integrity pins before rootful and rootless qualification."
+      ]
+    },
+    {
+      "description": ["Propose immutable Fedora 45 base manifest updates for native review"],
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["scripts/native-runtime-pins.sh"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["registry.fedoraproject.org/fedora"],
+      "allowedVersions": "/^45$/",
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "pinDigests": true,
+      "automerge": false
     },
     {
       "description": ["Hold direct Dev Container inputs until separate image qualification #563"],

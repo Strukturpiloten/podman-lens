@@ -5,7 +5,7 @@ ARG PODMAN_VERSION
 ARG PODMAN_RPM_RELEASE
 COPY podman.rpm /tmp/podman.rpm
 COPY podman.src.rpm /tmp/podman.src.rpm
-COPY fedora-beta.repo /etc/yum.repos.d/podman-lens-fixed.repo
+COPY fedora-fixed.repo /etc/yum.repos.d/podman-lens-fixed.repo
 ARG SOURCE_ARCHIVE_SHA256
 # The fixed compose's repomd and primary index are independently SHA-256 pinned by the builder.
 # hadolint ignore=DL3041

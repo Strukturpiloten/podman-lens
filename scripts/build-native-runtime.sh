@@ -32,23 +32,10 @@ trap 'exit 143' TERM INT
 install -d -m 0700 "${state_directory}/root" "${runroot_directory}" "${state_directory}/tmp" "${context}"
 printf '[engine]\nlock_type = "file"\n' > "${state_directory}/containers.conf"
 host_podman=(sudo env "CONTAINERS_CONF_OVERRIDE=${state_directory}/containers.conf" podman --root "${state_directory}/root" --runroot "${runroot_directory}" --tmpdir "${state_directory}/tmp")
-readonly rpm_name="podman-${PODMAN_NATIVE_VERSION#v}-${PODMAN_NATIVE_RPM_RELEASE}.x86_64.rpm"
-readonly rpm_url="https://kojipkgs.fedoraproject.org/packages/podman/${PODMAN_NATIVE_VERSION#v}/${PODMAN_NATIVE_RPM_RELEASE}/x86_64/${rpm_name}"
-readonly source_rpm_url="https://kojipkgs.fedoraproject.org/packages/podman/${PODMAN_NATIVE_VERSION#v}/${PODMAN_NATIVE_RPM_RELEASE}/src/podman-${PODMAN_NATIVE_VERSION#v}-${PODMAN_NATIVE_RPM_RELEASE}.src.rpm"
-curl --fail --location --silent --show-error --max-time 120 --output "${context}/podman.rpm" "${rpm_url}"
-printf '%s  %s\n' "${PODMAN_NATIVE_RPM_SHA256}" "${context}/podman.rpm" | sha256sum --check --status
-curl --fail --location --silent --show-error --max-time 120 --output "${context}/podman.src.rpm" "${source_rpm_url}"
-printf '%s  %s\n' "${PODMAN_NATIVE_SOURCE_RPM_SHA256}" "${context}/podman.src.rpm" | sha256sum --check --status
-tag_revision="$(git ls-remote https://github.com/containers/podman.git "refs/tags/${PODMAN_NATIVE_VERSION}^{}")"
-[[ "${tag_revision}" == "${PODMAN_NATIVE_SOURCE_REVISION}"$'\t'"refs/tags/${PODMAN_NATIVE_VERSION}^{}" ]]
-curl --fail --location --silent --show-error --max-time 30 --output "${context}/repomd.xml" "${PODMAN_NATIVE_COMPOSE_URL}/repodata/repomd.xml"
-printf '%s  %s\n' "${PODMAN_NATIVE_REPOMD_SHA256}" "${context}/repomd.xml" | sha256sum --check --status
-primary_href="$(sed -n '/<data type="primary">/,/<\/data>/s/.*<location href="\([^"]*\)".*/\1/p' "${context}/repomd.xml")"
-[[ "${primary_href}" == "repodata/${PODMAN_NATIVE_PRIMARY_SHA256}-primary.xml.zst" ]]
-curl --fail --location --silent --show-error --max-time 120 --output "${context}/primary.xml.zst" "${PODMAN_NATIVE_COMPOSE_URL}/${primary_href}"
-printf '%s  %s\n' "${PODMAN_NATIVE_PRIMARY_SHA256}" "${context}/primary.xml.zst" | sha256sum --check --status
+bash "$(dirname "${BASH_SOURCE[0]}")/fetch-native-runtime-inputs.sh" "${context}"
+IFS= read -r compose_url < "${context}/compose-url"
 cp containers/native-podman/Containerfile "${context}/Containerfile"
-printf '[podman-lens-fixed]\nname=PodmanLens fixed Fedora 45 Beta compose\nbaseurl=%s\nenabled=0\ngpgcheck=0\nmetadata_expire=-1\n' "${PODMAN_NATIVE_COMPOSE_URL}" > "${context}/fedora-beta.repo"
+printf '[podman-lens-fixed]\nname=PodmanLens fixed Fedora compose\nbaseurl=%s\nenabled=0\ngpgcheck=0\nmetadata_expire=-1\n' "${compose_url}" > "${context}/fedora-fixed.repo"
 image="localhost/podman-lens-native:${PODMAN_NATIVE_VERSION}-${state_key}"
 "${host_podman[@]}" pull --quiet "${PODMAN_NATIVE_BASE_IMAGE}"
 "${host_podman[@]}" build --pull=never --layers=false --target "${root_mode}" \
@@ -68,7 +55,7 @@ if [[ "${root_mode}" == rootless ]]; then
   '
 fi
 # The fixed compose must still serve the reviewed index after dependency resolution.
-curl --fail --location --silent --show-error --max-time 30 --output "${context}/repomd-after.xml" "${PODMAN_NATIVE_COMPOSE_URL}/repodata/repomd.xml"
+curl --fail --location --silent --show-error --max-time 30 --output "${context}/repomd-after.xml" "${compose_url}/repodata/repomd.xml"
 printf '%s  %s\n' "${PODMAN_NATIVE_REPOMD_SHA256}" "${context}/repomd-after.xml" | sha256sum --check --status
 raw_image_id="$("${host_podman[@]}" image inspect --format '{{.Id}}' "${image}")"
 image_id="$(normalize_native_image_id "${raw_image_id}")"

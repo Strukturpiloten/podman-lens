@@ -36,9 +36,9 @@ young transitive resolution, is exempt only after trusted closure checks. Unavai
 future, moved or stale evidence fails closed. Age admission is inapplicable to main, manual and
 release runs; complete integrity, audit and compatibility checks remain.
 
-The Podman qualification tuple stays fixed. Its exact Renovate owners are disabled without routine
-review proposals; target changes require separate qualification. Historical evidence stays unchanged.
-Release requires fresh native conformance and protected environment approval.
+Renovate proposes stable Fedora Podman builds and base digests. The maintainer verifies companion
+integrity pins and both native modes. Release requires fresh conformance and protected approval.
+[ADR 0017](decisions/0017-isolated-native-release-conformance.md) defines the qualification policy.
 
 The shared project owns Python, uv, Ruff, ty and lock integrity; consumers declare lint scope.
 Local, CI and image file tools use the six-tool `scripts/install-host-tools.sh` inventory, including
@@ -55,5 +55,5 @@ schedules and hold removal remain deferred.
 
 Coverage's uniquely annotated `CARGO_LLVM_COV_VERSION` ARG owns its readable version; locked
 crates.io installation supplies integrity. Its exact crate/path/manager Renovate exception preserves automatic updates and shared
-age/grouping/approval policy. Other image/native qualification holds
+age/grouping/approval policy. Other Dev Container qualification holds
 remain; tool updates do not qualify images.

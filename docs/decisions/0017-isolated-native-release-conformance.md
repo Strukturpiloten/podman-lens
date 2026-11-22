@@ -2,7 +2,42 @@
 
 - Status: Accepted
 - Date: 2026-09-21
-- Amendment: [ADR 0019](0019-shared-validation-and-dependency-automation.md) fixes the coupled runtime tuple for the overhaul and replaces routine Renovate proposals with a narrow exclusion. Native qualification and historical evidence remain unchanged.
+- Amendments: [ADR 0019](0019-shared-validation-and-dependency-automation.md) recorded the temporary update hold. The Fedora artifact decision below replaces that hold.
+
+## Fedora artifact retention and update ownership
+
+Validation-only Release run [44934186506](https://github.com/Strukturpiloten/podman-lens/actions/runs/44934186506)
+failed before either native mode started. Fedora deleted Koji build
+[3102806](https://koji.fedoraproject.org/koji/buildinfo?buildID=3102806), and both original
+unsigned artifact URLs returned HTTP 404. Signed copies surfaced on a testing mirror with
+different full-file hashes. Fedora's later 6.1.4
+[advisory](https://bodhi.fedoraproject.org/updates/FEDORA-2026-f91a799f07) was unpushed.
+
+Use the signed stable Podman 6.1 build from the fixed Fedora 45 final release. Fedora's
+[stable advisory](https://bodhi.fedoraproject.org/updates/FEDORA-2026-c30886e9ec) and
+[Koji build](https://koji.fedoraproject.org/koji/buildinfo?buildID=3111822) record the adopted
+build and Fedora packaging revision. The final binary and source package indexes identify both
+RPMs. Both signatures verify against Fedora 45's published key, fingerprint
+`4F50 A611 4CD5 C697 6A7F 1179 655A 4B02 F577 861E`. Fedora's release server and the
+Princeton and Hannover Fedora mirrors served byte-identical copies of both RPMs. The signed
+Koji paths served the same bytes. The source RPM includes the upstream tag archive with no RPM
+patch files. The archive matches GitHub's tag archive, and the annotated tag peels to the
+reviewed upstream commit. The active pin file carries the selected versions and digests.
+
+Both native cells and ordinary CI use the same bounded input check. Fallback applies when bytes
+are unavailable. A successful download with a mismatched digest fails the check. The build
+still checks the installed NEVRA, binary-to-source RPM relationship, source archive, spec, and
+package closure. The pinned OCI index has one Linux amd64 manifest.
+
+Renovate proposes the Fedora build identifier from signed stable Bodhi records. That identifier
+selects both the RPM release and the upstream tag, and the build component permits a proposal
+when Fedora rebuilds the same upstream patch. Bodhi publishes no binary, SRPM, source archive,
+or source commit checksums suitable for replacement. Verify their exact values and provenance in
+the same proposal. A build outside the final compose currently depends on retained signed Koji
+files. Verify a durable Fedora distribution source before adopting such a build.
+The separate Fedora base owner proposes immutable digest updates for the Fedora 45 tag. Both
+owners use manual review and require both native modes before adoption. A move beyond Libpod
+6.1 requires a separately qualified compatibility decision.
 
 ## Context
 
@@ -29,23 +64,21 @@ Manual evidence is diagnostic and cannot satisfy a later Release run's exact run
 It creates a fresh disposable Podman service on the runner, supplies its unique Unix socket only to
 ignored production-acquisition tests, and destroys the store afterwards. The tests permit only an
 exact reviewed version and bodyless GET requests. The rootful and rootless cells each build a
-disposable image from a Fedora 45 base pinned by tag and digest, a checksum-verified Podman 6.1.2
-Koji RPM, and Fedora 45 Beta's fixed compose. The builder verifies the compose repository metadata
+disposable image from a Fedora 45 base pinned by tag and digest, signed checksum-verified Podman
+RPMs, and the fixed Fedora release compose. The builder verifies the compose repository metadata
 and primary package index, disables mutable repositories, and records the installed package closure
-and built image ID. Fedora 45 Beta is isolated test infrastructure, not a general distribution
-support claim. Renovate signals new Podman patches and base digests for manual provenance,
-checksum, root-mode, and conformance review.
+and built image ID. The Fedora runtime is isolated test infrastructure. The provider and update
+contract is recorded above.
 Podman's image inspection reports a bare 64-hex ID; the builder accepts that form or an explicit
 `sha256:` prefix, validates the bytes, and records one canonical prefixed evidence value.
 This workflow's only active native line is 6.1; older 5.4–6.0 catalogue anchors and 6.1.0
 captures remain immutable evidence. BoxFerry #340 coordinates active cross-line patch adoption.
 
-The selected Fedora Koji binary RPM is `5:6.1.2-1.fc45.x86_64`, SHA-256
-`f3eab0b767203dd940e93b7a5e8df60a101b4d7832c1e5fdf62497bfcdd7e6bb`. Its matching
-source RPM is checksum-pinned separately. Inspection found an upstream `v6.1.2.tar.gz` source
-archive and no patch files in that source RPM; the upstream annotated tag peels to
-`04f3aa430e6df81bea059978bc5bafbc846ba3e7`. The source RPM is unsigned, so the exact
-reviewed SHA-256 and the fixed compose metadata are the integrity boundary. The Fedora base
+The original Fedora Koji binary RPM was `5:6.1.2-1.fc45.x86_64`, SHA-256
+`f3eab0b767203dd940e93b7a5e8df60a101b4d7832c1e5fdf62497bfcdd7e6bb`. Both RPMs
+were unsigned and separately checksum-pinned. Inspection found an upstream `v6.1.2.tar.gz` source
+archive and no patch files in that source RPM. The upstream annotated tag peels to
+`04f3aa430e6df81bea059978bc5bafbc846ba3e7`. Fedora 45 Beta supplied the fixed compose. The Fedora base
 digest, RPM and source digests, compose metadata digests, and package closure are carried in
 candidate-bound evidence. A new patch requires re-review of those values and native behavior.
 The upstream 6.1.1 notes describe a rootless port-binding fix; 6.1.2 notes describe security and
@@ -101,10 +134,10 @@ conservative and cannot prevent
 one write from crossing a limit between samples. The 50-minute native job timeout bounds all
 pre-cleanup step maxima to 42 minutes, reserving five minutes for cleanup and three more minutes of
 job headroom; a killed runner still cannot guarantee its own cleanup.
-The outer launcher is installed from the `ubuntu-24.04` runner's package repository and is
-intentionally not a conformance-version input. The active RPM, fixed compose, and base image are
-separate reviewed inputs; the build and native probe must both pass before Release accepts evidence.
-The retained 6.1.0 captures remain historical evidence, never relabeled as 6.1.2 observations.
+The hosted runner installs the outer launcher from its package repository. Review the active RPM,
+fixed compose, and base image together. Release accepts evidence after the build and native probe
+both pass.
+The retained 6.1.0 captures keep their original provenance.
 Failure evidence derives the reviewed version from the candidate's pinned runtime inputs rather than
 successful-service environment, so a setup failure still uploads bounded
 candidate/run/attempt/cell evidence. The initial process atomically publishes only bounded setup
@@ -125,6 +158,6 @@ enter the publication job.
 
 ## Consequences
 
-Ordinary pull requests remain offline and privacy-safe. Release gains bounded native API evidence
-without reusing a host service or retaining native payloads. Podman installation and reset are
-limited to the disposable GitHub-hosted runner.
+Ordinary pull request CI checks public artifact availability and integrity with bounded downloads.
+Release gains bounded native API evidence without reusing a host service or retaining native
+payloads. Podman installation and reset are limited to the disposable GitHub-hosted runner.

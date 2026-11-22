@@ -924,32 +924,9 @@ fn assert_reviewed_native_images(native: &str) -> Result<(), std::io::Error> {
         assert!(native.contains(output), "native runtime peak is missing {output}");
     }
     assert!(native.contains("http://localhost/libpod/_ping"));
-    let pins = fs::read_to_string("scripts/native-runtime-pins.sh")?;
-    let version = pins
-        .lines()
-        .find_map(|line| line.strip_prefix("readonly PODMAN_NATIVE_VERSION=v"))
-        .ok_or_else(|| policy_error("native Podman version pin is missing"))?;
-    let parsed = Version::parse(version)
-        .map_err(|error| policy_error(format!("native version must be stable semver: {error}")))?;
-    assert!(parsed.pre.is_empty() && parsed.build.is_empty());
-    for name in [
-        "PODMAN_NATIVE_RPM_SHA256",
-        "PODMAN_NATIVE_SOURCE_RPM_SHA256",
-        "PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256",
-        "PODMAN_NATIVE_REPOMD_SHA256",
-        "PODMAN_NATIVE_PRIMARY_SHA256",
-    ] {
-        let value = pins
-            .lines()
-            .find_map(|line| line.strip_prefix(&format!("readonly {name}=")))
-            .ok_or_else(|| policy_error(format!("missing {name}")))?;
-        assert!(value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    }
-    assert!(pins.contains("readonly PODMAN_NATIVE_BASE_IMAGE=registry.fedoraproject.org/fedora:45@sha256:"));
-    assert!(pins.contains("readonly PODMAN_NATIVE_COMPOSE_URL=https://dl.fedoraproject.org/pub/fedora/linux/releases/test/45_Beta/Everything/x86_64/os"));
     let builder = fs::read_to_string("scripts/build-native-runtime.sh")?;
     for required in [
-        "sha256sum --check --status",
+        "fetch-native-runtime-inputs.sh",
         "PODMAN_NATIVE_REPOMD_SHA256",
         "PODMAN_NATIVE_PRIMARY_SHA256",
         "--pull=never",
@@ -998,6 +975,55 @@ fn assert_reviewed_native_images(native: &str) -> Result<(), std::io::Error> {
             "native Containerfile is missing {required}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn reviewed_native_inputs_are_pinned_and_checked_early() -> Result<(), std::io::Error> {
+    let pins = fs::read_to_string("scripts/native-runtime-pins.sh")?;
+    let build = pins
+        .lines()
+        .find_map(|line| line.strip_prefix("readonly PODMAN_NATIVE_RPM_BUILD="))
+        .ok_or_else(|| policy_error("native Fedora build pin is missing"))?;
+    let (version, rpm_release) = build
+        .split_once('-')
+        .ok_or_else(|| policy_error("missing RPM release"))?;
+    let parsed = Version::parse(version)
+        .map_err(|error| policy_error(format!("native version must be stable semver: {error}")))?;
+    assert_eq!((parsed.major, parsed.minor), (6, 1));
+    assert!(parsed.pre.is_empty() && parsed.build.is_empty());
+    assert_eq!(rpm_release.rsplit_once('.').map(|(_, distro)| distro), Some("fc45"));
+    for name in [
+        "PODMAN_NATIVE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256",
+        "PODMAN_NATIVE_REPOMD_SHA256",
+        "PODMAN_NATIVE_PRIMARY_SHA256",
+    ] {
+        let value = pins
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("readonly {name}=")))
+            .ok_or_else(|| policy_error(format!("missing {name}")))?;
+        assert!(value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+    assert!(pins.contains("readonly PODMAN_NATIVE_BASE_IMAGE=registry.fedoraproject.org/fedora:45@sha256:"));
+    assert!(pins.contains("readonly PODMAN_NATIVE_COMPOSE_PATH=releases/45/Everything"));
+    let fetcher = fs::read_to_string("scripts/fetch-native-runtime-inputs.sh")?;
+    for required in [
+        "sha256sum --check --status",
+        "PODMAN_NATIVE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_RPM_SHA256",
+        "PODMAN_NATIVE_SOURCE_REVISION",
+        "PODMAN_NATIVE_SOURCE_ARCHIVE_SHA256",
+        "/data/signed/",
+    ] {
+        assert!(
+            fetcher.contains(required),
+            "native input verifier is missing {required}"
+        );
+    }
+    let ci = fs::read_to_string(".github/workflows/ci.yml")?;
+    assert!(ci.contains("timeout --signal=TERM --kill-after=5s 210s bash scripts/fetch-native-runtime-inputs.sh"));
     Ok(())
 }
 
@@ -1159,47 +1185,24 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
     let all_managers = renovate["customManagers"]
         .as_array()
         .ok_or_else(|| policy_error("Renovate customManagers must be an array"))?;
-    let managers = all_managers
-        .iter()
-        .filter(|manager| {
-            manager["description"]
-                == serde_json::json!(["Record the fixed native Podman version for qualification policy"])
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(managers.len(), 1, "native Podman patch needs one Renovate owner");
-    let manager = managers[0];
-    assert!(manager["matchStrings"][0].as_str().is_some_and(|pattern| {
-        pattern.contains("containers/podman") && pattern.contains("PODMAN_NATIVE_VERSION=(?<currentValue>v")
-    }));
-    assert_eq!(manager["versioningTemplate"], "semver");
-    assert_eq!(
-        manager["managerFilePatterns"],
-        serde_json::json!(["/^scripts/native-runtime-pins\\.sh$/"])
-    );
-    assert_native_renovate_extraction(manager, "PODMAN_NATIVE_VERSION=v")?;
-    let base_managers = all_managers
-        .iter()
-        .filter(|manager| {
-            manager["description"]
-                == serde_json::json!(["Record the fixed native Fedora base tag and manifest for qualification policy"])
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(base_managers.len(), 1, "native Fedora base needs one Renovate owner");
-    assert!(base_managers[0]["matchStrings"][0].as_str().is_some_and(|pattern| {
-        pattern.contains("PODMAN_NATIVE_BASE_IMAGE") && pattern.contains("currentDigest>sha256:[a-f0-9]{64}")
-    }));
-    assert_native_renovate_extraction(base_managers[0], "PODMAN_NATIVE_BASE_IMAGE=")?;
-    for marker in ["PODMAN_NATIVE_VERSION", "PODMAN_NATIVE_BASE_IMAGE"] {
+    for marker in ["PODMAN_NATIVE_RPM_BUILD", "PODMAN_NATIVE_BASE_IMAGE"] {
+        let owners: Vec<_> = all_managers
+            .iter()
+            .filter(|manager| manager["matchStrings"].to_string().contains(marker))
+            .collect();
+        assert_eq!(owners.len(), 1, "{marker} must have one Renovate owner");
         assert_eq!(
-            all_managers
-                .iter()
-                .filter(|manager| manager["matchStrings"].to_string().contains(marker))
-                .count(),
-            1,
-            "{marker} must have one Renovate owner"
+            owners[0]["managerFilePatterns"],
+            serde_json::json!(["/^scripts/native-runtime-pins\\.sh$/"])
         );
+        assert_native_renovate_extraction(owners[0], marker)?;
     }
-    assert_native_qualification_tuple_is_fixed(&renovate)?;
+    assert!(
+        all_managers
+            .iter()
+            .all(|manager| { !manager["matchStrings"].to_string().contains("PODMAN_NATIVE_VERSION") }),
+        "the selected Fedora build owns the upstream version"
+    );
     assert!(
         !release.contains("expected_rootful") && !release.contains("expected_rootless"),
         "release validation must consume candidate-bound evidence instead of duplicating Renovate-owned image pins"
@@ -1228,36 +1231,6 @@ fn native_runtime_renovate_and_publication_contract_are_complete() -> Result<(),
             "credentialed publish job must not rerun {forbidden}"
         );
     }
-    Ok(())
-}
-
-fn assert_native_qualification_tuple_is_fixed(renovate: &Value) -> Result<(), std::io::Error> {
-    let review_rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| policy_error("Renovate packageRules must be an array"))?
-        .iter()
-        .filter(|rule| {
-            rule["description"] == serde_json::json!(["Keep the coupled Podman native qualification tuple fixed"])
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(review_rules.len(), 1);
-    let fixed = review_rules[0];
-    assert_eq!(fixed["matchManagers"], serde_json::json!(["custom.regex"]));
-    assert_eq!(
-        fixed["matchFileNames"],
-        serde_json::json!(["scripts/native-runtime-pins.sh"])
-    );
-    assert_eq!(
-        fixed["matchDatasources"],
-        serde_json::json!(["github-releases", "docker"])
-    );
-    assert_eq!(
-        fixed["matchPackageNames"],
-        serde_json::json!(["containers/podman", "registry.fedoraproject.org/fedora"])
-    );
-    assert_eq!(fixed["enabled"], false);
-    assert!(fixed["dependencyDashboardApproval"].is_null());
-    assert!(fixed["automerge"].is_null());
     Ok(())
 }
 

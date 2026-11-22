@@ -160,6 +160,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.sha }}
+      - name: Verify the pinned native Podman inputs
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scratch="$(mktemp -d "${RUNNER_TEMP}/podman-lens-native-inputs.XXXXXXXX")"
+          trap 'rm -rf -- "${scratch}"' EXIT
+          timeout --signal=TERM --kill-after=5s 210s bash scripts/fetch-native-runtime-inputs.sh "${scratch}"
       - name: Check out immutable shared automation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

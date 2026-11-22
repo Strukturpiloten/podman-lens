@@ -71,7 +71,7 @@ evidence. The cassettes and capture manifest are test-only repository formats, n
 live matrix or a public interchange contract.
 
 The active native release worker selects the latest reviewed 6.1 patch separately from immutable
-6.1.0 capture and output-anchor provenance. Its Fedora 45 Beta image is isolated test
+6.1.0 capture and output-anchor provenance. Its Fedora 45 runtime is isolated test
 infrastructure, not a Fedora 45 distribution-compatibility claim. A new patch becomes reviewed
 only after both root modes, Libpod API identity, and acquisition tests pass against the actual
 runtime. Its exact candidate and review outcome are determined by hosted native evidence, not

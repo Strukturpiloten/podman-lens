@@ -12,8 +12,8 @@ jobs:
       github.repository == 'Strukturpiloten/podman-lens' &&
       github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' &&
       github.event_name == 'workflow_dispatch'
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-updates.yml@c4e49870d55d8d88624b25c6c0c3c319dd6d4398 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-updates.yml@b2e07985372159a7c522addbfba8e9b79200c332 # automation-v1 interface v1
     with:
-      automation-sha: c4e49870d55d8d88624b25c6c0c3c319dd6d4398
+      automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
     secrets:
       app-private-key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}

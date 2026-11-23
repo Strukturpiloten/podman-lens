@@ -22,6 +22,10 @@ allowances. Release and validation-only compare against the canonical published 
 successful published-purpose API evidence for the exact candidate satisfies the release guard.
 Missing published evidence never becomes proof through a generic candidate output.
 
+The shared read-only inventory validates the single `podman-lens` crate on the default-branch
+dispatch path. It receives the successful final gate result and both of its exact-candidate
+outputs before checking the workspace against the release policy.
+
 Native release admission checks out the exact SHA and verifies the current default-branch head
 before privileged cells start. `release_validation=true` cannot select the manual issue-branch path.
 A diagnostic issue-branch run never replaces fresh Release evidence. Native qualification retains

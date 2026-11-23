@@ -418,7 +418,6 @@ class ConsumerContracts(unittest.TestCase):
         preparation = workflow_job(release, "release-preparation")
         self.assertIn("needs: shared-release-gate", preparation)
         self.assertIn("permissions:\n      contents: read\n", preparation)
-        self.assertRegex(preparation, r"validation-only: ['\"]true['\"]")
         self.assertNotIn("inputs.validation_only", preparation)
         for forbidden in (
             "id-token:",
@@ -426,8 +425,23 @@ class ConsumerContracts(unittest.TestCase):
             "bootstrap-token:",
             "CARGO_REGISTRY_TOKEN",
             "environment:",
+            "runs-on:",
+            "timeout-minutes:",
+            "steps:",
         ):
             self.assertNotIn(forbidden, preparation)
+        for required in (
+            "github.repository == 'Strukturpiloten/podman-lens'",
+            "github.event_name == 'workflow_dispatch'",
+            "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
+            "candidate_sha: ${{ github.sha }}",
+            "policy_sha: ${{ github.sha }}",
+            "config_path: .github/release-policy.json",
+            "validation_sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}",
+            "validation_result: ${{ needs.shared-release-gate.result }}",
+            "published_api_candidate_sha: ${{ needs.shared-release-gate.outputs.published_api_candidate_sha }}",
+        ):
+            self.assertIn(required, preparation)
         publish = workflow_job(release, "publish")
         self.assertIn("needs: [shared-release-gate, release-preparation]", publish)
         for required in (
@@ -444,20 +458,20 @@ class ConsumerContracts(unittest.TestCase):
             for required in (
                 "needs.shared-release-gate.result == 'success'",
                 "needs.shared-release-gate.outputs.candidate_sha == github.sha",
-                "uses: ./_automation/.github/actions/shared-crate-publish",
-                "validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}",
-                "validation-result: ${{ needs.shared-release-gate.result }}",
             ):
                 self.assertIn(required, job)
             self.assertNotIn("bootstrap-token:", job)
-        self.assertIn("release-config: ${{ steps.source.outputs.config }}", preparation)
-        self.assertIn("policy-sha: ${{ github.sha }}", preparation)
-        self.assertIn("candidate-sha: ${{ github.sha }}", preparation)
+        for required in (
+            "uses: ./_automation/.github/actions/shared-crate-publish",
+            "validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}",
+            "validation-result: ${{ needs.shared-release-gate.result }}",
+        ):
+            self.assertIn(required, publish)
         revision = json.loads((ROOT / ".github/automation.json").read_text())["revision"]
         self.assertIn(f"shared-release-validation.yml@{revision}", gate)
         self.assertIn(f"automation_sha: {revision}", gate)
-        self.assertIn(f"ref: {revision}", preparation)
-        self.assertEqual(preparation.count(f"automation-sha: {revision}"), 2)
+        self.assertIn(f"shared-release-inventory.yml@{revision}", preparation)
+        self.assertIn(f"automation_sha: {revision}", preparation)
         self.assertIn(f"automation-sha: {revision}", publish)
 
     def test_release_validation_only_inventory_never_contacts_registry_or_mutates(self) -> None:
@@ -477,7 +491,7 @@ class ConsumerContracts(unittest.TestCase):
             ],
         }
         args = [
-            "prepare-crate",
+            "prepare-inventory",
             "--repository-root",
             str(ROOT),
             "--config",
@@ -486,16 +500,13 @@ class ConsumerContracts(unittest.TestCase):
             candidate,
             "--automation-sha",
             "b" * 40,
-            "--package",
-            "podman-lens",
             "--validation-sha",
             candidate,
             "--validation-result",
             "success",
-            "--validation-only",
-            "true",
         ]
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch.dict(
                 os.environ, {"GITHUB_REPOSITORY": "Strukturpiloten/podman-lens"}, clear=True
             ),
@@ -508,7 +519,16 @@ class ConsumerContracts(unittest.TestCase):
             patch.object(shared_release.subprocess, "run") as mutate,
             patch("sys.stderr", new_callable=io.StringIO),
         ):
-            self.assertEqual(shared_release.main(args), 0)
+            output = Path(directory) / "output"
+            os.environ["GITHUB_OUTPUT"] = str(output)
+            published = ["--published-api-candidate-sha", candidate]
+            self.assertEqual(shared_release.main([*args, *published]), 0)
+            self.assertEqual(
+                output.read_text(),
+                f"candidate_sha={candidate}\npublished_api_candidate_sha={candidate}\n",
+            )
+            output.unlink()
+            self.assertEqual(read_metadata.call_count, 1)
             self.assertEqual(
                 read_metadata.call_args.args[0],
                 ["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"],
@@ -520,11 +540,29 @@ class ConsumerContracts(unittest.TestCase):
                 ["--validation-result", "failure"],
                 ["--validation-result", "skipped"],
                 ["--validation-result", "cancelled"],
+                ["--published-api-candidate-sha", ""],
+                ["--published-api-candidate-sha", "c" * 40],
+                ["--validation-only", "false"],
+                ["--bootstrap", "true"],
+                ["--package", "podman-lens"],
             ):
                 with self.subTest(extra=extra), self.assertRaises(SystemExit):
-                    shared_release.main([*args, *extra])
+                    shared_release.main([*args, *published, *extra])
             with self.assertRaises(SystemExit):
-                shared_release.main(["publish-crate", *args[1:]])
+                shared_release.main(args)
+            self.assertEqual(read_metadata.call_count, 1)
+            self.assertFalse(output.exists())
+            with self.assertRaises(SystemExit):
+                shared_release.main(
+                    [
+                        "publish-crate",
+                        *args[1:],
+                        "--package",
+                        "podman-lens",
+                        "--validation-only",
+                        "true",
+                    ]
+                )
             registry.assert_not_called()
             publish.assert_not_called()
             mutate.assert_not_called()
@@ -2007,6 +2045,7 @@ const path = require("node:path");
                 "shared-dependency-wait.yml",
                 "shared-dependency-eligibility.yml",
                 "shared-release-prepare.yml",
+                "shared-release-inventory.yml",
                 "shared-release-validation.yml",
                 "shared-devcontainer-validation.yml",
                 "shared-devcontainer-updates.yml",

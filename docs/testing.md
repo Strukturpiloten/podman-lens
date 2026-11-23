@@ -126,8 +126,11 @@ admission script, manually run `gh workflow run native-podman-conformance.yml --
 TheRealBecks/issue98 -f candidate_sha=<reviewed-head-sha>` with the exact 40-character head SHA.
 Admission checks that SHA, the current branch and checkout heads, and both original and rerun
 actors' write-or-higher permission. Moved branches, tags, forks, and unavailable permission APIs
-fail before the native matrix. This validation-only path never runs for untrusted PR events or
-replaces fresh Release evidence.
+fail before the native matrix. Each Release requires fresh evidence.
+
+PR and merge-group CI qualify changed Fedora 45 base digests in both root modes. The job
+requires cleanup and verifies both current-attempt artifacts before reporting the tested SHA
+to Required CI. The trusted base policy still governs dependency eligibility.
 
 `Native Podman conformance` creates a fresh disposable Podman service, passes only its run-scoped
 socket to the ignored tests, and uploads SHA/run/attempt/task-bound evidence. Release calls that reusable

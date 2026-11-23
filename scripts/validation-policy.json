@@ -1,6 +1,7 @@
 {
   "schema": 2,
   "repository": "Strukturpiloten/podman-lens",
+  "podman_native_conformance": true,
   "jobs": [
     "rust",
     "coverage",

@@ -36,8 +36,9 @@ young transitive resolution, is exempt only after trusted closure checks. Unavai
 future, moved or stale evidence fails closed. Age admission is inapplicable to main, manual and
 release runs; complete integrity, audit and compatibility checks remain.
 
-Renovate proposes stable Fedora Podman builds and base digests. The maintainer verifies companion
-integrity pins and both native modes. Release requires fresh conformance and protected approval.
+Renovate proposes stable Fedora Podman builds and base digests. Maintainers verify companion
+integrity pins. Base digest changes require both native modes in PR and merge-group CI and
+retain trusted first-seen holds. Release requires fresh conformance and protected approval.
 [ADR 0017](decisions/0017-isolated-native-release-conformance.md) defines the qualification policy.
 
 The shared project owns Python, uv, Ruff, ty and lock integrity; consumers declare lint scope.

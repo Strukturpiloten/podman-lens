@@ -535,15 +535,38 @@ class ConsumerContracts(unittest.TestCase):
         gate = workflow_job(native, "native-gate")
         self.assertIn("needs: [admit-candidate, native-api]", gate)
         self.assertIn("if: always()", gate)
-        self.assertIn("permissions: {}", gate)
+        self.assertIn("    permissions:\n      contents: read\n", gate)
         self.assertIn("CANDIDATE_SHA: ${{ needs.admit-candidate.outputs.candidate_sha }}", gate)
+        admission_step = workflow_job(native, "admit-candidate")
+        self.assertIn(
+            "github.event_name == 'workflow_dispatch' && inputs.release_validation != true && github.token",
+            admission_step,
+        )
+        self.assertIn("persist-credentials: false", gate)
+        steps = (
+            'test "${NATIVE_RESULT}" = success',
+            "Download current-run CI native evidence",
+            "bash scripts/validate-native-evidence.sh",
+            "id: binding",
+        )
+        positions = [gate.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        ci_event = "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'"
+        self.assertEqual(gate.count(ci_event), 3)
+        release = workflow_job((ROOT / ".github/workflows/release.yml").read_text(), "release-gate")
+        for pattern in (
+            r"uses: actions/download-artifact@[^\n]+",
+            r"pattern: podman-lens-native-api-[^\n]+",
+        ):
+            self.assertEqual(re.findall(pattern, gate), re.findall(pattern, release))
         matrix = workflow_job(native, "native-api")
         self.assertIn(
             "if: always()", matrix[matrix.index("- name: Remove disposable native service") :]
         )
         self.assertIn('bash scripts/cleanup-native-runtime.sh "${state_key}"', matrix)
-        script = gate.split("        run: |\n", 1)[1]
-        script = textwrap.dedent(script)
+        script = ApiPurposeContract.step_script(
+            gate, "Require admitted candidate and every native cell successful"
+        )
         candidate = "a" * 40
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output"
@@ -574,9 +597,7 @@ class ConsumerContracts(unittest.TestCase):
                 )
                 with self.subTest(admission=admission, outcome=outcome, receipt=receipt):
                     self.assertEqual(result.returncode == 0, succeeds, result.stderr)
-                    self.assertEqual(
-                        output.read_text(), f"candidate_sha={candidate}\n" if succeeds else ""
-                    )
+                    self.assertEqual(output.read_text(), "")
 
     def test_prose_examples_native_and_unknown_paths(self) -> None:
         for path, content, expected in (
@@ -657,8 +678,25 @@ class ConsumerContracts(unittest.TestCase):
         assert dependencies is not None
         self.assertEqual(
             dependencies[1].splitlines(),
-            [f"      - {job}" for job in ("validation-plan", *POLICY.jobs)],
+            [f"      - {job}" for job in ("validation-plan", *POLICY.jobs, "native-conformance")],
         )
+        self.assertTrue(POLICY.podman_native_conformance)
+        plan = workflow_job(ci, "validation-plan")
+        self.assertIn(
+            "select_native_conformance: ${{ steps.plan.outputs.select_native_conformance }}", plan
+        )
+        for job in (plan, gate):
+            self.assertEqual(job.count("--bootstrap-podman-native-conformance"), 1)
+        native = workflow_job(ci, "native-conformance")
+        for required in (
+            "needs: validation-plan",
+            "if: needs.validation-plan.outputs.select_native_conformance == 'true'",
+            "permissions:\n      contents: read\n",
+            "uses: ./.github/workflows/native-podman-conformance.yml",
+            "release_validation: false",
+            "candidate_sha: ${{ fromJSON(needs.validation-plan.outputs.plan).tested_sha }}",
+        ):
+            self.assertIn(required, native)
         self.assertIn("    if: always()\n", gate)
         self.assertIn(
             '--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}" --devcontainer-validation',
@@ -1672,7 +1710,7 @@ const path = require("node:path");
 
     def test_trusted_service_and_candidate_receipt_reader_have_separate_authority(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-        reader = workflow.split("  lockfile-release-age:\n", 1)[1].split("  pr-gate:\n", 1)[0]
+        reader = workflow_job(workflow, "lockfile-release-age")
         for required in (
             "actions: read",
             "contents: read",

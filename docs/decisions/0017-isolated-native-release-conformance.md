@@ -48,7 +48,8 @@ connection boundary.
 
 ## Decision
 
-`Native Podman conformance` is a reusable workflow used for reviewed manual diagnostics and every Release.
+`Native Podman conformance` is a reusable workflow used for Fedora image qualification, reviewed
+manual diagnostics, and every Release.
 It has a separate read-only admission job before the native matrix. A manual `workflow_dispatch`
 is validation-only and requires an explicit 40-hex candidate SHA equal to the run SHA and checked-out
 HEAD, a current same-repository `TheRealBecks/issue<N>` branch head at that SHA, and both the
@@ -61,6 +62,15 @@ token, and an unavailable response fails closed. A Release reusable call must ex
 `release_validation=true` and still admits only the current default-branch SHA, even though the
 caller itself was dispatched. It does not depend on collaborator status of the automation actor.
 Manual evidence is diagnostic and cannot satisfy a later Release run's exact run/attempt gate.
+
+On ordinary pull requests and merge groups, the shared planner compares the Fedora 45 image
+digest at the exact trusted base and the complete tested tree. A changed digest independently
+requires native conformance. Admission binds the planner's candidate to the run SHA, checkout,
+and current PR merge ref or default-branch queue ref. These calls use read-only permissions and
+need no collaborator lookup. The native gate verifies both cells succeeded through cleanup and
+checks both candidate/run/attempt artifacts before returning a receipt. Required CI independently
+recomputes selection and verifies that receipt.
+
 It creates a fresh disposable Podman service on the runner, supplies its unique Unix socket only to
 ignored production-acquisition tests, and destroys the store afterwards. The tests permit only an
 exact reviewed version and bodyless GET requests. The rootful and rootless cells each build a

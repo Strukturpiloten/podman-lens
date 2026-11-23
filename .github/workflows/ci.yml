@@ -43,6 +43,7 @@ jobs:
       select_lockfile_release_age: ${{ steps.plan.outputs.select_lockfile_release_age }}
       select_api_release_type: ${{ steps.plan.outputs.select_api_release_type }}
       select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}
+      select_native_conformance: ${{ steps.plan.outputs.select_native_conformance }}
     steps:
       - name: Check out immutable shared automation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,6 +65,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-python
       - name: Select exact-revision plan
         id: plan
+        # Bootstrap also recognizes the exact policy immediately preceding native qualification.
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
@@ -76,7 +78,7 @@ jobs:
             --repository-root source --config "${POLICY_CONFIG}" \
             --event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
             --tested-sha "${GITHUB_SHA}" --policy-sha "${POLICY_SHA}" --automation-sha "${AUTOMATION_SHA}" \
-            --github-output "${GITHUB_OUTPUT}"
+            --github-output "${GITHUB_OUTPUT}" --bootstrap-podman-native-conformance
   rust:
     name: Rust quality
     needs: validation-plan
@@ -246,6 +248,16 @@ jobs:
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       automation_sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
       config_path: scripts/validation-policy.json
+  native-conformance:
+    name: Native Fedora image qualification
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_native_conformance == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-podman-conformance.yml
+    with:
+      release_validation: false
+      candidate_sha: ${{ fromJSON(needs.validation-plan.outputs.plan).tested_sha }}
   pr-gate:
     name: Required CI
     if: always()
@@ -260,6 +272,7 @@ jobs:
       - documentation
       - lockfile-release-age
       - devcontainer-validation
+      - native-conformance
     runs-on: ubuntu-26.04
     steps:
       - name: Check out immutable shared automation
@@ -281,6 +294,7 @@ jobs:
       - name: Install locked shared Python tooling
         uses: ./_automation/.github/actions/shared-python
       - name: Require selected jobs and only planned skips
+        # Use the same trusted-base bootstrap when recomputing selection.
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
@@ -295,7 +309,8 @@ jobs:
             --repository-root source --config "${POLICY_CONFIG}" \
             --event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
             --tested-sha "${GITHUB_SHA}" --policy-sha "${POLICY_SHA}" --automation-sha "${AUTOMATION_SHA}" \
-            --plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}" --devcontainer-validation
+            --plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}" --devcontainer-validation \
+            --bootstrap-podman-native-conformance
       - name: Expose successful candidate binding
         id: binding
         env:

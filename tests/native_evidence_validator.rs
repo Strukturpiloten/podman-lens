@@ -73,7 +73,7 @@ fn assert_missing_attempt_message(
         .output()?;
     let message = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
-    assert!(message.contains("fresh full Release validation run"));
+    assert!(message.contains("fresh full validation run"));
     assert!(message.contains("Rerunning failed jobs alone"));
     Ok(())
 }

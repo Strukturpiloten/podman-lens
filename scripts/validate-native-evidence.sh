@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate compact Release evidence without accepting an earlier workflow run.
+# Validate compact native evidence from the exact workflow run and attempt.
 set -Eeuo pipefail
 
 if [[ $# -ne 4 ]]; then
@@ -16,7 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/native-runtime-pins.sh"
 for cell in podman-6.1-rootful podman-6.1-rootless; do
   evidence="${root}/podman-lens-native-api-${candidate}-${run_id}-${run_attempt}-${cell}/native-podman-evidence.json"
   [[ -f "${evidence}" ]] || {
-    echo "Missing current-attempt native evidence for ${cell}; start a fresh full Release validation run. Rerunning failed jobs alone cannot supply every cell for the new attempt." >&2
+    echo "Missing current-attempt native evidence for ${cell}; start a fresh full validation run. Rerunning failed jobs alone cannot supply every cell for the new attempt." >&2
     exit 1
   }
   root_mode=${cell##*-}
@@ -52,7 +52,7 @@ for cell in podman-6.1-rootful podman-6.1-rootless; do
      (.packages | type == "array" and length > 0 and length <= 1000 and index($podman_nevra) != null and
        all(.[]; valid_package))' \
     "${evidence}" > /dev/null 2>&1; then
-    echo "Invalid current-attempt native evidence for ${cell}; review identity, package syntax, provenance, and budgets, then run full Release validation." >&2
+    echo "Invalid current-attempt native evidence for ${cell}; review identity, package syntax, provenance, and budgets, then run full validation." >&2
     exit 1
   fi
   recorded_closure_sha="$(jq -r '.closure_sha256' "${evidence}")"

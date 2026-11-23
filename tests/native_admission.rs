@@ -4,6 +4,7 @@ use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, process::Command, tim
 
 const CANDIDATE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_SHA: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const QUEUE_REF: &str = "refs/heads/gh-readonly-queue/main/pr-184-test";
 
 struct Fixture {
     root: PathBuf,
@@ -126,5 +127,72 @@ fn release_call_requires_current_default_branch_even_for_dispatch_event() -> Res
         ("NATIVE_RELEASE_VALIDATION", "unknown"),
         ("GITHUB_REF", "refs/heads/main")
     ])?);
+    Ok(())
+}
+
+#[test]
+fn ci_admission_requires_exact_event_ref_and_sha_without_collaborator_lookup() -> Result<(), Box<dyn std::error::Error>>
+{
+    let fixture = Fixture::new()?;
+    let pr = [
+        ("GITHUB_EVENT_NAME", "pull_request"),
+        ("GITHUB_REF", "refs/pull/184/merge"),
+        ("NATIVE_PR_NUMBER", "184"),
+        ("FAKE_GH_FAIL", "1"),
+    ];
+    let queue = [
+        ("GITHUB_EVENT_NAME", "merge_group"),
+        ("GITHUB_REF", QUEUE_REF),
+        ("NATIVE_QUEUE_BASE_REF", "refs/heads/main"),
+        ("NATIVE_QUEUE_HEAD_REF", QUEUE_REF),
+        ("NATIVE_QUEUE_HEAD_SHA", CANDIDATE),
+        ("FAKE_GH_FAIL", "1"),
+    ];
+    for case in [pr.as_slice(), queue.as_slice()] {
+        assert!(fixture.run(case)?);
+        for mutation in [
+            ("NATIVE_CANDIDATE_SHA", ""),
+            ("NATIVE_CANDIDATE_SHA", OTHER_SHA),
+            ("FAKE_CHECKOUT_SHA", OTHER_SHA),
+            ("FAKE_REMOTE_SHA", OTHER_SHA),
+            ("FAKE_REF_MISSING", "1"),
+            ("GITHUB_REPOSITORY", "someone/podman-lens"),
+            ("NATIVE_RELEASE_VALIDATION", "true"),
+        ] {
+            assert!(!fixture.run(&[case, &[mutation]].concat())?, "must reject {mutation:?}");
+        }
+    }
+    for mutation in [
+        ("NATIVE_PR_NUMBER", ""),
+        ("NATIVE_PR_NUMBER", "185"),
+        ("GITHUB_REF", "refs/pull/184/head"),
+        ("GITHUB_EVENT_NAME", "pull_request_target"),
+    ] {
+        assert!(
+            !fixture.run(&[pr.as_slice(), &[mutation]].concat())?,
+            "must reject {mutation:?}"
+        );
+    }
+    for mutation in [
+        ("NATIVE_QUEUE_BASE_REF", "refs/heads/other"),
+        ("NATIVE_QUEUE_HEAD_REF", ""),
+        ("NATIVE_QUEUE_HEAD_SHA", OTHER_SHA),
+        ("GITHUB_REF", "refs/heads/main"),
+    ] {
+        assert!(
+            !fixture.run(&[queue.as_slice(), &[mutation]].concat())?,
+            "must reject {mutation:?}"
+        );
+    }
+    let branch = "refs/heads/TheRealBecks/issue185";
+    assert!(
+        !fixture.run(
+            &[
+                queue.as_slice(),
+                &[("GITHUB_REF", branch), ("NATIVE_QUEUE_HEAD_REF", branch)],
+            ]
+            .concat()
+        )?
+    );
     Ok(())
 }

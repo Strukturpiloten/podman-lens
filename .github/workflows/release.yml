@@ -79,10 +79,10 @@ jobs:
     if: needs.deterministic.result == 'success'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@b2e07985372159a7c522addbfba8e9b79200c332 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@cf3578f47416e1b27b770fe4a81918844fb2d58b # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b2e07985372159a7c522addbfba8e9b79200c332
+      automation_sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
       policy_sha: ${{ github.sha }}
       config_path: scripts/validation-policy.json
       package: podman-lens
@@ -157,7 +157,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b2e07985372159a7c522addbfba8e9b79200c332
+          ref: cf3578f47416e1b27b770fe4a81918844fb2d58b
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -227,7 +227,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
+          automation-sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
           release-config: ${{ github.workspace }}/.github/release-policy.json
           package: podman-lens
           validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
@@ -244,10 +244,10 @@ jobs:
     if: always()
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@b2e07985372159a7c522addbfba8e9b79200c332 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@cf3578f47416e1b27b770fe4a81918844fb2d58b # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b2e07985372159a7c522addbfba8e9b79200c332
+      automation_sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
       policy_sha: ${{ github.sha }}
       config_path: .github/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -269,7 +269,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b2e07985372159a7c522addbfba8e9b79200c332
+          ref: cf3578f47416e1b27b770fe4a81918844fb2d58b
           path: _automation
           persist-credentials: false
       - name: Bind exact release candidate and policy
@@ -277,7 +277,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-source
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
+          automation-sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
           policy-sha: ${{ github.sha }}
           config-path: .github/release-policy.json
       - name: Install locked shared Python tooling
@@ -286,7 +286,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
+          automation-sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
           release-config: ${{ steps.source.outputs.config }}
           package: podman-lens
           validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}

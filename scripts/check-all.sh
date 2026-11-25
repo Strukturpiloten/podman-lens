@@ -43,7 +43,7 @@ run_step() {
   "$@"
 }
 
-required_tools=(cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee markdownlint-cli2 prettier python3 rustup shellcheck shfmt tombi zizmor)
+required_tools=(cargo cargo-deny cargo-llvm-cov cargo-semver-checks curl git hadolint jq lychee python3 rustup shellcheck shfmt tombi zizmor)
 missing_tools=()
 for tool in "${required_tools[@]}"; do
   command -v "${tool}" > /dev/null 2>&1 || missing_tools+=("${tool}")

@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from boxferry_ci import cargo_tools
+from boxferry_ci import cargo_tools, devcontainer_validation
 from boxferry_ci import release as shared_release
 from boxferry_ci.contracts import ContractError
 from boxferry_ci.gate import verify_devcontainer_gate, verify_gate
@@ -195,7 +195,7 @@ def require_selected_shared_node_caller(workflow: str, automation_sha: str) -> d
     checkout_index, checkout = one("repository: Strukturpiloten/boxferry")
     python_index, python_step = one("uses: ./_automation/.github/actions/shared-python")
     node_index, node_step = one("uses: ./_automation/.github/actions/shared-node")
-    npm_index, _npm = one("npm ci --ignore-scripts")
+    npm_index, _npm = one("python3 scripts/shared-ci.py node-tool")
     if not checkout_index < python_index < node_index < npm_index:
         raise ValueError("selected checkout and shared Python must precede shared Node and npm")
     if (
@@ -210,11 +210,11 @@ def require_selected_shared_node_caller(workflow: str, automation_sha: str) -> d
     expected = {
         "automation-sha": automation_sha,
         "cache": "npm",
-        "cache-dependency-path": "package-lock.json",
+        "cache-dependency-path": "_automation/package-lock.json",
     }
     if fields != expected:
         raise ValueError(
-            "shared Node must preserve only selected source, existing npm cache and root lock"
+            "shared Node must preserve only selected source, npm cache and selected producer lock"
         )
     if re.search(r"(?m)^\s+node-version:", job) or "uses: actions/setup-node@" in job:
         raise ValueError("consumer must not retain an independent Node version or setup route")
@@ -299,6 +299,90 @@ def devcontainer_image_owners(configuration: dict, source: str) -> list[tuple[di
 
 
 class ConsumerContracts(unittest.TestCase):
+    def test_native_configuration_admits_actual_config_and_rejects_extra_environment(self) -> None:
+        config = devcontainer_validation.validate_configuration(ROOT, "podman-lens")
+        self.assertEqual(config, json.loads((ROOT / ".devcontainer/devcontainer.json").read_text()))
+        self.assertEqual(
+            set(config["containerEnv"]), {"CARGO_HOME", "CARGO_TARGET_DIR", "GH_CONFIG_DIR"}
+        )
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        self.assertIn("ENV PODMAN_LENS_NODE_TOOLS_ROOT=/opt/podman-lens-file-tools", image)
+        for extra in (
+            {"PATH": "/usr/local/bin:/usr/bin:/bin"},
+            {"PODMAN_LENS_NODE_TOOLS_ROOT": "/opt/podman-lens-file-tools"},
+            {
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "PODMAN_LENS_NODE_TOOLS_ROOT": "/opt/podman-lens-file-tools",
+            },
+        ):
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                shutil.copytree(ROOT / ".devcontainer", root / ".devcontainer")
+                changed = copy.deepcopy(config)
+                changed["containerEnv"].update(extra)
+                (root / ".devcontainer/devcontainer.json").write_text(json.dumps(changed))
+                with self.assertRaisesRegex(
+                    devcontainer_validation.ValidationError, "finite reviewed contract"
+                ):
+                    devcontainer_validation.validate_configuration(root, "podman-lens")
+
+    def test_image_formatters_survive_both_finite_runtime_paths(self) -> None:
+        config = devcontainer_validation.validate_configuration(ROOT, "podman-lens")
+        provider_environment = dict(
+            value.split("=", 1)
+            for value in devcontainer_validation._runtime_environment(config, {}, "podman-lens")
+        )
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        links = re.findall(
+            r"ln -s (/opt/podman-lens-file-tools/node_modules/\.bin/\S+) "
+            r"(/usr/local/bin/[^;\s]+);",
+            image,
+        )
+        self.assertEqual(
+            links,
+            [
+                (f"/opt/podman-lens-file-tools/node_modules/.bin/{name}", f"/usr/local/bin/{name}")
+                for name in ("markdownlint-cli2", "prettier")
+            ],
+        )
+        for label, path in (
+            # The developer inherits image PATH; exercise the conventional finite
+            # system subset instead of adding a consumer containerEnv override.
+            ("developer", "/usr/local/bin:/usr/bin:/bin"),
+            ("provider", provider_environment["PATH"]),
+        ):
+            with self.subTest(runtime=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                # Relocate every finite PATH entry into a private image filesystem fixture.
+                environment = {"PATH": ":".join(str(root / part[1:]) for part in path.split(":"))}
+                for source, destination in links:
+                    executable = root / source[1:]
+                    executable.parent.mkdir(parents=True, exist_ok=True)
+                    executable.write_text("#!/bin/bash\nprintf '%s\\n' selected-installation\n")
+                    executable.chmod(0o755)
+                    public = root / destination[1:]
+                    public.parent.mkdir(parents=True, exist_ok=True)
+                command = "command -v markdownlint-cli2 && command -v prettier"
+                missing = subprocess.run(
+                    ["/bin/bash", "-c", command], env=environment, capture_output=True, timeout=10
+                )
+                self.assertEqual(missing.returncode, 1)
+                for source, destination in links:
+                    (root / destination[1:]).symlink_to(root / source[1:])
+                found = subprocess.run(
+                    ["/bin/bash", "-c", command + "; markdownlint-cli2; prettier"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                self.assertEqual(found.returncode, 0, found.stderr)
+                self.assertEqual(
+                    found.stdout.splitlines(),
+                    [str(root / destination[1:]) for _, destination in links]
+                    + ["selected-installation"] * 2,
+                )
+
     def test_release_ci_permission_ceiling_covers_all_explicit_callee_scopes(self) -> None:
         release = (ROOT / ".github/workflows/release.yml").read_text()
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -927,8 +1011,7 @@ class ConsumerContracts(unittest.TestCase):
                 "scripts/shared-ci.py",
                 "scripts/install-host-tools.sh",
                 ".github/automation.json",
-                "package.json",
-                "package-lock.json",
+                ".github/node-tools.json",
             },
         )
         for path in copied | {
@@ -1057,7 +1140,6 @@ class ConsumerContracts(unittest.TestCase):
                 "Strukturpiloten/boxferry",
                 ".github/automation.json",
             ),
-            ("npm", "npm", "prettier", "package.json"),
             ("custom.regex", "github-tags", "rust-lang/rust", "rust-toolchain.toml"),
             ("cargo", "crate", "serde", "Cargo.toml"),
             ("custom.regex", "crate", "cargo-llvm-cov", ".devcontainer/Dockerfile"),
@@ -1283,8 +1365,9 @@ class ConsumerContracts(unittest.TestCase):
             (ROOT / ".github/workflows/ci.yml").read_text(), revision
         )
         self.assertIn("cache: npm", flow["node_step"])
-        self.assertIn("cache-dependency-path: package-lock.json", flow["node_step"])
-        self.assertTrue((ROOT / "package-lock.json").is_file())
+        self.assertIn("cache-dependency-path: _automation/package-lock.json", flow["node_step"])
+        self.assertFalse((ROOT / "package-lock.json").exists())
+        self.assertFalse((ROOT / "package.json").exists())
         self.assertNotIn("node-version:", flow["node_step"])
 
     def test_shared_node_caller_rejects_source_order_version_and_cache_drift(self) -> None:
@@ -1984,7 +2067,9 @@ const path = require("node:path");
         consumer, selected = Path("/fixture/consumer"), Path("/fixture/implementation-B/automation")
         with (
             patch.object(
-                bootstrap, "load_config", return_value={"policy": "scripts/validation-policy.json"}
+                bootstrap,
+                "load_config",
+                return_value={"policy": "scripts/validation-policy.json", "revision": "b" * 40},
             ),
             patch.object(bootstrap, "ensure_uv", return_value=Path("/fixture/verified-B/uv")) as uv,
             patch.object(bootstrap.subprocess, "call", return_value=31) as execute,
@@ -2145,13 +2230,25 @@ const path = require("node:path");
         node_release = re.search(r"# release: ([0-9.]+)-", image)
         assert node_release is not None
         node_version = node_release[1]
+        provider_environment = dict(
+            value.split("=", 1)
+            for value in devcontainer_validation._runtime_environment(
+                devcontainer_validation.validate_configuration(ROOT, "podman-lens"),
+                {},
+                "podman-lens",
+            )
+        )
+        self.assertNotIn("PODMAN_LENS_NODE_TOOLS_ROOT", provider_environment)
         for case in (
             "valid",
+            "valid_explicit_root",
+            "wrong_node_root",
             "wrong_ruff",
             "wrong_node",
             "missing_ty",
             "help_failure",
             "wrong_authority",
+            "node_failure",
             "wrong_rust",
             "bare_node_image",
             "mismatched_node_tag",
@@ -2163,12 +2260,22 @@ const path = require("node:path");
                 root = Path(temporary)
                 repository, tooling, binary = root / "repository", root / "tooling", root / "bin"
                 for directory in (
+                    repository / "scripts",
                     repository / ".devcontainer",
                     repository / ".github",
                     tooling / ".github",
                     binary,
                 ):
                     directory.mkdir(parents=True)
+                # Image lifecycle must never fall back to the contributor dispatcher.
+                (repository / "scripts/node-tool.sh").write_text("exit 97\n")
+                retained_helper = tooling / "boxferry-node-tools.py"
+                retained_helper.write_text(
+                    "import os, sys\n"
+                    "with open(os.environ['PROBE_LOG'], 'a') as log:\n"
+                    " log.write(' '.join(sys.argv[1:]) + '\\n')\n"
+                    + ("raise SystemExit(17)\n" if case == "node_failure" else "")
+                )
                 manifest = json.loads((ROOT / ".github/automation.json").read_text())
                 (repository / ".github/automation.json").write_text(json.dumps(manifest))
                 retained = (
@@ -2203,6 +2310,8 @@ const path = require("node:path");
                 verifier.write_text(
                     source.replace(
                         'tooling_root="/opt/podman-lens-tooling"', f'tooling_root="{tooling}"'
+                    ).replace(
+                        "/opt/podman-lens-file-tools/boxferry-node-tools.py", str(retained_helper)
                     )
                 )
                 mock = binary / "mock"
@@ -2229,18 +2338,22 @@ const path = require("node:path");
                 mock.chmod(0o755)
                 for name in tools[1].split():
                     (binary / name).symlink_to(python_executable if name == "python3" else mock)
-                for name in ("dirname", "chmod", "grep", "id"):
+                for name in ("bash", "dirname", "chmod", "grep", "id"):
                     executable = shutil.which(name)
                     assert executable is not None
                     (binary / name).symlink_to(executable)
                 if case == "missing_ty":
                     (binary / "ty").unlink()
                 environment = {
-                    **os.environ,
+                    **provider_environment,
                     "PATH": str(binary),
                     "PROBE_LOG": str(root / "probe.log"),
                     "PROBE_CASE": case,
                 }
+                if case == "valid_explicit_root":
+                    environment["PODMAN_LENS_NODE_TOOLS_ROOT"] = "/opt/podman-lens-file-tools"
+                elif case == "wrong_node_root":
+                    environment["PODMAN_LENS_NODE_TOOLS_ROOT"] = "/tmp/untrusted"
                 for name in ("CARGO_HOME", "CARGO_TARGET_DIR", "GH_CONFIG_DIR"):
                     directory = root / name
                     directory.mkdir()
@@ -2254,10 +2367,16 @@ const path = require("node:path");
                     timeout=30,
                 )
                 self.assertEqual(
-                    result.returncode == 0, case == "valid", result.stdout + result.stderr
+                    result.returncode == 0,
+                    case in {"valid", "valid_explicit_root"},
+                    result.stdout + result.stderr,
                 )
-                if case == "valid":
+                if case in {"valid", "valid_explicit_root"}:
                     calls = (root / "probe.log").read_text().splitlines()
+                    self.assertIn(
+                        f"image-node-tool --repository-root {repository} --cwd {repository} prettier --version",
+                        calls,
+                    )
                     for name in ("uv", "ruff", "ty", "node"):
                         self.assertIn(f"{name} --version", calls)
                         self.assertIn(f"{name} --help", calls)
@@ -3014,6 +3133,7 @@ class ApiPurposeContract(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    subprocess.run([sys.executable, str(ROOT / "scripts/test-node-tools.py")], check=True)
     if sys.argv[1:] == ["--native"]:
         suite = unittest.TestSuite(
             [ConsumerContracts("check_shared_node_caller_has_no_independent_node_version_owner")]

@@ -1282,8 +1282,8 @@ fn hosted_documentation_job_installs_file_tools_without_elevation() -> Result<()
         .map(|(job, _)| job)
         .ok_or_else(|| policy_error("CI documentation job boundary missing"))?;
     for required in [
-        "npm ci --ignore-scripts",
-        "${GITHUB_WORKSPACE}/node_modules/.bin",
+        "python3 scripts/shared-ci.py node-tool --cwd \"${GITHUB_WORKSPACE}\" --install-only",
+        "cache-dependency-path: _automation/package-lock.json",
         "mktemp -d \"${RUNNER_TEMP}/podman-lens-file-tools.XXXXXXXX\"",
         "bash scripts/install-host-tools.sh \"${file_tool_bin}\"",
         "printf '%s\\n' \"${file_tool_bin}\" >> \"${GITHUB_PATH}\"",

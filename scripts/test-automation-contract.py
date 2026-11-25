@@ -2067,7 +2067,9 @@ const path = require("node:path");
         consumer, selected = Path("/fixture/consumer"), Path("/fixture/implementation-B/automation")
         with (
             patch.object(
-                bootstrap, "load_config", return_value={"policy": "scripts/validation-policy.json"}
+                bootstrap,
+                "load_config",
+                return_value={"policy": "scripts/validation-policy.json", "revision": "b" * 40},
             ),
             patch.object(bootstrap, "ensure_uv", return_value=Path("/fixture/verified-B/uv")) as uv,
             patch.object(bootstrap.subprocess, "call", return_value=31) as execute,

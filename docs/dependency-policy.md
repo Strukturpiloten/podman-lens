@@ -52,7 +52,7 @@ Shared metadata, package locks and compiler updates retain one automatic owner a
 qualification when in its input closure. Required native CI image lanes establish fresh qualification;
 source checks do not. VS Code uses existing Podman storage, preferably rootless. Updater/App delivery,
 schedules and hold removal remain deferred.
-[ADR 0019](decisions/0019-shared-validation-and-dependency-automation.md) records this stage.
+[ADR 0019](decisions/0019-shared-validation-and-dependency-automation.md#migration-and-rollback) records this stage.
 
 Coverage's uniquely annotated `CARGO_LLVM_COV_VERSION` ARG owns its readable version; locked
 crates.io installation supplies integrity. Its exact crate/path/manager Renovate exception preserves automatic updates and shared

@@ -5,6 +5,10 @@ set -Eeuo pipefail
 script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repository_root="$(cd -- "${script_directory}/.." && pwd -P)"
 tooling_root="/opt/podman-lens-tooling"
+if [[ -n "${PODMAN_LENS_NODE_TOOLS_ROOT:-}" && "${PODMAN_LENS_NODE_TOOLS_ROOT}" != /opt/podman-lens-file-tools ]]; then
+  printf 'PodmanLens Dev Container requires its fixed image Node installation.\n' >&2
+  exit 1
+fi
 
 for cargo_directory_name in CARGO_HOME CARGO_TARGET_DIR GH_CONFIG_DIR; do
   cargo_directory="${!cargo_directory_name:-}"
@@ -48,6 +52,12 @@ try:
     retained = json.loads((tooling / ".github/automation.json").read_text())
     if retained != manifest:
         raise ValueError("retained shared-tool authority differs from the checkout")
+    # This image-only lifecycle also runs under the provider's clean environment.
+    # Its retained helper selects the protected installation without image ENV.
+    subprocess.run([
+        sys.executable, "/opt/podman-lens-file-tools/boxferry-node-tools.py", "image-node-tool",
+        "--repository-root", str(repository), "--cwd", str(repository), "prettier", "--version",
+    ], check=True, timeout=30)
     project = tooling / "target/boxferry-automation" / manifest["revision"] / "automation"
     metadata = tomllib.loads((project / "pyproject.toml").read_text())
     uv_requirement = metadata["tool"]["uv"]["required-version"]

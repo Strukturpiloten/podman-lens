@@ -15,7 +15,7 @@ if [[ "${mode}" != "--check" && "${mode}" != "--fix" ]]; then
 fi
 readonly mode
 
-required_tools=(git hadolint markdownlint-cli2 prettier shellcheck shfmt tombi)
+required_tools=(git hadolint python3 shellcheck shfmt tombi)
 missing_tools=()
 for tool in "${required_tools[@]}"; do
   if ! command -v "${tool}" > /dev/null 2>&1; then
@@ -61,6 +61,10 @@ run() {
   "$@"
 }
 
+node_tool() {
+  run bash scripts/node-tool.sh "$@"
+}
+
 check_yaml_document_markers() {
   local file first_line
   local -a missing_markers=()
@@ -81,11 +85,11 @@ check_yaml_document_markers() {
 if [[ "${mode}" == "--fix" ]]; then
   run python3 scripts/shared-ci.py run --task python-format
   printf '\nFormat Markdown\n'
-  run prettier --write --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}"
-  run markdownlint-cli2 --fix "${markdown_literals[@]}"
+  node_tool prettier --write --config .prettierrc.json --no-editorconfig --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}"
+  node_tool markdownlint-cli2 --config .markdownlint.json --fix "${markdown_literals[@]}"
   if ((${#structured_files[@]} != 0)); then
     printf '\nFormat JSON and YAML\n'
-    run prettier --write --ignore-path .prettierignore --ignore-unknown "${structured_files[@]}"
+    node_tool prettier --write --config .prettierrc.json --no-editorconfig --ignore-path .prettierignore --ignore-unknown "${structured_files[@]}"
   fi
   if ((${#toml_files[@]} != 0)); then
     printf '\nFormat TOML\n'
@@ -98,12 +102,12 @@ if [[ "${mode}" == "--fix" ]]; then
 fi
 
 printf '\nLint Markdown\n'
-run markdownlint-cli2 "${markdown_literals[@]}"
+node_tool markdownlint-cli2 --config .markdownlint.json "${markdown_literals[@]}"
 printf '\nCheck Markdown formatting\n'
-run prettier --check --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}"
+node_tool prettier --check --config .prettierrc.json --no-editorconfig --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}"
 if ((${#structured_files[@]} != 0)); then
   printf '\nCheck JSON and YAML formatting and syntax\n'
-  run prettier --check --ignore-path .prettierignore --ignore-unknown "${structured_files[@]}"
+  node_tool prettier --check --config .prettierrc.json --no-editorconfig --ignore-path .prettierignore --ignore-unknown "${structured_files[@]}"
 fi
 if ((${#yaml_document_files[@]} != 0)); then
   printf '\nCheck YAML document markers\n'

@@ -99,6 +99,16 @@ caller, coverage behavior, dependency-age policy or release prerequisite.
 
 ## Migration and rollback
 
+The shared automation revision also owns the locked Prettier and markdownlint-cli2 pair.
+Consumer configuration, file selection, ignores and native conformance stay repository-owned.
+The thin interface-1 launcher is synchronized once for concurrent cold acquisition; ongoing
+upgrades use the existing grouped revision without another package authority. Image builds
+retain a protected installation in `/opt/podman-lens-file-tools`; explicitly configured image
+checks execute its retained standard-library launcher against the checkout without npm,
+network access or writes to the read-only checkout. Startup verifies the retained authority
+before formatter dispatch. Public tool links survive both finite runtime PATHs. This wiring
+requires actual native amd64/arm64 qualification and does not itself establish admission.
+
 Land the trusted service, automation manifest and additive task policy first, preserving the legacy planner and every
 complete job. Its parser accepts only the additional `tasks` key and never executes those tasks.
 Bootstrap merge queue events select every existing job and reject every missing or failed result.

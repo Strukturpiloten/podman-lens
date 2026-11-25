@@ -24,6 +24,12 @@ the canonical locked Python, uv, Ruff and ty environment.
 The complete local gate uses the same installer and selects its checksum-verified Actionlint
 first on `PATH` before linting workflows.
 
+Prettier and markdownlint-cli2 come from the same selected shared revision. For individual
+commands use `python3 scripts/shared-ci.py node-tool --cwd "$PWD" prettier <args>` (or
+`markdownlint-cli2`). Pass `.prettierrc.json`, `.prettierignore` and `.markdownlint.json`
+explicitly, as `scripts/check-files.sh --check` and `--fix` do. The Dev Container retains
+the selected installation for offline checks in a read-only checkout.
+
 ## Development loop
 
 1. Make one focused change.

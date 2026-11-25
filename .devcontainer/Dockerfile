@@ -32,11 +32,13 @@ cargo "+${rust_channel}" install --locked --version "${ZIZMOR_VERSION}" zizmor
 # Bootstrap only the manifest-selected immutable shared tooling project.
 COPY scripts/shared-ci.py scripts/install-host-tools.sh /opt/podman-lens-tooling/scripts/
 COPY .github/automation.json /opt/podman-lens-tooling/.github/
-COPY package.json package-lock.json /opt/podman-lens-file-tools/
-ENV UV_CACHE_DIR=/opt/podman-lens-tooling/uv-cache \
+COPY .github/node-tools.json /opt/podman-lens-tooling/.github/
+ENV PODMAN_LENS_NODE_TOOLS_ROOT=/opt/podman-lens-file-tools \
+    UV_CACHE_DIR=/opt/podman-lens-tooling/uv-cache \
     UV_PYTHON_INSTALL_DIR=/opt/podman-lens-tooling/python
 RUN set -eux; \
-    npm ci --ignore-scripts --prefix /opt/podman-lens-file-tools; \
+    python3 /opt/podman-lens-tooling/scripts/shared-ci.py node-tool \
+      --cwd /opt/podman-lens-tooling --installation-root /opt/podman-lens-file-tools --install-only; \
     ln -s /opt/podman-lens-file-tools/node_modules/.bin/markdownlint-cli2 /usr/local/bin/markdownlint-cli2; \
     ln -s /opt/podman-lens-file-tools/node_modules/.bin/prettier /usr/local/bin/prettier; \
     python3 --version; \
@@ -46,4 +48,4 @@ python3 /opt/podman-lens-tooling/scripts/shared-ci.py tools \
       --destination /usr/local/bin --python-tools; \
     mkdir -p /opt/podman-lens-tooling/target /opt/podman-lens-tooling/uv-cache /opt/podman-lens-tooling/python; \
     chown -R vscode:vscode /opt/podman-lens-tooling/target /opt/podman-lens-tooling/uv-cache /opt/podman-lens-tooling/python; \
-    chmod -R a+rX /opt/podman-lens-tooling
+    chmod -R a+rX /opt/podman-lens-tooling /opt/podman-lens-file-tools

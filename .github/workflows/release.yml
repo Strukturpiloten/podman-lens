@@ -79,10 +79,10 @@ jobs:
     if: needs.deterministic.result == 'success'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@0aece357141870375bb872d5fd258a4e12961850 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@5c2ea1a8f0f4bcbd2636d99d47674188972400a9 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: 0aece357141870375bb872d5fd258a4e12961850
+      automation_sha: 5c2ea1a8f0f4bcbd2636d99d47674188972400a9
       policy_sha: ${{ github.sha }}
       config_path: scripts/validation-policy.json
       package: podman-lens
@@ -157,7 +157,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: 0aece357141870375bb872d5fd258a4e12961850
+          ref: 5c2ea1a8f0f4bcbd2636d99d47674188972400a9
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -227,7 +227,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: 0aece357141870375bb872d5fd258a4e12961850
+          automation-sha: 5c2ea1a8f0f4bcbd2636d99d47674188972400a9
           release-config: ${{ github.workspace }}/.github/release-policy.json
           package: podman-lens
           validation-sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
@@ -244,10 +244,10 @@ jobs:
     if: always()
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@0aece357141870375bb872d5fd258a4e12961850 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@5c2ea1a8f0f4bcbd2636d99d47674188972400a9 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: 0aece357141870375bb872d5fd258a4e12961850
+      automation_sha: 5c2ea1a8f0f4bcbd2636d99d47674188972400a9
       policy_sha: ${{ github.sha }}
       config_path: .github/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -261,10 +261,10 @@ jobs:
       needs.shared-release-gate.outputs.candidate_sha == github.sha
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@0aece357141870375bb872d5fd258a4e12961850 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@5c2ea1a8f0f4bcbd2636d99d47674188972400a9 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: 0aece357141870375bb872d5fd258a4e12961850
+      automation_sha: 5c2ea1a8f0f4bcbd2636d99d47674188972400a9
       policy_sha: ${{ github.sha }}
       config_path: .github/release-policy.json
       validation_sha: ${{ needs.shared-release-gate.outputs.candidate_sha }}
